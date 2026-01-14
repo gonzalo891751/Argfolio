@@ -52,6 +52,8 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
         if (existing) {
             existing.totalQuantity += h.quantity
             existing.totalCostBasis += h.costBasisNative
+            existing.totalCostBasisArs += h.costBasisArs
+            existing.totalCostBasisUsd += h.costBasisUsd
             existing.byAccount.push(h)
         } else {
             aggregatedMap.set(h.instrumentId, {
@@ -59,7 +61,11 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 instrument: h.instrument,
                 totalQuantity: h.quantity,
                 totalCostBasis: h.costBasisNative,
+                totalCostBasisArs: h.costBasisArs,
+                totalCostBasisUsd: h.costBasisUsd,
                 avgCost: h.avgCostNative,
+                avgCostArs: h.avgCostArs,
+                avgCostUsd: h.avgCostUsd,
                 currentPrice: price,
                 byAccount: [h],
             })
@@ -73,6 +79,8 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
 
     for (const [, agg] of aggregatedMap) {
         agg.avgCost = agg.totalCostBasis / agg.totalQuantity
+        agg.avgCostArs = agg.totalCostBasisArs / agg.totalQuantity
+        agg.avgCostUsd = agg.totalCostBasisUsd / agg.totalQuantity
 
         // Calculate Valuation using the Engine
         const valResult = calculateValuation(
@@ -83,8 +91,8 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
             fxRates
         )
 
-        agg.valueARS = valResult.valueArs
-        agg.valueUSD = valResult.valueUsd
+        agg.valueARS = valResult.valueArs ?? undefined // Undefined used for optional field
+        agg.valueUSD = valResult.valueUsd ?? undefined
         agg.fxUsed = valResult.fxUsed
         agg.ruleApplied = valResult.ruleApplied
 
@@ -97,8 +105,16 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 agg.totalCostBasis > 0 ? (agg.unrealizedPnL / agg.totalCostBasis) * 100 : 0
         }
 
-        totalARS += agg.valueARS
-        totalUSD += agg.valueUSD
+        // Calculate Dual PnL
+        // Calculate Dual PnL (Safe check)
+        if (agg.valueARS != null && agg.valueUSD != null) {
+            agg.unrealizedPnL_ARS = agg.valueARS - agg.totalCostBasisArs
+            agg.unrealizedPnL_USD = agg.valueUSD - agg.totalCostBasisUsd
+
+            // Add to totals
+            totalARS += agg.valueARS
+            totalUSD += agg.valueUSD
+        }
 
         // Accumulate Unrealized PnL only if valid
         if (agg.unrealizedPnL) {
@@ -142,11 +158,11 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
             )
 
             if (currency === 'ARS') {
-                liquidityARS += val.valueArs
+                liquidityARS += val.valueArs ?? 0
                 // liquidityUSD += val.valueUsd // Don't double count if we add to totalARS/USD later
             } else {
                 // liquidityARS += val.valueArs
-                liquidityUSD += val.valueUsd
+                liquidityUSD += val.valueUsd ?? 0
             }
 
             // Actually the loop accumulates into liquidityARS/USD.
@@ -154,8 +170,8 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
             // If I have 1000 ARS. valueArs=1000, valueUsd=1.
             // liquidityARS += 1000, liquidityUSD += 1.
 
-            liquidityARS += val.valueArs
-            liquidityUSD += val.valueUsd
+            liquidityARS += val.valueArs ?? 0
+            liquidityUSD += val.valueUsd ?? 0
         }
     }
 

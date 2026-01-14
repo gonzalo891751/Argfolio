@@ -9,6 +9,7 @@ import { CompositionChart } from '@/components/dashboard/composition-chart'
 import { TopPositionsChart } from '@/components/dashboard/top-positions'
 import { DebtsSummaryCard } from '@/components/dashboard/debts-card'
 import { EmptyState } from '@/components/dashboard/empty-state'
+import { useTrackCash } from '@/hooks/use-preferences'
 
 
 
@@ -53,6 +54,10 @@ export function DashboardPage() {
         }))
     }, [portfolio])
 
+    const { trackCash } = useTrackCash()
+
+    // ... (rest of the component)
+
     return (
         <div className="space-y-6">
             {/* Page header */}
@@ -73,8 +78,10 @@ export function DashboardPage() {
                 />
                 <KpiCard
                     title="Liquidez"
-                    valueArs={portfolio?.liquidityARS ?? 0}
-                    valueUsd={portfolio?.liquidityUSD}
+                    valueArs={trackCash ? (portfolio?.liquidityARS ?? 0) : 0}
+                    valueUsd={trackCash ? portfolio?.liquidityUSD : undefined}
+                    customDisplay={!trackCash ? '—' : undefined}
+                    subtitle={!trackCash ? 'Modo simple (sin caja)' : undefined}
                     icon={DollarSign}
                     isLoading={isLoading}
                 />

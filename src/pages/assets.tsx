@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Search, Edit2 } from 'lucide-react'
 import { cn, formatCurrency, formatPercent, getChangeColor } from '@/lib/utils'
 import { useComputedPortfolio } from '@/hooks/use-computed-portfolio'
+import { useManualPrices } from '@/hooks/use-manual-prices'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -26,6 +27,7 @@ const categoryLabels: Record<AssetCategory, string> = {
 export function AssetsPage() {
     const navigate = useNavigate()
     const { data: portfolio, isLoading } = useComputedPortfolio()
+    const { priceMap: manualPrices } = useManualPrices()
     const [selectedCategory, setSelectedCategory] = useState<AssetCategory | 'all'>('all')
     const [searchQuery, setSearchQuery] = useState('')
 
@@ -160,9 +162,8 @@ export function AssetsPage() {
                                 <tbody>
                                     {filteredHoldings.map((holding) => {
                                         const isCedear = holding.category === 'CEDEAR'
-                                        // Display Price in native currency context
-                                        // For Crypto -> USD
-                                        // For CEDEAR -> ARS (Manual)
+                                        const isManual = manualPrices.has(holding.id)
+                                        const isAuto = isCedear && !isManual && (holding.currentPrice ?? 0) > 0
                                         const displayCurrency = holding.nativeCurrency === 'ARS' || isCedear ? 'ARS' : 'USD'
 
                                         return (
@@ -189,19 +190,34 @@ export function AssetsPage() {
                                                     {holding.quantity < 1 ? holding.quantity.toFixed(8) : holding.quantity.toFixed(2)}
                                                 </td>
                                                 <td className="p-4 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <span className="font-numeric">
-                                                            {holding.currentPrice ? formatCurrency(holding.currentPrice, displayCurrency) : '—'}
-                                                        </span>
-                                                        {isCedear && (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-6 w-6"
-                                                                onClick={(e) => openPriceDialog(e, holding.id, holding.symbol, holding.currentPrice)}
-                                                            >
-                                                                <Edit2 className="h-3 w-3" />
-                                                            </Button>
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <span className="font-numeric">
+                                                                {holding.currentPrice ? formatCurrency(holding.currentPrice, displayCurrency) : '—'}
+                                                            </span>
+                                                            {isCedear && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6"
+                                                                    onClick={(e) => openPriceDialog(e, holding.id, holding.symbol, holding.currentPrice)}
+                                                                >
+                                                                    <Edit2 className="h-3 w-3" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                        {isCedear && (holding.currentPrice ?? 0) > 0 && (
+                                                            <div className="flex gap-1">
+                                                                {isManual ? (
+                                                                    <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 font-normal">
+                                                                        MANUAL
+                                                                    </Badge>
+                                                                ) : isAuto ? (
+                                                                    <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-normal">
+                                                                        AUTO
+                                                                    </Badge>
+                                                                ) : null}
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </td>

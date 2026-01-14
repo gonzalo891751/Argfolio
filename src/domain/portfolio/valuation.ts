@@ -30,16 +30,24 @@ export function calculateValuation(
     currency: Currency,
     fxRates: FxRates
 ): ValuationResult {
-    // Default result if missing data
-    const defaultResult: ValuationResult = {
-        valueArs: 0,
-        valueUsd: 0,
-        fxUsed: 'MEP', // Fallback
+    // Default result if missing data (nulls to avoid poisoning totals)
+    const nullResult: ValuationResult = {
+        valueArs: null,
+        valueUsd: null,
+        fxUsed: 'MEP',
         exchangeRate: fxRates.mep,
-        ruleApplied: 'DEFAULT_FALLBACK'
+        ruleApplied: 'MISSING_DATA'
     }
 
-    if (quantity === 0) return defaultResult
+    if (quantity === 0) {
+        return {
+            valueArs: 0,
+            valueUsd: 0,
+            fxUsed: 'MEP',
+            exchangeRate: fxRates.mep,
+            ruleApplied: 'ZERO_QTY'
+        }
+    }
 
     // -------------------------------------------------------------------------
     // 1 & 2. CRYPTO & STABLECOIN
@@ -61,18 +69,19 @@ export function calculateValuation(
     }
 
     // -------------------------------------------------------------------------
-    // 3. CEDEAR (Native currency usually ARS for local quotes, but can be USD)
+    // 3. CEDEAR (Native currency usually ARS for local quotes)
     // -------------------------------------------------------------------------
     if (category === 'CEDEAR') {
-        // Assumption: Price provided is in ARS because they are traded in ARS usually
-        // If native currency is USD (unlikely for a CEDEAR holding unless underlying), handle differently.
-        // For Phase 4, we assume CEDEAR price is ARS.
+        // If price is missing (undefined or 0/NaN check depending on provider contract)
+        // We return NULL so it doesn't count as 0 value in totals
+        if (price === undefined || price === null) {
+            return nullResult
+        }
 
-        const effPrice = price ?? 0
-        const valueArs = quantity * effPrice
+        const valueArs = quantity * price
         const fxUsed = 'MEP'
         const exchangeRate = fxRates.mep
-        // valueUsd implies implicit USD value
+        // valueUsd implies implicit USD value via MEP
         const valueUsd = exchangeRate > 0 ? valueArs / exchangeRate : 0
 
         return {
@@ -124,8 +133,8 @@ export function calculateValuation(
     // -------------------------------------------------------------------------
     // Fallback for other things (e.g. FCI, WALLET, OTHER) or Explicit Currency
     // -------------------------------------------------------------------------
-    // Assume priced in Native Currency
-    const valueNative = quantity * (price ?? 1)
+    const effPrice = price ?? 1
+    const valueNative = quantity * effPrice
 
     if (currency === 'USD') {
         return {

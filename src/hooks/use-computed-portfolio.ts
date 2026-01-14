@@ -4,6 +4,7 @@ import { useInstruments, useAccounts } from './use-instruments'
 import { useFxRates } from './use-fx-rates'
 import { useCryptoPrices } from './use-crypto-prices'
 import { useManualPrices } from './use-manual-prices'
+import { useCedearPrices } from './use-cedear-prices'
 import {
     computeHoldings,
     computeCashBalances,
@@ -27,11 +28,16 @@ const mockPrices: Record<string, number> = {
     usd: 1,
 }
 
-function getUserPreferences(): { baseFx: FxType; stableFx: FxType } {
-    const stored = localStorage.getItem('argfolio-fx-preference')
+function getUserPreferences(): { baseFx: FxType; stableFx: FxType; cedearAuto: boolean; trackCash: boolean } {
+    const storedFx = localStorage.getItem('argfolio-fx-preference')
+    const storedCedear = localStorage.getItem('argfolio-settings-cedear-auto')
+    const storedTrackCash = localStorage.getItem('argfolio.trackCash')
+
     return {
-        baseFx: (stored as FxType) || 'MEP',
+        baseFx: (storedFx as FxType) || 'MEP',
         stableFx: 'CRIPTO',
+        cedearAuto: storedCedear !== 'false', // Default ON
+        trackCash: storedTrackCash === 'true', // Default OFF
     }
 }
 
@@ -41,6 +47,8 @@ export function useComputedPortfolio() {
     const { data: accountsList = [] } = useAccounts()
     const { data: fxRates } = useFxRates()
     const { priceMap: manualPrices } = useManualPrices()
+
+    const { cedearAuto, trackCash } = getUserPreferences()
 
     // Extract unique symbols for crypto fetching (Phase 3.2)
     const cryptoSymbols = Array.from(new Set(
@@ -54,9 +62,10 @@ export function useComputedPortfolio() {
     if (!cryptoSymbols.includes('USDC')) cryptoSymbols.push('USDC')
 
     const { data: cryptoPrices = {} } = useCryptoPrices(cryptoSymbols)
+    const { data: cedearPrices = {} } = useCedearPrices(cedearAuto)
 
     return useQuery({
-        queryKey: ['portfolio', 'computed', movements.length, instrumentsList.length, fxRates?.updatedAtISO, cryptoPrices, manualPrices],
+        queryKey: ['portfolio', 'computed', movements.length, instrumentsList.length, fxRates?.updatedAtISO, cryptoPrices, cedearPrices, manualPrices, cedearAuto, trackCash],
         queryFn: (): PortfolioTotals | null => {
             if (!fxRates || instrumentsList.length === 0 || accountsList.length === 0) {
                 return null
@@ -66,7 +75,7 @@ export function useComputedPortfolio() {
             const accounts = new Map(accountsList.map((a) => [a.id, a]))
 
             // Merge mock prices (stocks) with real crypto prices
-            // Priority: Real Crypto > Mock
+            // Priority: Manual > Auto CEDEAR > Real Crypto > Mock
             const pricesMap = new Map<string, number>()
 
             // Add mocks first
@@ -79,9 +88,7 @@ export function useComputedPortfolio() {
             // Wait, computeHoldings uses instrumentId. 
             // So currentPrices map keys must be INSTRUMENT IDs.
 
-            // Correction: We need to map Symbol Price -> Instrument ID Price
             // Iterate instruments, find price for its symbol, set in map.
-
             instrumentsList.forEach(instr => {
                 const sym = instr.symbol.toUpperCase()
 
@@ -96,8 +103,17 @@ export function useComputedPortfolio() {
                     pricesMap.set(instr.id, realPrice)
                 }
 
+                // AUTO CEDEAR (PPI)
+                // Only if enabled and category is CEDEAR
+                if (cedearAuto && instr.category === 'CEDEAR') {
+                    const cedearPrice = cedearPrices[sym] // keys are tickers in CEDEAR map
+                    if (cedearPrice) {
+                        pricesMap.set(instr.id, cedearPrice.lastPriceArs)
+                    }
+                }
+
                 // MANUAL PRICES (CEDEARs, Stocks)
-                // Overrides mocks if present
+                // Overrides everything if present
                 if (manualPrices.has(instr.id)) {
                     pricesMap.set(instr.id, manualPrices.get(instr.id)!)
                 }
@@ -106,10 +122,11 @@ export function useComputedPortfolio() {
             const { baseFx, stableFx } = getUserPreferences()
 
             // Compute holdings
-            const holdings = computeHoldings(movements, instruments, accounts)
+            const holdings = computeHoldings(movements, instruments, accounts, fxRates)
 
-            // Compute cash balances
-            const cashBalances = computeCashBalances(movements)
+            // Compute cash balances (only if tracking cash is enabled)
+            const trackCash = getUserPreferences().trackCash
+            const cashBalances = trackCash ? computeCashBalances(movements) : new Map()
 
             // Compute realized PnL
             const realizedPnLResult = computeRealizedPnL(movements, fxRates, baseFx)

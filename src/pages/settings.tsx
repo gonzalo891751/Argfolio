@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
+import { useTrackCash } from '@/hooks/use-preferences'
 
 type FxPreference = 'MEP' | 'CCL'
 
@@ -124,17 +125,17 @@ export function SettingsPage() {
                 <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
                         <RefreshCw className="h-4 w-4" />
-                        Actualización automática
+                        Actualización de datos
                     </CardTitle>
-                    <CardDescription>Los datos se actualizan cada 5 minutos automáticamente</CardDescription>
+                    <CardDescription>Configurá la frecuencia y origen de las actualizaciones</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-6">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="font-medium">Habilitar auto-refresh</p>
                             <p className="text-sm text-muted-foreground">
                                 {isAutoRefreshEnabled
-                                    ? 'Los datos se actualizan automáticamente'
+                                    ? 'Los datos se actualizan automáticamente cada 5 min'
                                     : 'Actualizá manualmente con el botón "Actualizar"'}
                             </p>
                         </div>
@@ -142,6 +143,26 @@ export function SettingsPage() {
                             checked={isAutoRefreshEnabled}
                             onCheckedChange={setAutoRefreshEnabled}
                         />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-medium">Precios CEDEAR automáticos (PPI)</p>
+                            <p className="text-sm text-muted-foreground">
+                                Obtener cotizaciones de CEDEARs automáticamente desde PPI
+                            </p>
+                        </div>
+                        <CedearToggle />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-medium">Trackear liquidez/caja</p>
+                            <p className="text-sm text-muted-foreground">
+                                Habilitar seguimiento de efectivo (USD/ARS/etc). Si está desactivado, el dashboard mostrará "Modo simple".
+                            </p>
+                        </div>
+                        <TrackCashToggle />
                     </div>
                 </CardContent>
             </Card>
@@ -196,6 +217,40 @@ export function SettingsPage() {
                 </CardContent>
             </Card>
         </div>
+    )
+}
+
+
+function CedearToggle() {
+    const queryClient = useQueryClient()
+    const [enabled, setEnabled] = useState(() => {
+        const stored = localStorage.getItem('argfolio-settings-cedear-auto')
+        return stored !== 'false'
+    })
+
+    const handleToggle = (checked: boolean) => {
+        setEnabled(checked)
+        localStorage.setItem('argfolio-settings-cedear-auto', String(checked))
+        queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+        queryClient.invalidateQueries({ queryKey: ['cedears'] })
+    }
+
+    return (
+        <Switch
+            checked={enabled}
+            onCheckedChange={handleToggle}
+        />
+    )
+}
+
+function TrackCashToggle() {
+    const { trackCash, setTrackCash } = useTrackCash()
+
+    return (
+        <Switch
+            checked={trackCash}
+            onCheckedChange={setTrackCash}
+        />
     )
 }
 

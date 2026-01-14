@@ -9,6 +9,8 @@ interface KpiCardProps {
     valueUsd?: number
     change?: number
     changePercent?: number
+    customDisplay?: React.ReactNode
+    subtitle?: string
     icon?: React.ComponentType<{ className?: string }>
     isLoading?: boolean
     variant?: 'default' | 'highlight'
@@ -20,6 +22,8 @@ export function KpiCard({
     valueUsd,
     change,
     changePercent,
+    customDisplay,
+    subtitle,
     icon: Icon,
     isLoading,
     variant = 'default',
@@ -52,13 +56,19 @@ export function KpiCard({
                 <div className="space-y-1">
                     <div className="flex items-baseline gap-2">
                         <span className="text-2xl font-bold font-numeric">
-                            {formatCurrency(valueArs, 'ARS')}
+                            {customDisplay ?? formatCurrency(valueArs, 'ARS')}
                         </span>
                     </div>
 
-                    {valueUsd !== undefined && (
+                    {!customDisplay && valueUsd !== undefined && (
                         <div className="text-sm text-muted-foreground font-numeric">
                             {formatCurrency(valueUsd, 'USD')}
+                        </div>
+                    )}
+
+                    {subtitle && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                            {subtitle}
                         </div>
                     )}
 

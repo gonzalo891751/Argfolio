@@ -118,7 +118,11 @@ export interface Holding {
     account: Account
     quantity: number
     costBasisNative: number // total cost in native currency
-    avgCostNative: number // cost basis / quantity
+    costBasisArs: number    // total cost tracked in ARS
+    costBasisUsd: number    // total cost tracked in USD
+    avgCostNative: number   // cost basis / quantity
+    avgCostArs: number
+    avgCostUsd: number
     currentPriceNative?: number
     currentValueNative?: number
     unrealizedPnLNative?: number
@@ -129,14 +133,23 @@ export interface HoldingAggregated {
     instrumentId: string
     instrument: Instrument
     totalQuantity: number
-    totalCostBasis: number
-    avgCost: number
+    totalCostBasis: number // native
+    totalCostBasisArs: number
+    totalCostBasisUsd: number
+    avgCost: number // native
+    avgCostArs: number
+    avgCostUsd: number
     currentPrice?: number
-    currentValue?: number
-    unrealizedPnL?: number
-    unrealizedPnLPercent?: number
+    currentValue?: number // native
+    unrealizedPnL?: number // native
+    unrealizedPnLPercent?: number // native
+
+    // Explicit dual valuation
     valueARS?: number
     valueUSD?: number
+    unrealizedPnL_ARS?: number
+    unrealizedPnL_USD?: number
+
     fxUsed?: FxType
     ruleApplied?: string
     byAccount: Holding[]
@@ -197,8 +210,8 @@ export interface ManualPrice {
 // -----------------------------------------------------------------------------
 
 export interface ValuationResult {
-    valueArs: number
-    valueUsd: number
+    valueArs: number | null
+    valueUsd: number | null
     fxUsed: FxType
     exchangeRate: number
     ruleApplied: string

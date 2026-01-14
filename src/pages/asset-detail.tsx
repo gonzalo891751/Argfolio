@@ -136,15 +136,23 @@ export function AssetDetailPage() {
             )}
 
             {/* KPI Cards */}
+            {/* KPI Cards */}
             <AssetKpiCards
+                category={instrument.category}
                 totalQuantity={holdingSummary.totalQuantity}
-                avgCost={holdingSummary.avgCost}
-                totalInvested={holdingSummary.totalInvested}
-                currentPrice={holdingSummary.currentPrice}
-                currentValue={holdingSummary.currentValue}
-                unrealizedPnL={holdingSummary.unrealizedPnL}
+                avgCostArs={holdingSummary.avgCostArs}
+                avgCostUsd={holdingSummary.avgCostUsd}
+                totalInvestedArs={holdingSummary.totalInvestedArs}
+                totalInvestedUsd={holdingSummary.totalInvestedUsd}
+                currentValueArs={holdingSummary.currentValueArs}
+                currentValueUsd={holdingSummary.currentValueUsd}
+                unrealizedPnL_ARS={holdingSummary.unrealizedPnL_ARS}
+                unrealizedPnL_USD={holdingSummary.unrealizedPnL_USD}
                 unrealizedPnLPercent={holdingSummary.unrealizedPnLPercent}
+
+                // Legacy / Single needed for fallback or native display
                 realizedPnL={holdingSummary.realizedPnL}
+                currentPrice={holdingSummary.currentPrice}
                 tradeCurrency={instrument.nativeCurrency}
             />
 
