@@ -1,0 +1,5 @@
+export { movementsRepo } from './movements'
+export { instrumentsRepo } from './instruments'
+export { accountsRepo } from './accounts'
+export { snapshotsRepo } from './snapshots'
+export { debtsRepo } from './debts'

@@ -1,0 +1,138 @@
+import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ThemeProvider } from '@/lib/theme'
+import { RefreshProvider } from '@/hooks/use-auto-refresh'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
+import { AppLayout } from '@/components/layout/app-layout'
+import { DashboardPage } from '@/pages/dashboard'
+import { AssetsPage } from '@/pages/assets'
+import { AssetDetailPage } from '@/pages/asset-detail'
+import { MovementsPage } from '@/pages/movements'
+import { HistoryPage } from '@/pages/history'
+import { DebtsPage } from '@/pages/debts'
+import { SettingsPage } from '@/pages/settings'
+import { ImportPage } from '@/pages/import'
+import { seedDatabase } from '@/db'
+
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            refetchOnWindowFocus: false,
+            retry: 2,
+            staleTime: 30000,
+        },
+    },
+})
+
+function App() {
+    const [isDbReady, setIsDbReady] = useState(false)
+
+    // Initialize database on app startup
+    useEffect(() => {
+        seedDatabase().then(() => {
+            setIsDbReady(true)
+        }).catch((err) => {
+            console.error('Failed to initialize database:', err)
+            setIsDbReady(true) // Continue anyway
+        })
+    }, [])
+
+    if (!isDbReady) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <div className="text-center">
+                    <div className="h-10 w-10 rounded-lg gradient-primary flex items-center justify-center mx-auto mb-4">
+                        <span className="text-white font-bold text-lg">A</span>
+                    </div>
+                    <p className="text-muted-foreground">Cargando Argfolio...</p>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <QueryClientProvider client={queryClient}>
+            <ThemeProvider>
+                <RefreshProvider>
+                    <TooltipProvider>
+                        <BrowserRouter>
+                            <Routes>
+                                <Route element={<AppLayout />}>
+                                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                                    <Route
+                                        path="/dashboard"
+                                        element={
+                                            <ErrorBoundary>
+                                                <DashboardPage />
+                                            </ErrorBoundary>
+                                        }
+                                    />
+                                    <Route
+                                        path="/assets"
+                                        element={
+                                            <ErrorBoundary>
+                                                <AssetsPage />
+                                            </ErrorBoundary>
+                                        }
+                                    />
+                                    <Route
+                                        path="/assets/:instrumentId"
+                                        element={
+                                            <ErrorBoundary>
+                                                <AssetDetailPage />
+                                            </ErrorBoundary>
+                                        }
+                                    />
+                                    <Route
+                                        path="/movements"
+                                        element={
+                                            <ErrorBoundary>
+                                                <MovementsPage />
+                                            </ErrorBoundary>
+                                        }
+                                    />
+                                    <Route
+                                        path="/history"
+                                        element={
+                                            <ErrorBoundary>
+                                                <HistoryPage />
+                                            </ErrorBoundary>
+                                        }
+                                    />
+                                    <Route
+                                        path="/debts"
+                                        element={
+                                            <ErrorBoundary>
+                                                <DebtsPage />
+                                            </ErrorBoundary>
+                                        }
+                                    />
+                                    <Route
+                                        path="/settings"
+                                        element={
+                                            <ErrorBoundary>
+                                                <SettingsPage />
+                                            </ErrorBoundary>
+                                        }
+                                    />
+                                    <Route
+                                        path="/import"
+                                        element={
+                                            <ErrorBoundary>
+                                                <ImportPage />
+                                            </ErrorBoundary>
+                                        }
+                                    />
+                                </Route>
+                            </Routes>
+                        </BrowserRouter>
+                    </TooltipProvider>
+                </RefreshProvider>
+            </ThemeProvider>
+        </QueryClientProvider>
+    )
+}
+
+export default App
