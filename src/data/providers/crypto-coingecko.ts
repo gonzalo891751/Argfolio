@@ -1,4 +1,4 @@
-import type { PriceQuote } from '@/domain/types'
+
 
 // Map internal symbols to CoinGecko IDs
 // Add more as needed. Ideally this comes from a backend or configurable list.

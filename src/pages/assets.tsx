@@ -1,12 +1,14 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search } from 'lucide-react'
+import { Search, Edit2 } from 'lucide-react'
 import { cn, formatCurrency, formatPercent, getChangeColor } from '@/lib/utils'
 import { useComputedPortfolio } from '@/hooks/use-computed-portfolio'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { ManualPriceDialog } from '@/components/assets/ManualPriceDialog'
 import type { AssetCategory } from '@/domain/types'
 
 const categoryLabels: Record<AssetCategory, string> = {
@@ -27,6 +29,11 @@ export function AssetsPage() {
     const [selectedCategory, setSelectedCategory] = useState<AssetCategory | 'all'>('all')
     const [searchQuery, setSearchQuery] = useState('')
 
+    // Manual Price Dialog State
+    const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
+    const [editingSymbol, setEditingSymbol] = useState('')
+    const [editingPrice, setEditingPrice] = useState<number | undefined>(undefined)
+
     // Flatten holdings from all categories
     const allHoldings = useMemo(() => {
         if (!portfolio) return []
@@ -36,6 +43,7 @@ export function AssetsPage() {
                 symbol: item.instrument.symbol,
                 name: item.instrument.name,
                 category: item.instrument.category,
+                nativeCurrency: item.instrument.nativeCurrency,
                 quantity: item.totalQuantity,
                 avgCost: item.avgCost,
                 currentPrice: item.currentPrice,
@@ -43,6 +51,7 @@ export function AssetsPage() {
                 valueUSD: item.valueUSD ?? 0,
                 unrealizedPnL: item.unrealizedPnL ?? 0,
                 unrealizedPnLPercent: item.unrealizedPnLPercent ?? 0,
+                fxUsed: item.fxUsed,
             }))
         )
     }, [portfolio])
@@ -62,6 +71,13 @@ export function AssetsPage() {
         const uniqueCategories = new Set(allHoldings.map((h) => h.category))
         return ['all', ...Array.from(uniqueCategories)] as (AssetCategory | 'all')[]
     }, [allHoldings])
+
+    const openPriceDialog = (e: React.MouseEvent, id: string, symbol: string, price?: number) => {
+        e.stopPropagation()
+        setEditingPriceId(id)
+        setEditingSymbol(symbol)
+        setEditingPrice(price)
+    }
 
     return (
         <div className="space-y-6">
@@ -135,56 +151,94 @@ export function AssetsPage() {
                                         <th className="text-left p-4 text-sm font-medium text-muted-foreground">Activo</th>
                                         <th className="text-left p-4 text-sm font-medium text-muted-foreground">Categoría</th>
                                         <th className="text-right p-4 text-sm font-medium text-muted-foreground">Cantidad</th>
-                                        <th className="text-right p-4 text-sm font-medium text-muted-foreground">Costo Prom.</th>
                                         <th className="text-right p-4 text-sm font-medium text-muted-foreground">Precio Actual</th>
-                                        <th className="text-right p-4 text-sm font-medium text-muted-foreground">Valor ARS</th>
+                                        <th className="text-right p-4 text-sm font-medium text-muted-foreground">Valuación</th>
+                                        <th className="text-right p-4 text-sm font-medium text-muted-foreground">FX</th>
                                         <th className="text-right p-4 text-sm font-medium text-muted-foreground">PnL</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredHoldings.map((holding) => (
-                                        <tr
-                                            key={holding.id}
-                                            onClick={() => navigate(`/assets/${holding.id}`)}
-                                            className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
-                                        >
-                                            <td className="p-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
-                                                        {holding.symbol.slice(0, 2)}
+                                    {filteredHoldings.map((holding) => {
+                                        const isCedear = holding.category === 'CEDEAR'
+                                        // Display Price in native currency context
+                                        // For Crypto -> USD
+                                        // For CEDEAR -> ARS (Manual)
+                                        const displayCurrency = holding.nativeCurrency === 'ARS' || isCedear ? 'ARS' : 'USD'
+
+                                        return (
+                                            <tr
+                                                key={holding.id}
+                                                onClick={() => navigate(`/assets/${holding.id}`)}
+                                                className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                                            >
+                                                <td className="p-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                                                            {holding.symbol.slice(0, 2)}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium">{holding.symbol}</p>
+                                                            <p className="text-sm text-muted-foreground">{holding.name}</p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="font-medium">{holding.symbol}</p>
-                                                        <p className="text-sm text-muted-foreground">{holding.name}</p>
+                                                </td>
+                                                <td className="p-4">
+                                                    <Badge variant="secondary">{categoryLabels[holding.category] ?? holding.category}</Badge>
+                                                </td>
+                                                <td className="p-4 text-right font-numeric">
+                                                    {holding.quantity < 1 ? holding.quantity.toFixed(8) : holding.quantity.toFixed(2)}
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <span className="font-numeric">
+                                                            {holding.currentPrice ? formatCurrency(holding.currentPrice, displayCurrency) : '—'}
+                                                        </span>
+                                                        {isCedear && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-6 w-6"
+                                                                onClick={(e) => openPriceDialog(e, holding.id, holding.symbol, holding.currentPrice)}
+                                                            >
+                                                                <Edit2 className="h-3 w-3" />
+                                                            </Button>
+                                                        )}
                                                     </div>
-                                                </div>
-                                            </td>
-                                            <td className="p-4">
-                                                <Badge variant="secondary">{categoryLabels[holding.category] ?? holding.category}</Badge>
-                                            </td>
-                                            <td className="p-4 text-right font-numeric">
-                                                {holding.quantity < 1 ? holding.quantity.toFixed(8) : holding.quantity.toFixed(2)}
-                                            </td>
-                                            <td className="p-4 text-right font-numeric text-muted-foreground">
-                                                {formatCurrency(holding.avgCost, 'USD')}
-                                            </td>
-                                            <td className="p-4 text-right font-numeric">
-                                                {holding.currentPrice ? formatCurrency(holding.currentPrice, 'USD') : '—'}
-                                            </td>
-                                            <td className="p-4 text-right font-numeric font-medium">
-                                                {formatCurrency(holding.valueARS, 'ARS')}
-                                            </td>
-                                            <td className={cn('p-4 text-right font-numeric', getChangeColor(holding.unrealizedPnLPercent))}>
-                                                {formatPercent(holding.unrealizedPnLPercent)}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                                </td>
+                                                <td className="p-4 text-right font-numeric">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium">{formatCurrency(holding.valueUSD, 'USD')}</span>
+                                                        <span className="text-xs text-muted-foreground">{formatCurrency(holding.valueARS, 'ARS')}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    {holding.fxUsed && (
+                                                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-5">
+                                                            {holding.fxUsed}
+                                                        </Badge>
+                                                    )}
+                                                </td>
+                                                <td className={cn('p-4 text-right font-numeric', getChangeColor(holding.unrealizedPnLPercent))}>
+                                                    {formatPercent(holding.unrealizedPnLPercent)}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
                                 </tbody>
                             </table>
                         </div>
                     )}
                 </CardContent>
             </Card>
+
+            <ManualPriceDialog
+                isOpen={!!editingPriceId}
+                onOpenChange={(open) => !open && setEditingPriceId(null)}
+                instrumentId={editingPriceId || ''}
+                symbol={editingSymbol}
+                currentPrice={editingPrice}
+            />
         </div>
     )
 }
+

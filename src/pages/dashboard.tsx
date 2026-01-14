@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Wallet, DollarSign, TrendingUp, Banknote, Coins, Building2, Bitcoin, PiggyBank } from 'lucide-react'
+import { TrendingUp, DollarSign, Wallet } from 'lucide-react'
 import { useComputedPortfolio } from '@/hooks/use-computed-portfolio'
 import { useSnapshots } from '@/hooks/use-snapshots'
 import { useDebts } from '@/hooks/use-debts'
@@ -9,19 +9,8 @@ import { CompositionChart } from '@/components/dashboard/composition-chart'
 import { TopPositionsChart } from '@/components/dashboard/top-positions'
 import { DebtsSummaryCard } from '@/components/dashboard/debts-card'
 import { EmptyState } from '@/components/dashboard/empty-state'
-import type { AssetCategory } from '@/domain/types'
 
-const categoryIcons: Record<AssetCategory, typeof Wallet> = {
-    CEDEAR: TrendingUp,
-    CRYPTO: Bitcoin,
-    STABLE: Coins,
-    USD_CASH: DollarSign,
-    ARS_CASH: Banknote,
-    FCI: Building2,
-    PF: PiggyBank,
-    WALLET: Wallet,
-    DEBT: Banknote,
-}
+
 
 export function DashboardPage() {
     const { data: portfolio, isLoading } = useComputedPortfolio()

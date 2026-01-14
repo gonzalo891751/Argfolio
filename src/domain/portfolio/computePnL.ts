@@ -1,4 +1,4 @@
-import type { Movement, Instrument, Holding, FxRates, FxType } from '@/domain/types'
+import type { Movement, Holding, FxRates, FxType } from '@/domain/types'
 
 interface RealizedPnLResult {
     totalNative: number
@@ -12,7 +12,6 @@ interface RealizedPnLResult {
  */
 export function computeRealizedPnL(
     movements: Movement[],
-    instruments: Map<string, Instrument>,
     fxRates: FxRates,
     baseFx: FxType = 'MEP'
 ): RealizedPnLResult {

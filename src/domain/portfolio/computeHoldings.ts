@@ -1,9 +1,6 @@
 import type { Movement, Instrument, Account, Holding } from '@/domain/types'
 
-interface HoldingKey {
-    instrumentId: string
-    accountId: string
-}
+
 
 interface HoldingAccumulator {
     quantity: number
@@ -104,8 +101,7 @@ export function computeHoldings(
  * Compute cash balances (ARS, USD, stablecoins) from movements.
  */
 export function computeCashBalances(
-    movements: Movement[],
-    accounts: Map<string, Account>
+    movements: Movement[]
 ): Map<string, Map<string, number>> {
     // Map<accountId, Map<currency, balance>>
     const balances = new Map<string, Map<string, number>>()

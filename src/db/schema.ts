@@ -7,6 +7,7 @@ export class ArgfolioDatabase extends Dexie {
     accounts!: Table<Account, string>
     snapshots!: Table<Snapshot, string>
     debts!: Table<Debt, string>
+    manualPrices!: Table<{ instrumentId: string; price: number; updatedAtISO: string }, string>
 
     constructor() {
         super('argfolio-db')
@@ -17,6 +18,10 @@ export class ArgfolioDatabase extends Dexie {
             accounts: 'id, name, kind',
             snapshots: 'id, dateLocal, createdAtISO',
             debts: 'id, status, dueDateLocal',
+        })
+
+        this.version(2).stores({
+            manualPrices: 'instrumentId',
         })
     }
 }

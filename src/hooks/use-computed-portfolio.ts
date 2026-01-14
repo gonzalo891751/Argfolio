@@ -3,6 +3,7 @@ import { useMovements } from './use-movements'
 import { useInstruments, useAccounts } from './use-instruments'
 import { useFxRates } from './use-fx-rates'
 import { useCryptoPrices } from './use-crypto-prices'
+import { useManualPrices } from './use-manual-prices'
 import {
     computeHoldings,
     computeCashBalances,
@@ -39,6 +40,7 @@ export function useComputedPortfolio() {
     const { data: instrumentsList = [] } = useInstruments()
     const { data: accountsList = [] } = useAccounts()
     const { data: fxRates } = useFxRates()
+    const { priceMap: manualPrices } = useManualPrices()
 
     // Extract unique symbols for crypto fetching (Phase 3.2)
     const cryptoSymbols = Array.from(new Set(
@@ -54,7 +56,7 @@ export function useComputedPortfolio() {
     const { data: cryptoPrices = {} } = useCryptoPrices(cryptoSymbols)
 
     return useQuery({
-        queryKey: ['portfolio', 'computed', movements.length, instrumentsList.length, fxRates?.updatedAtISO, cryptoPrices],
+        queryKey: ['portfolio', 'computed', movements.length, instrumentsList.length, fxRates?.updatedAtISO, cryptoPrices, manualPrices],
         queryFn: (): PortfolioTotals | null => {
             if (!fxRates || instrumentsList.length === 0 || accountsList.length === 0) {
                 return null
@@ -93,6 +95,12 @@ export function useComputedPortfolio() {
                 if (realPrice !== undefined && (instr.category === 'CRYPTO' || instr.category === 'STABLE')) {
                     pricesMap.set(instr.id, realPrice)
                 }
+
+                // MANUAL PRICES (CEDEARs, Stocks)
+                // Overrides mocks if present
+                if (manualPrices.has(instr.id)) {
+                    pricesMap.set(instr.id, manualPrices.get(instr.id)!)
+                }
             })
 
             const { baseFx, stableFx } = getUserPreferences()
@@ -101,10 +109,10 @@ export function useComputedPortfolio() {
             const holdings = computeHoldings(movements, instruments, accounts)
 
             // Compute cash balances
-            const cashBalances = computeCashBalances(movements, accounts)
+            const cashBalances = computeCashBalances(movements)
 
             // Compute realized PnL
-            const realizedPnLResult = computeRealizedPnL(movements, instruments, fxRates, baseFx)
+            const realizedPnLResult = computeRealizedPnL(movements, fxRates, baseFx)
 
             // Compute totals
             const totals = computeTotals({

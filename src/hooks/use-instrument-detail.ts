@@ -1,10 +1,8 @@
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useMovements } from './use-movements'
 import { useInstruments, useAccounts } from './use-instruments'
-import { useFxRates } from './use-fx-rates'
 import { useMockPrices } from './use-computed-portfolio'
-import type { Movement, Instrument, Account, FxType } from '@/domain/types'
+import type { Movement, Instrument } from '@/domain/types'
 
 // Mock prices lookup by instrument ID
 const priceKeyMap: Record<string, string> = {
@@ -59,19 +57,11 @@ export interface InstrumentDetail {
     isLoading: boolean
 }
 
-function getUserPreferences(): { baseFx: FxType; stableFx: FxType } {
-    const stored = localStorage.getItem('argfolio-fx-preference')
-    return {
-        baseFx: (stored as FxType) || 'MEP',
-        stableFx: 'CRIPTO',
-    }
-}
-
 export function useInstrumentDetail(instrumentId: string): InstrumentDetail | null {
     const { data: movements = [], isLoading: movementsLoading } = useMovements()
     const { data: instrumentsList = [], isLoading: instrumentsLoading } = useInstruments()
     const { data: accountsList = [], isLoading: accountsLoading } = useAccounts()
-    const { data: fxRates } = useFxRates()
+    // const { data: fxRates } = useFxRates()
     const { data: pricesMap } = useMockPrices()
 
     const isLoading = movementsLoading || instrumentsLoading || accountsLoading

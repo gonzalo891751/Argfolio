@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { DeleteConfirmDialog } from '@/components/movements/DeleteConfirmDialog'
-import { useDebts, useAllDebts, useCreateDebt, usePayDebt, useDeleteDebt } from '@/hooks/use-debts'
+import { useAllDebts, useCreateDebt, usePayDebt, useDeleteDebt } from '@/hooks/use-debts'
 import type { Debt, Currency } from '@/domain/types'
 
 const currencies: { value: Currency; label: string }[] = [

@@ -137,6 +137,8 @@ export interface HoldingAggregated {
     unrealizedPnLPercent?: number
     valueARS?: number
     valueUSD?: number
+    fxUsed?: FxType
+    ruleApplied?: string
     byAccount: Holding[]
 }
 
@@ -182,6 +184,24 @@ export interface PriceQuote {
     priceUsd: number
     source: string
     updatedAtISO: string
+}
+
+export interface ManualPrice {
+    instrumentId: string
+    price: number
+    updatedAtISO: string
+}
+
+// -----------------------------------------------------------------------------
+// Valuation Rules
+// -----------------------------------------------------------------------------
+
+export interface ValuationResult {
+    valueArs: number
+    valueUsd: number
+    fxUsed: FxType
+    exchangeRate: number
+    ruleApplied: string
 }
 
 // -----------------------------------------------------------------------------
