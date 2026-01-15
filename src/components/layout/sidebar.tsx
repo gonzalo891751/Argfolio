@@ -9,6 +9,7 @@ import {
     Settings,
     ChevronLeft,
     Menu,
+    TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -36,6 +37,7 @@ const STORAGE_KEY = 'argfolio-sidebar-collapsed'
 
 const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/market', label: 'Mercado', icon: TrendingUp },
     { path: '/assets', label: 'Mis Activos', icon: Wallet },
     { path: '/movements', label: 'Movimientos', icon: ArrowLeftRight },
     { path: '/history', label: 'Historial', icon: History },

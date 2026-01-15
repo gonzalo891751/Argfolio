@@ -14,8 +14,8 @@ import type {
  * 3) CEDEAR:
  *    - valueArs = qty * priceArs (from manual price or provider)
  *    - valueUsd = valueArs / fxRates.mep (default)
- * 4) CASH in USD: valueUsd = amount; valueArs = valueUsd * fxRates.oficial
- * 5) CASH in ARS: valueArs = amount; valueUsd = valueArs / fxRates.oficial
+ * 4) CASH in USD: valueUsd = amount; valueArs = valueUsd * fxRates.mep
+ * 5) CASH in ARS: valueArs = amount; valueUsd = valueArs / fxRates.mep
  * 
  * @param quantity Total quantity of the asset
  * @param price Current price (either USD for Crypto/Stable or ARS for Cedear)
@@ -39,6 +39,10 @@ export function calculateValuation(
         ruleApplied: 'MISSING_DATA'
     }
 
+    if (!Number.isFinite(quantity)) {
+        return nullResult
+    }
+
     if (quantity === 0) {
         return {
             valueArs: 0,
@@ -53,15 +57,19 @@ export function calculateValuation(
     // 1 & 2. CRYPTO & STABLECOIN
     // -------------------------------------------------------------------------
     if (category === 'CRYPTO' || category === 'STABLE') {
-        const effPrice = price ?? 0
+        const effPrice = (price !== undefined && Number.isFinite(price)) ? price : 0
         const valueUsd = quantity * effPrice
         const fxUsed = 'CRIPTO'
         const exchangeRate = fxRates.cripto
-        const valueArs = valueUsd * exchangeRate
+
+        let valueArs: number | null = null
+        if (Number.isFinite(valueUsd) && Number.isFinite(exchangeRate)) {
+            valueArs = valueUsd * exchangeRate
+        }
 
         return {
-            valueUsd,
-            valueArs,
+            valueUsd: Number.isFinite(valueUsd) ? valueUsd : null,
+            valueArs: Number.isFinite(valueArs) ? valueArs : null,
             fxUsed,
             exchangeRate,
             ruleApplied: 'CRYPTO_TO_ARS'
@@ -74,19 +82,22 @@ export function calculateValuation(
     if (category === 'CEDEAR') {
         // If price is missing (undefined or 0/NaN check depending on provider contract)
         // We return NULL so it doesn't count as 0 value in totals
-        if (price === undefined || price === null) {
+        if (price === undefined || price === null || !Number.isFinite(price)) {
             return nullResult
         }
 
         const valueArs = quantity * price
         const fxUsed = 'MEP'
         const exchangeRate = fxRates.mep
-        // valueUsd implies implicit USD value via MEP
-        const valueUsd = exchangeRate > 0 ? valueArs / exchangeRate : 0
+
+        let valueUsd: number | null = null
+        if (Number.isFinite(valueArs) && Number.isFinite(exchangeRate) && exchangeRate > 0) {
+            valueUsd = valueArs / exchangeRate
+        }
 
         return {
-            valueArs,
-            valueUsd,
+            valueArs: Number.isFinite(valueArs) ? valueArs : null,
+            valueUsd: Number.isFinite(valueUsd) ? valueUsd : null,
             fxUsed,
             exchangeRate,
             ruleApplied: 'CEDEAR_IMPLICIT_USD'
@@ -99,16 +110,20 @@ export function calculateValuation(
     if (category === 'USD_CASH') {
         // For cash, quantity is the amount
         const valueUsd = quantity
-        const fxUsed = 'OFICIAL'
-        const exchangeRate = fxRates.oficial
-        const valueArs = valueUsd * exchangeRate
+        const fxUsed = 'MEP' // CHANGED from OFICIAL to MEP
+        const exchangeRate = fxRates.mep
+
+        let valueArs: number | null = null
+        if (Number.isFinite(valueUsd) && Number.isFinite(exchangeRate)) {
+            valueArs = valueUsd * exchangeRate
+        }
 
         return {
-            valueUsd,
-            valueArs,
+            valueUsd: Number.isFinite(valueUsd) ? valueUsd : null,
+            valueArs: Number.isFinite(valueArs) ? valueArs : null,
             fxUsed,
             exchangeRate,
-            ruleApplied: 'CASH_USD_OFFICIAL'
+            ruleApplied: 'CASH_USD_MEP'
         }
     }
 
@@ -117,38 +132,49 @@ export function calculateValuation(
     // -------------------------------------------------------------------------
     if (category === 'ARS_CASH') {
         const valueArs = quantity
-        const fxUsed = 'OFICIAL'
-        const exchangeRate = fxRates.oficial
-        const valueUsd = exchangeRate > 0 ? valueArs / exchangeRate : 0
+        const fxUsed = 'MEP' // CHANGED from OFICIAL to MEP
+        const exchangeRate = fxRates.mep
+
+        let valueUsd: number | null = null
+        if (Number.isFinite(valueArs) && Number.isFinite(exchangeRate) && exchangeRate > 0) {
+            valueUsd = valueArs / exchangeRate
+        }
 
         return {
-            valueArs,
-            valueUsd,
+            valueArs: Number.isFinite(valueArs) ? valueArs : null,
+            valueUsd: Number.isFinite(valueUsd) ? valueUsd : null,
             fxUsed,
             exchangeRate,
-            ruleApplied: 'CASH_ARS_OFFICIAL'
+            ruleApplied: 'CASH_ARS_MEP'
         }
     }
 
     // -------------------------------------------------------------------------
     // Fallback for other things (e.g. FCI, WALLET, OTHER) or Explicit Currency
     // -------------------------------------------------------------------------
-    const effPrice = price ?? 1
+    const effPrice = (price !== undefined && Number.isFinite(price)) ? price : 1
     const valueNative = quantity * effPrice
 
     if (currency === 'USD') {
+        const valueUsd = valueNative
+        const rate = fxRates.mep
+        const valueArs = (Number.isFinite(valueUsd) && Number.isFinite(rate)) ? valueUsd * rate : null
+
         return {
-            valueUsd: valueNative,
-            valueArs: valueNative * fxRates.mep, // Use MEP for generics
+            valueUsd: Number.isFinite(valueUsd) ? valueUsd : null,
+            valueArs,
             fxUsed: 'MEP',
-            exchangeRate: fxRates.mep,
+            exchangeRate: rate,
             ruleApplied: 'GENERIC_USD'
         }
     } else {
+        const valueArs = valueNative
         const rate = fxRates.mep
+        const valueUsd = (Number.isFinite(valueArs) && Number.isFinite(rate) && rate > 0) ? valueArs / rate : null
+
         return {
-            valueArs: valueNative,
-            valueUsd: rate > 0 ? valueNative / rate : 0,
+            valueArs: Number.isFinite(valueArs) ? valueArs : null,
+            valueUsd: Number.isFinite(valueUsd) ? valueUsd : null,
             fxUsed: 'MEP',
             exchangeRate: rate,
             ruleApplied: 'GENERIC_ARS'

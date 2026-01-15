@@ -5,6 +5,7 @@ import { useFxRates } from './use-fx-rates'
 import { useCryptoPrices } from './use-crypto-prices'
 import { useManualPrices } from './use-manual-prices'
 import { useMockPrices } from './use-computed-portfolio'
+import { calculateValuation } from '@/domain/portfolio/valuation'
 import type { Movement, Instrument } from '@/domain/types'
 
 // Mock prices lookup by instrument ID
@@ -126,7 +127,6 @@ export function useInstrumentDetail(instrumentId: string): InstrumentDetail | nu
         }
 
         const isCrypto = instrument.category === 'CRYPTO' || instrument.category === 'STABLE'
-        const isCedear = instrument.category === 'CEDEAR'
 
         // Compute holding using weighted average and Dual Cost Basis
         let totalQuantity = 0
@@ -230,33 +230,17 @@ export function useInstrumentDetail(instrumentId: string): InstrumentDetail | nu
         const avgCostUsd = totalQuantity > 0 ? totalCostBasisUsd / totalQuantity : 0
 
         // Valuation
-        let currentValueArs = 0
-        let currentValueUsd = 0
-        // Use calculateValuation behavior? 
-        // Rules:
-        // CEDEAR: price is ARS (manual). valueArs = qty * price. valueUsd = valueArs / mep.
-        // CRYPTO: price is USD (real). valueUsd = qty * price. valueArs = valueUsd * crypto.
-
-        let valueNative = totalQuantity * currentPrice
-
-        if (isCedear) {
-            // Price is ARS
-            currentValueArs = valueNative
-            currentValueUsd = fxRates.mep > 0 ? currentValueArs / fxRates.mep : 0
-        } else if (isCrypto) {
-            // Price is USD
-            currentValueUsd = valueNative
-            currentValueArs = currentValueUsd * fxRates.cripto
-        } else {
-            // Fallback logic
-            if (instrument.nativeCurrency === 'USD') {
-                currentValueUsd = valueNative
-                currentValueArs = valueNative * fxRates.mep
-            } else {
-                currentValueArs = valueNative
-                currentValueUsd = fxRates.mep > 0 ? currentValueArs / fxRates.mep : 0
-            }
-        }
+        // Use shared valuation logic
+        const valuation = calculateValuation(
+            totalQuantity,
+            currentPrice,
+            instrument.category,
+            instrument.nativeCurrency,
+            fxRates
+        )
+        const currentValueArs = valuation.valueArs ?? 0
+        const currentValueUsd = valuation.valueUsd ?? 0
+        // const calculatedCurrentValueNative = totalQuantity * currentPrice // Native value (keep for legacy consistency if needed)
 
         // Native PnL (Legacy support)
         const currentValue = totalQuantity * currentPrice

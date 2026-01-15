@@ -18,7 +18,7 @@ import { SellPreviewPanel } from '@/components/assets/SellPreviewPanel'
 import { useInstruments, useAccounts } from '@/hooks/use-instruments'
 import { useCreateMovement, useUpdateMovement } from '@/hooks/use-movements'
 import { useFxRates } from '@/hooks/use-fx-rates'
-import { formatCurrency } from '@/lib/utils'
+import { formatMoney, formatNumberAR } from '@/lib/format'
 import type { Movement, MovementType, Currency } from '@/domain/types'
 
 const movementTypes: { value: MovementType; label: string }[] = [
@@ -343,7 +343,7 @@ export function MovementModal({
                             {...form.register('fxAtTrade', { valueAsNumber: true })}
                         />
                         <p className="text-xs text-muted-foreground">
-                            Actual MEP: {Number.isFinite(fxRates?.mep) ? fxRates!.mep.toFixed(2) : '—'}
+                            Actual MEP: {Number.isFinite(fxRates?.mep) ? formatNumberAR(fxRates!.mep) : '—'}
                         </p>
                     </div>
 
@@ -384,12 +384,12 @@ export function MovementModal({
                             <p className="font-medium mb-1">Resumen:</p>
                             <p>
                                 {watchCurrency === 'ARS'
-                                    ? formatCurrency(totalAmount, 'ARS')
-                                    : formatCurrency(totalAmount, watchCurrency)}
+                                    ? formatMoney(totalAmount, 'ARS')
+                                    : formatMoney(totalAmount, watchCurrency)}
                             </p>
                             {watchCurrency !== 'ARS' && fxAtTrade && (
                                 <p className="text-muted-foreground">
-                                    ≈ {formatCurrency(totalAmount * fxAtTrade, 'ARS')}
+                                    ≈ {formatMoney(totalAmount * fxAtTrade, 'ARS')}
                                 </p>
                             )}
                         </div>

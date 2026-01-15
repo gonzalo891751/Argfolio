@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown } from 'lucide-react'
-import { cn, formatCurrency, formatPercent } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { formatMoneyARS, formatMoneyUSD, formatMoney, formatPercent } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -56,13 +57,13 @@ export function KpiCard({
                 <div className="space-y-1">
                     <div className="flex items-baseline gap-2">
                         <span className="text-2xl font-bold font-numeric">
-                            {customDisplay ?? formatCurrency(valueArs, 'ARS')}
+                            {customDisplay ?? formatMoneyARS(valueArs)}
                         </span>
                     </div>
 
                     {!customDisplay && valueUsd !== undefined && (
                         <div className="text-sm text-muted-foreground font-numeric">
-                            {formatCurrency(valueUsd, 'USD')}
+                            {formatMoneyUSD(valueUsd)}
                         </div>
                     )}
 
@@ -82,10 +83,10 @@ export function KpiCard({
                             ) : (
                                 <TrendingDown className="h-3.5 w-3.5" />
                             )}
-                            <span>{formatPercent(changePercent)}</span>
+                            <span>{formatPercent(changePercent / 100)}</span>
                             {change !== undefined && (
                                 <span className="text-muted-foreground ml-1">
-                                    ({formatCurrency(change, 'ARS', { showSign: true, compact: true })})
+                                    ({formatMoney(change, 'ARS')})
                                 </span>
                             )}
                         </div>

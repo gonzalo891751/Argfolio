@@ -2,7 +2,7 @@ import { TrendingUp, TrendingDown, DollarSign, Coins, PiggyBank, BarChart3, Calc
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { formatMoney, formatQuantity, formatPercent } from '@/lib/format'
+import { formatMoneyARS, formatMoneyUSD, formatQty, formatPercent, formatMoney } from '@/lib/format'
 import { AssetCategory } from '@/domain/types'
 
 interface AssetKpiCardsProps {
@@ -63,40 +63,40 @@ export function AssetKpiCards({
     // Determine Primary vs Secondary
     // CEDEAR: ARS (Big) / USD (Small)
     // CRYPTO: USD (Big) / ARS (Small)
-    // Others: Default to Native? 
-    // Let's stick to prompt: "Asset Detail page consistent: CEDEAR -> ARS big, USD small. CRYPTO -> USD big, ARS small."
 
     const isCrypto = category === 'CRYPTO' || category === 'STABLE'
     const isCedear = category === 'CEDEAR'
 
     // Helper to format pair
-    const formatPair = (valArs: number, valUsd: number) => {
+    const formatPair = (valArs: number | null, valUsd: number | null) => {
+        // CEDEAR -> Prioritize ARS
         if (isCedear) {
             return {
-                primary: formatMoney(valArs, 'ARS'),
-                secondary: formatMoney(valUsd, 'USD'),
-            }
-        }
-        // Crypto or default (assume USD preference for crypto, others might vary but let's default to USD pri for crypto)
-        if (isCrypto) {
-            return {
-                primary: formatMoney(valUsd, 'USD'),
-                secondary: formatMoney(valArs, 'ARS'),
+                primary: formatMoneyARS(valArs),
+                secondary: formatMoneyUSD(valUsd),
             }
         }
 
-        // Default Logic based on tradeCurrency?
+        // Crypto -> Prioritize USD
+        if (isCrypto) {
+            return {
+                primary: formatMoneyUSD(valUsd),
+                secondary: formatMoneyARS(valArs),
+            }
+        }
+
+        // Default Logic based on tradeCurrency
         // If tradeCurrency is USD, USD primary.
         const isTradeUsd = tradeCurrency === 'USD' || tradeCurrency === 'USDT' || tradeCurrency === 'USDC'
         if (isTradeUsd) {
             return {
-                primary: formatMoney(valUsd, 'USD'),
-                secondary: formatMoney(valArs, 'ARS'),
+                primary: formatMoneyUSD(valUsd),
+                secondary: formatMoneyARS(valArs),
             }
         } else {
             return {
-                primary: formatMoney(valArs, 'ARS'),
-                secondary: formatMoney(valUsd, 'USD'),
+                primary: formatMoneyARS(valArs),
+                secondary: formatMoneyUSD(valUsd),
             }
         }
     }
@@ -104,12 +104,22 @@ export function AssetKpiCards({
     const invested = formatPair(totalInvestedArs, totalInvestedUsd)
     const currentVal = formatPair(currentValueArs, currentValueUsd)
     const avg = formatPair(avgCostArs, avgCostUsd)
-    const pnl = formatPair(unrealizedPnL_ARS, unrealizedPnL_USD)
+
+    // For PnL, we need to handle the number check for color
+    const pnlPair = formatPair(unrealizedPnL_ARS, unrealizedPnL_USD)
+
+    const getPrimaryPnLValue = () => {
+        if (isCedear) return unrealizedPnL_ARS
+        if (isCrypto) return unrealizedPnL_USD
+        const isTradeUsd = tradeCurrency === 'USD' || tradeCurrency === 'USDT' || tradeCurrency === 'USDC'
+        return isTradeUsd ? unrealizedPnL_USD : unrealizedPnL_ARS
+    }
+    const primaryPnLValue = getPrimaryPnLValue()
 
     const kpis = [
         {
             label: 'Cantidad Total',
-            value: formatQuantity(totalQuantity, category),
+            value: formatQty(totalQuantity, category),
             icon: Coins,
             color: 'text-primary',
         },
@@ -146,12 +156,9 @@ export function AssetKpiCards({
         },
         {
             label: 'PnL No Realizado',
-            value: pnl.primary,
-            subValue: `${pnl.secondary} (${formatPercent(unrealizedPnLPercent)})`,
-            // logic for color based on primary val number check? 
-            // We need raw number for color check. 
-            // isCrypto ? unrealizedPnL_USD : unrealizedPnL_ARS
-            isPositive: (isCrypto ? unrealizedPnL_USD : unrealizedPnL_ARS) >= 0,
+            value: pnlPair.primary,
+            subValue: `${pnlPair.secondary} (${formatPercent(unrealizedPnLPercent)})`,
+            isPositive: (primaryPnLValue ?? 0) >= 0,
             icon: TrendingUp, // icon will be dynamic
             color: 'dynamic',
         },
@@ -168,8 +175,10 @@ export function AssetKpiCards({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {kpis.map((kpi) => {
                 const isPositive = kpi.isPositive
-                const dynamicColor = isPositive ? 'text-success' : 'text-destructive'
-                const finalColor = kpi.color === 'dynamic' ? dynamicColor : kpi.color
+                // Dynamic color logic moved to colorToUse
+
+                const colorToUse = kpi.color === 'dynamic' ? (isPositive ? 'text-green-600' : 'text-destructive') : kpi.color
+
                 const Icon = kpi.label.includes('PnL') ? (isPositive ? TrendingUp : TrendingDown) : kpi.icon
 
                 return (
@@ -183,9 +192,9 @@ export function AssetKpiCards({
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-sm text-muted-foreground">{kpi.label}</span>
-                                <Icon className={cn('h-4 w-4', finalColor)} />
+                                <Icon className={cn('h-4 w-4', colorToUse)} />
                             </div>
-                            <p className={cn('text-lg font-semibold font-numeric', finalColor)}>
+                            <p className={cn('text-lg font-semibold font-numeric', colorToUse)}>
                                 {kpi.value}
                             </p>
                             {kpi.subValue && (

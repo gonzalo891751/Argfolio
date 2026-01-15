@@ -1,4 +1,5 @@
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { formatMoney, formatQty } from '@/lib/format'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Movement } from '@/domain/types'
 
@@ -78,21 +79,19 @@ export function SellMovementsTable({ movements, avgCost, isLoading }: SellMoveme
                                 {sell.accountId}
                             </td>
                             <td className="p-3 text-right font-numeric">
-                                {(sell.quantity ?? 0) < 1
-                                    ? (sell.quantity ?? 0).toFixed(8)
-                                    : (sell.quantity ?? 0).toFixed(4)}
+                                {formatQty(sell.quantity ?? 0)}
                             </td>
                             <td className="p-3 text-right font-numeric text-muted-foreground">
-                                {formatCurrency(sell.unitPrice ?? 0, sell.tradeCurrency as 'USD' | 'ARS')}
+                                {formatMoney(sell.unitPrice ?? 0, sell.tradeCurrency)}
                             </td>
                             <td className="p-3 text-right font-numeric">
-                                {formatCurrency(sell.totalAmount, sell.tradeCurrency as 'USD' | 'ARS')}
+                                {formatMoney(sell.totalAmount, sell.tradeCurrency)}
                             </td>
                             <td className={cn(
                                 'p-3 text-right font-numeric font-medium',
                                 sell.realizedPnL >= 0 ? 'text-success' : 'text-destructive'
                             )}>
-                                {formatCurrency(sell.realizedPnL, sell.tradeCurrency as 'USD' | 'ARS')}
+                                {formatMoney(sell.realizedPnL, sell.tradeCurrency)}
                             </td>
                         </tr>
                     ))}
@@ -101,3 +100,4 @@ export function SellMovementsTable({ movements, avgCost, isLoading }: SellMoveme
         </div>
     )
 }
+

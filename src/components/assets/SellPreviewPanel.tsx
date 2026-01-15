@@ -1,6 +1,7 @@
 import { AlertTriangle, TrendingDown, Wallet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { formatMoney, formatQty } from '@/lib/format'
 
 interface SellPreviewPanelProps {
     currentHolding: number
@@ -45,7 +46,7 @@ export function SellPreviewPanel({
                         Tenencia Actual
                     </span>
                     <span className="font-numeric font-medium">
-                        {currentHolding < 1 ? currentHolding.toFixed(8) : currentHolding.toFixed(4)}
+                        {formatQty(currentHolding)}
                     </span>
                 </div>
 
@@ -53,7 +54,7 @@ export function SellPreviewPanel({
                 <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Máximo Vendible</span>
                     <span className="font-numeric">
-                        {currentHolding < 1 ? currentHolding.toFixed(8) : currentHolding.toFixed(4)}
+                        {formatQty(currentHolding)}
                     </span>
                 </div>
 
@@ -64,7 +65,7 @@ export function SellPreviewPanel({
                         <span>
                             No podés vender más de lo que tenés. Ajustá la cantidad a máximo{' '}
                             <span className="font-numeric font-medium">
-                                {currentHolding < 1 ? currentHolding.toFixed(8) : currentHolding.toFixed(4)}
+                                {formatQty(currentHolding)}
                             </span>
                         </span>
                     </div>
@@ -77,7 +78,7 @@ export function SellPreviewPanel({
                 <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Ingreso Estimado</span>
                     <span className="font-numeric">
-                        {formatCurrency(proceeds, tradeCurrency as 'USD' | 'ARS')}
+                        {formatMoney(proceeds, tradeCurrency)}
                     </span>
                 </div>
 
@@ -88,7 +89,7 @@ export function SellPreviewPanel({
                         'font-numeric font-medium',
                         estimatedPnL >= 0 ? 'text-success' : 'text-destructive'
                     )}>
-                        {formatCurrency(estimatedPnL, tradeCurrency as 'USD' | 'ARS')}
+                        {formatMoney(estimatedPnL, tradeCurrency)}
                     </span>
                 </div>
 
@@ -97,10 +98,10 @@ export function SellPreviewPanel({
                     <span className="text-muted-foreground">Posición Restante</span>
                     <div className="text-right">
                         <span className="font-numeric">
-                            {remainingQty < 1 ? remainingQty.toFixed(8) : remainingQty.toFixed(4)}
+                            {formatQty(remainingQty)}
                         </span>
                         <span className="text-muted-foreground ml-1">
-                            ({formatCurrency(remainingValue, tradeCurrency as 'USD' | 'ARS')})
+                            ({formatMoney(remainingValue, tradeCurrency)})
                         </span>
                     </div>
                 </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Trash2, Pencil, MoreHorizontal } from 'lucide-react'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { formatMoney, formatQty } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -125,16 +126,16 @@ export function MovementTable({
                                         {account?.name ?? <span className="text-muted-foreground">—</span>}
                                     </td>
                                     <td className="p-3 text-right font-numeric">
-                                        {mov.quantity?.toFixed(mov.quantity < 1 ? 8 : 2) ?? '—'}
+                                        {mov.quantity ? formatQty(mov.quantity) : '—'}
                                     </td>
                                     <td className="p-3 text-right font-numeric text-muted-foreground">
-                                        {mov.unitPrice ? formatCurrency(mov.unitPrice, mov.tradeCurrency) : '—'}
+                                        {mov.unitPrice ? formatMoney(mov.unitPrice, mov.tradeCurrency) : '—'}
                                     </td>
                                     <td className={cn(
                                         'p-3 text-right font-numeric font-medium',
                                         mov.type === 'SELL' || mov.type === 'WITHDRAW' ? 'text-destructive' : ''
                                     )}>
-                                        {formatCurrency(mov.totalAmount, mov.tradeCurrency)}
+                                        {formatMoney(mov.totalAmount, mov.tradeCurrency)}
                                     </td>
                                     <td className="p-3 text-right">
                                         <DropdownMenu>

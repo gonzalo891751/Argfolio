@@ -1,4 +1,5 @@
-import { cn, formatCurrency, formatPercent } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { formatMoney, formatQty, formatPercent } from '@/lib/format'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BuyLot } from '@/hooks/use-instrument-detail'
 
@@ -64,29 +65,29 @@ export function BuyLotsTable({ lots, isLoading }: BuyLotsTableProps) {
                                 {lot.accountName}
                             </td>
                             <td className="p-3 text-right font-numeric">
-                                {lot.quantity < 1 ? lot.quantity.toFixed(8) : lot.quantity.toFixed(4)}
+                                {formatQty(lot.quantity)}
                             </td>
                             <td className="p-3 text-right font-numeric text-muted-foreground">
-                                {formatCurrency(lot.unitPrice, lot.tradeCurrency as 'USD' | 'ARS')}
+                                {formatMoney(lot.unitPrice, lot.tradeCurrency)}
                             </td>
                             <td className="p-3 text-right font-numeric">
-                                {formatCurrency(lot.totalPaid, lot.tradeCurrency as 'USD' | 'ARS')}
+                                {formatMoney(lot.totalPaid, lot.tradeCurrency)}
                             </td>
                             <td className="p-3 text-right font-numeric text-muted-foreground">
-                                {lot.fxAtTrade ? lot.fxAtTrade.toFixed(2) : '—'}
+                                {lot.fxAtTrade ? new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(lot.fxAtTrade) : '—'}
                             </td>
                             <td className="p-3 text-right font-numeric">
-                                {formatCurrency(lot.currentValue, lot.tradeCurrency as 'USD' | 'ARS')}
+                                {formatMoney(lot.currentValue, lot.tradeCurrency)}
                             </td>
                             <td className={cn(
                                 'p-3 text-right font-numeric font-medium',
                                 lot.lotPnL >= 0 ? 'text-success' : 'text-destructive'
                             )}>
                                 <div>
-                                    {formatCurrency(lot.lotPnL, lot.tradeCurrency as 'USD' | 'ARS')}
+                                    {formatMoney(lot.lotPnL, lot.tradeCurrency)}
                                 </div>
                                 <div className="text-xs">
-                                    {formatPercent(lot.lotPnLPercent)}
+                                    {formatPercent(lot.lotPnLPercent / 100)}
                                 </div>
                             </td>
                         </tr>
@@ -96,3 +97,4 @@ export function BuyLotsTable({ lots, isLoading }: BuyLotsTableProps) {
         </div>
     )
 }
+

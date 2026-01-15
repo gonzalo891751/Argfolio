@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown } from 'lucide-react'
-import { cn, formatNumber, formatPercent } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { formatNumberAR, formatPercent } from '@/lib/format'
 import { useMarketTape } from '@/hooks/use-market-tape'
 import { useCryptoPrices } from '@/hooks/use-crypto-prices'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -48,7 +49,7 @@ export function TickerTape() {
                         <span className="font-semibold text-sm">{ticker.symbol}</span>
                         <span className="font-mono text-sm text-muted-foreground">
                             {ticker.currency === 'USD' ? 'US$' : '$'}
-                            {formatNumber(ticker.price, ticker.price < 10 ? 2 : 0)}
+                            {formatNumberAR(ticker.price, ticker.price < 10 ? 2 : 0, 2)}
                         </span>
                         <span
                             className={cn(
@@ -61,7 +62,7 @@ export function TickerTape() {
                             ) : ticker.changePercent < 0 ? (
                                 <TrendingDown className="h-3 w-3" />
                             ) : null}
-                            {formatPercent(ticker.changePercent)}
+                            {formatPercent(ticker.changePercent / 100)}
                         </span>
                     </div>
                 ))}

@@ -14,6 +14,7 @@ import { HistoryPage } from '@/pages/history'
 import { DebtsPage } from '@/pages/debts'
 import { SettingsPage } from '@/pages/settings'
 import { ImportPage } from '@/pages/import'
+import { MarketPage } from '@/pages/market'
 import { seedDatabase } from '@/db'
 
 const queryClient = new QueryClient({
@@ -66,6 +67,14 @@ function App() {
                                         element={
                                             <ErrorBoundary>
                                                 <DashboardPage />
+                                            </ErrorBoundary>
+                                        }
+                                    />
+                                    <Route
+                                        path="/market"
+                                        element={
+                                            <ErrorBoundary>
+                                                <MarketPage />
                                             </ErrorBoundary>
                                         }
                                     />

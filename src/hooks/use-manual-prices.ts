@@ -26,10 +26,21 @@ export function useManualPrices() {
         },
     })
 
+    const deletePriceMutation = useMutation({
+        mutationFn: async (instrumentId: string) => {
+            await manualPricesRepo.delete(instrumentId)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['manual-prices'] })
+            queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+        },
+    })
+
     return {
         prices,
         priceMap,
         setPrice: (instrumentId: string, price: number) => setPriceMutation.mutate({ instrumentId, price }),
+        deletePrice: (instrumentId: string) => deletePriceMutation.mutate(instrumentId),
         isLoading,
     }
 }
