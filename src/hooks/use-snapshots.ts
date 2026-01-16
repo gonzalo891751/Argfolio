@@ -36,7 +36,7 @@ export function useSaveSnapshot() {
                 totalARS: portfolio.totalARS,
                 totalUSD: portfolio.totalUSD,
                 fxUsed: {
-                    usdArs: fxRates.mep,
+                    usdArs: fxRates.mep.sell || fxRates.mep.buy || 0,
                     type: baseFx,
                 },
                 createdAtISO: new Date().toISOString(),

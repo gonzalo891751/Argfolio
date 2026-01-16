@@ -186,12 +186,18 @@ export interface PortfolioTotals {
 // FX Rates (from mock provider)
 // -----------------------------------------------------------------------------
 
+export interface FxPair {
+    buy: number | null
+    sell: number | null
+    mid?: number | null // optional midpoint if needed
+}
+
 export interface FxRates {
-    oficial: number
-    blue: number
-    mep: number
-    ccl: number
-    cripto: number
+    oficial: FxPair
+    blue: FxPair
+    mep: FxPair
+    ccl: FxPair
+    cripto: FxPair
     updatedAtISO: string
     source: string
 }

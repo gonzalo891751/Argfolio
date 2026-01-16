@@ -214,7 +214,8 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
             }
 
             // USD (MEP)
-            const mepRate = fxRates?.mep ?? 0
+            const mepVal = fxRates?.mep?.sell ?? fxRates?.mep?.buy
+            const mepRate = mepVal ?? 0
             let lastPriceUsd: number | null = null
             if (lastPriceArs != null && mepRate > 0) {
                 lastPriceUsd = lastPriceArs / mepRate
@@ -239,7 +240,7 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
         })
 
         return list
-    }, [masterMap, ppiPrices, fxRates?.mep])
+    }, [masterMap, ppiPrices, fxRates?.mep?.sell])
 
     // 3. Filter based on mode AND query
     const filtered = useMemo(() => {

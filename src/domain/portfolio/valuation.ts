@@ -35,7 +35,7 @@ export function calculateValuation(
         valueArs: null,
         valueUsd: null,
         fxUsed: 'MEP',
-        exchangeRate: fxRates.mep,
+        exchangeRate: fxRates.mep.sell || fxRates.mep.buy || 0,
         ruleApplied: 'MISSING_DATA'
     }
 
@@ -48,7 +48,7 @@ export function calculateValuation(
             valueArs: 0,
             valueUsd: 0,
             fxUsed: 'MEP',
-            exchangeRate: fxRates.mep,
+            exchangeRate: fxRates.mep.sell || fxRates.mep.buy || 0,
             ruleApplied: 'ZERO_QTY'
         }
     }
@@ -60,7 +60,7 @@ export function calculateValuation(
         const effPrice = (price !== undefined && Number.isFinite(price)) ? price : 0
         const valueUsd = quantity * effPrice
         const fxUsed = 'CRIPTO'
-        const exchangeRate = fxRates.cripto
+        const exchangeRate = fxRates.cripto?.sell || fxRates.cripto?.buy || 0
 
         let valueArs: number | null = null
         if (Number.isFinite(valueUsd) && Number.isFinite(exchangeRate)) {
@@ -89,12 +89,16 @@ export function calculateValuation(
         const valueArs = quantity * price
 
         // Prefer CCL for theoretical USD valuation of CEDEARs
-        const useCcl = fxRates.ccl && fxRates.ccl > 0
+        // Use SELL price for valuation
+        const cclVar = fxRates.ccl.sell || fxRates.ccl.buy
+        const mepVar = fxRates.mep.sell || fxRates.mep.buy
+
+        const useCcl = cclVar && cclVar > 0
         const fxUsed = useCcl ? 'CCL' : 'MEP'
-        const exchangeRate = useCcl ? fxRates.ccl : fxRates.mep
+        const exchangeRate = useCcl ? cclVar : mepVar
 
         let valueUsd: number | null = null
-        if (Number.isFinite(valueArs) && Number.isFinite(exchangeRate) && exchangeRate > 0) {
+        if (Number.isFinite(valueArs) && Number.isFinite(exchangeRate) && exchangeRate && exchangeRate > 0) {
             valueUsd = valueArs / exchangeRate
         }
 
@@ -102,7 +106,7 @@ export function calculateValuation(
             valueArs: Number.isFinite(valueArs) ? valueArs : null,
             valueUsd: Number.isFinite(valueUsd) ? valueUsd : null,
             fxUsed,
-            exchangeRate,
+            exchangeRate: exchangeRate || 0,
             ruleApplied: 'CEDEAR_IMPLICIT_USD'
         }
     }
@@ -114,10 +118,10 @@ export function calculateValuation(
         // For cash, quantity is the amount
         const valueUsd = quantity
         const fxUsed = 'MEP' // CHANGED from OFICIAL to MEP
-        const exchangeRate = fxRates.mep
+        const exchangeRate = fxRates.mep.sell || fxRates.mep.buy || 0
 
         let valueArs: number | null = null
-        if (Number.isFinite(valueUsd) && Number.isFinite(exchangeRate)) {
+        if (Number.isFinite(valueUsd) && Number.isFinite(exchangeRate) && exchangeRate > 0) {
             valueArs = valueUsd * exchangeRate
         }
 
@@ -136,7 +140,7 @@ export function calculateValuation(
     if (category === 'ARS_CASH') {
         const valueArs = quantity
         const fxUsed = 'MEP' // CHANGED from OFICIAL to MEP
-        const exchangeRate = fxRates.mep
+        const exchangeRate = fxRates.mep.sell || fxRates.mep.buy || 0
 
         let valueUsd: number | null = null
         if (Number.isFinite(valueArs) && Number.isFinite(exchangeRate) && exchangeRate > 0) {
@@ -160,7 +164,7 @@ export function calculateValuation(
 
     if (currency === 'USD') {
         const valueUsd = valueNative
-        const rate = fxRates.mep
+        const rate = fxRates.mep.sell || fxRates.mep.buy || 0
         const valueArs = (Number.isFinite(valueUsd) && Number.isFinite(rate)) ? valueUsd * rate : null
 
         return {
@@ -172,7 +176,7 @@ export function calculateValuation(
         }
     } else {
         const valueArs = valueNative
-        const rate = fxRates.mep
+        const rate = fxRates.mep.sell || fxRates.mep.buy || 0
         const valueUsd = (Number.isFinite(valueArs) && Number.isFinite(rate) && rate > 0) ? valueArs / rate : null
 
         return {

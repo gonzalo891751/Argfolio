@@ -70,13 +70,17 @@ export function computeHoldings(
                     // Use fxAtTrade if available, else fallback
                     // Fallback rule: If crypto, use cripto rate? Or always MEP for ARS->USD conversion?
                     // Prompt says "CEDEAR: Convert to USD using MEP". "CRYPTO: costARS = costUSD * fxAtTrade... If buy in ARS: costARS stored. costUSD = costARS / fxAtTrade (use fx.cripto)"
-                    const rate = mov.fxAtTrade || (isCrypto ? fxRates.cripto : fxRates.mep)
+                    const mepRate = fxRates.mep.sell || fxRates.mep.buy || 0
+                    const cryptoRate = fxRates.cripto?.sell || fxRates.cripto?.buy || 0
+                    const rate = mov.fxAtTrade || (isCrypto ? cryptoRate : mepRate)
                     txCostUsd = rate > 0 ? txCostArs / rate : 0
                 } else {
                     // USD or Crypto/Stable (assumed priced in USD/USDT/USDC)
                     txCostUsd = txCost
                     // Convert to ARS
-                    const rate = mov.fxAtTrade || (isCrypto ? fxRates.cripto : fxRates.mep)
+                    const mepRate = fxRates.mep.sell || fxRates.mep.buy || 0
+                    const cryptoRate = fxRates.cripto?.sell || fxRates.cripto?.buy || 0
+                    const rate = mov.fxAtTrade || (isCrypto ? cryptoRate : mepRate)
                     txCostArs = txCostUsd * rate
                 }
 

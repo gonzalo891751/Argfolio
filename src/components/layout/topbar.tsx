@@ -66,11 +66,11 @@ export function Topbar() {
                         </div>
                     ) : fxRates ? (
                         <>
-                            <FxBadge label="Oficial" value={fxRates.oficial} />
-                            <FxBadge label="Blue" value={fxRates.blue} variant="blue" />
-                            <FxBadge label="MEP" value={fxRates.mep} variant="mep" />
-                            <FxBadge label="CCL" value={fxRates.ccl} />
-                            <FxBadge label="Cripto" value={fxRates.cripto} variant="crypto" />
+                            <FxBadge label="Oficial" value={fxRates.oficial.sell ?? 0} />
+                            <FxBadge label="Blue" value={fxRates.blue.sell ?? 0} variant="blue" />
+                            <FxBadge label="MEP" value={fxRates.mep.sell ?? 0} variant="mep" />
+                            <FxBadge label="CCL" value={fxRates.ccl.sell ?? 0} />
+                            <FxBadge label="Cripto" value={fxRates.cripto.sell ?? 0} variant="crypto" />
                         </>
                     ) : null}
                 </div>

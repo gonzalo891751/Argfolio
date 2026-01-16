@@ -34,26 +34,36 @@ export async function fetchFxRates(): Promise<FxRates> {
         // Helper to find sell price
         const findRate = (casa: string) => {
             const rate = data.find(d => d.casa === casa)
-            return rate ? rate.venta : 0
+            // If we found it, return full object, else defaults
+            if (rate) {
+                return {
+                    buy: rate.compra,
+                    sell: rate.venta,
+                    mid: null
+                }
+            }
+            return { buy: null, sell: null, mid: null }
         }
 
         const oficial = findRate('oficial')
         const blue = findRate('blue')
         const mep = findRate('bolsa') // API often uses 'bolsa' for MEP
         const ccl = findRate('contadoconliqui')
-        const cripto = findRate('cripto') // Check if this exists, otherwise we might default to MEP or leave 0
 
-        // If 'cripto' 0, try to fetch USDT entry if it exists in the main array, 
-        // or just fallback to MEP as a safe proxy for now if usage is low, 
-        // but better to fetch specific crypto endpoint if needed.
-        // For simplicity in this phase, we rely on the main array.
+        // For crypto, find the rate like others
+        const cripto = findRate('cripto')
+        // Fallback if missing
+        if (!cripto.buy && !cripto.sell) {
+            cripto.sell = mep.sell || 0
+            cripto.buy = mep.buy || 0 // rough fallback
+        }
 
         return {
             oficial,
             blue,
             mep,
             ccl,
-            cripto: cripto || mep, // Fallback to MEP if crypto missing for now
+            cripto,
             updatedAtISO: new Date().toISOString(),
             source: 'dolarapi.com'
         }

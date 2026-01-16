@@ -84,7 +84,12 @@ export async function getTheoreticalCedears(
 
     // 2. Build results
     // Use CCL as primary, MEP as fallback
-    const fxRate = fxRates.ccl && fxRates.ccl > 0 ? fxRates.ccl : fxRates.mep
+    // We use SELL price for valuation (conservative for buying, but standard for valuation often uses mid or sell depending on context)
+    // Let's use SELL as per previous implicit logic
+    const cclVal = fxRates.ccl.sell || fxRates.ccl.buy
+    const mepVal = fxRates.mep.sell || fxRates.mep.buy
+
+    const fxRate = (cclVal && cclVal > 0) ? cclVal : mepVal
 
     return items.map(item => {
         const quote = quotesMap.get(item.ticker)

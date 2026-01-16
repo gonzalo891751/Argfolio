@@ -81,27 +81,64 @@ function SortIcon({ column, activeSort, activeDir }: { column: string; activeSor
 // Dollar Strip Component
 // ============================================================================
 
-function DollarStrip({ oficial, mep, ccl, cripto }: { oficial?: number; mep?: number; ccl?: number; cripto?: number }) {
-    const items = [
-        { label: 'Oficial', value: oficial },
-        { label: 'MEP', value: mep },
-        { label: 'CCL', value: ccl },
-        { label: 'Cripto', value: cripto },
-    ]
+import type { FxPair } from '@/domain/types'
+
+function DollarStrip({ oficial, mep, ccl, cripto }: { oficial?: FxPair; mep?: FxPair; ccl?: FxPair; cripto?: FxPair }) {
+    // Render helper
+    const renderPair = (pair?: FxPair) => {
+        if (!pair) return <span className="font-semibold">—</span>
+
+        // Single value fallback (only sell or buy available)
+        if (pair.buy == null && pair.sell != null) {
+            return <span className="font-semibold text-foreground">{formatMoneyARS(pair.sell)}</span>
+        }
+
+        // Full Buy/Sell display
+        // Use green for Buy, Red for Sell
+        return (
+            <div className="flex flex-col leading-tight text-xs sm:flex-row sm:gap-3 sm:items-baseline">
+                {pair.buy != null ? (
+                    <span className="font-medium text-muted-foreground">
+                        C: <span className="text-emerald-500 dark:text-emerald-400 font-semibold">{formatMoneyARS(pair.buy)}</span>
+                    </span>
+                ) : (
+                    <span className="font-medium text-muted-foreground">C: <span className="text-muted-foreground">—</span></span>
+                )}
+
+                <span className="hidden sm:inline text-border">|</span>
+
+                {pair.sell != null ? (
+                    <span className="font-medium text-muted-foreground">
+                        V: <span className="text-rose-500 dark:text-rose-400 font-semibold">{formatMoneyARS(pair.sell)}</span>
+                    </span>
+                ) : (
+                    <span className="font-medium text-muted-foreground">V: <span className="text-muted-foreground">—</span></span>
+                )}
+            </div>
+        )
+    }
 
     return (
         <div className="flex flex-wrap gap-2">
-            {items.map(item => (
-                <div
-                    key={item.label}
-                    className="glass rounded-full px-4 py-2 border flex items-center gap-2 text-sm"
-                >
-                    <span className="text-muted-foreground font-medium">{item.label}</span>
-                    <span className="font-semibold">
-                        {item.value != null ? formatMoneyARS(item.value) : '—'}
-                    </span>
-                </div>
-            ))}
+            <div className="glass rounded-lg px-4 py-2 border flex items-center gap-3 text-sm min-h-[42px]">
+                <span className="text-muted-foreground font-medium">Oficial</span>
+                {renderPair(oficial)}
+            </div>
+
+            <div className="glass rounded-lg px-4 py-2 border flex items-center gap-3 text-sm min-h-[42px]">
+                <span className="text-muted-foreground font-medium">MEP</span>
+                {renderPair(mep)}
+            </div>
+
+            <div className="glass rounded-lg px-4 py-2 border flex items-center gap-3 text-sm min-h-[42px]">
+                <span className="text-muted-foreground font-medium">CCL</span>
+                {renderPair(ccl)}
+            </div>
+
+            <div className="glass rounded-lg px-4 py-2 border flex items-center gap-3 text-sm min-h-[42px]">
+                <span className="text-muted-foreground font-medium">Cripto</span>
+                {renderPair(cripto)}
+            </div>
         </div>
     )
 }
@@ -962,8 +999,8 @@ export function MarketPage() {
             {selectedCedear && (
                 <CedearDetailModal
                     item={selectedCedear}
-                    mepRate={fxRates?.mep ?? 0}
-                    cclRate={fxRates?.ccl ?? 0}
+                    mepRate={fxRates?.mep?.sell ?? fxRates?.mep?.buy ?? 0}
+                    cclRate={fxRates?.ccl?.sell ?? fxRates?.ccl?.buy ?? 0}
                     onClose={() => setSelectedCedear(null)}
                 />
             )}

@@ -159,12 +159,16 @@ export function useInstrumentDetail(instrumentId: string): InstrumentDetail | nu
                 // Prompt: "if buy in ARS: costARS stored. costUSD = costARS / fxAtTrade (use fx.cripto)" -> for crypto.
                 // For CEDEAR: "Convert to USD using MEP".
 
-                const fxToUse = mov.fxAtTrade || (isCrypto ? fxRates.cripto : fxRates.mep)
+                const mepRate = fxRates.mep.sell || fxRates.mep.buy || 0
+                const cryptoRate = fxRates.cripto?.sell || fxRates.cripto?.buy || 0
+                const fxToUse = mov.fxAtTrade || (isCrypto ? cryptoRate : mepRate)
                 txCostUsd = fxToUse > 0 ? txCostArs / fxToUse : 0
             } else {
                 // USD-like
                 txCostUsd = txCostNative
-                const fxToUse = mov.fxAtTrade || (isCrypto ? fxRates.cripto : fxRates.mep)
+                const mepRate = fxRates.mep.sell || fxRates.mep.buy || 0
+                const cryptoRate = fxRates.cripto?.sell || fxRates.cripto?.buy || 0
+                const fxToUse = mov.fxAtTrade || (isCrypto ? cryptoRate : mepRate)
                 txCostArs = txCostUsd * fxToUse
             }
 

@@ -163,10 +163,20 @@ export function getFxDailyChangePct(currentRate: number, fxType: keyof FxRates):
         // We compare against 'prev'.
         if (!state.prev || !state.prev.rates) return null
 
-        const prevRate = state.prev.rates[fxType] as number
-        if (typeof prevRate !== 'number' || prevRate === 0) return null
+        const prevData = state.prev.rates[fxType]
+        // Handle FxPair or number (if any left, though now all are FxPair except standard types possibly?)
+        // Actually types.ts says cripto is FxPair now.
+        // We safe-cast or check type.
+        let prevVal = 0
+        if (typeof prevData === 'number') {
+            prevVal = prevData
+        } else if (prevData && typeof prevData === 'object') {
+            prevVal = prevData.sell ?? prevData.buy ?? 0
+        }
 
-        return (currentRate / prevRate) - 1
+        if (!prevVal || prevVal === 0) return null
+
+        return (currentRate / prevVal) - 1
     } catch {
         return null
     }

@@ -111,14 +111,14 @@ export function computeUnrealizedPnL(
 function getFxRate(fxRates: FxRates, type: FxType): number {
     switch (type) {
         case 'MEP':
-            return fxRates.mep
+            return fxRates.mep?.sell || fxRates.mep?.buy || 0
         case 'CCL':
-            return fxRates.ccl
+            return fxRates.ccl?.sell || fxRates.ccl?.buy || 0
         case 'OFICIAL':
-            return fxRates.oficial
+            return fxRates.oficial?.sell || fxRates.oficial?.buy || 0
         case 'CRIPTO':
-            return fxRates.cripto
+            return fxRates.cripto?.sell || fxRates.cripto?.buy || 0
         default:
-            return fxRates.mep
+            return fxRates.mep?.sell || fxRates.mep?.buy || 0
     }
 }

@@ -27,11 +27,31 @@ export const mockProvider: DataProvider = {
 
         // Phase 3: normalized flat numbers
         return {
-            oficial: mockFxRates.oficial.sell,
-            blue: mockFxRates.blue.sell,
-            mep: mockFxRates.mep.sell + (Math.random() - 0.5) * 2,
-            ccl: mockFxRates.ccl.sell,
-            cripto: mockFxRates.cripto.sell,
+            oficial: {
+                buy: mockFxRates.oficial.buy,
+                sell: mockFxRates.oficial.sell,
+                mid: null
+            },
+            blue: {
+                buy: mockFxRates.blue.buy,
+                sell: mockFxRates.blue.sell,
+                mid: null
+            },
+            mep: {
+                buy: mockFxRates.mep.buy,
+                sell: mockFxRates.mep.sell + (Math.random() - 0.5) * 2,
+                mid: null
+            },
+            ccl: {
+                buy: mockFxRates.ccl.buy,
+                sell: mockFxRates.ccl.sell,
+                mid: null
+            },
+            cripto: {
+                buy: 1200,
+                sell: 1220,
+                mid: 1210
+            },
             updatedAtISO: new Date().toISOString(),
             source: 'mock'
         }

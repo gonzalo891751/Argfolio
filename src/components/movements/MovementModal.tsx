@@ -98,7 +98,7 @@ export function MovementModal({
             unitPrice: movement?.unitPrice ?? currentPrice ?? undefined,
             tradeCurrency: movement?.tradeCurrency ?? 'USD',
             totalAmount: movement?.totalAmount ?? 0,
-            fxAtTrade: movement?.fxAtTrade ?? (fxRates?.mep || undefined),
+            fxAtTrade: movement?.fxAtTrade ?? (fxRates?.mep?.sell ?? fxRates?.mep?.buy ?? undefined),
             feeAmount: movement?.feeAmount,
             feeCurrency: movement?.feeCurrency,
             notes: movement?.notes ?? '',
@@ -117,14 +117,14 @@ export function MovementModal({
                 unitPrice: currentPrice ?? undefined,
                 tradeCurrency: 'USD',
                 totalAmount: 0,
-                fxAtTrade: Number.isFinite(fxRates?.mep) ? fxRates?.mep : undefined,
+                fxAtTrade: (fxRates?.mep?.sell ?? fxRates?.mep?.buy) || undefined,
                 feeAmount: undefined,
                 feeCurrency: undefined,
                 notes: '',
                 datetimeISO: new Date().toISOString().slice(0, 16),
             })
         }
-    }, [open, defaultType, defaultInstrumentId, currentPrice, fxRates?.mep, isEditing, form])
+    }, [open, defaultType, defaultInstrumentId, currentPrice, fxRates?.mep?.sell, isEditing, form])
 
     const watchType = form.watch('type') as MovementType
     const watchQty = form.watch('quantity')
@@ -203,7 +203,8 @@ export function MovementModal({
 
     // Preview totals in both currencies
     const totalAmount = form.watch('totalAmount')
-    const fxAtTrade = form.watch('fxAtTrade') ?? (Number.isFinite(fxRates?.mep) ? fxRates!.mep : 1200)
+    const mepRate = fxRates?.mep?.sell ?? fxRates?.mep?.buy ?? 1200
+    const fxAtTrade = form.watch('fxAtTrade') ?? mepRate
 
     // Get instrument for currency display
     const selectedInstrument = instruments.find((i) => i.id === watchInstrumentId)
@@ -343,7 +344,7 @@ export function MovementModal({
                             {...form.register('fxAtTrade', { valueAsNumber: true })}
                         />
                         <p className="text-xs text-muted-foreground">
-                            Actual MEP: {Number.isFinite(fxRates?.mep) ? formatNumberAR(fxRates!.mep) : '—'}
+                            Actual MEP: {(fxRates?.mep?.sell ?? fxRates?.mep?.buy) ? formatNumberAR(fxRates!.mep.sell ?? fxRates!.mep.buy!) : '—'}
                         </p>
                     </div>
 
