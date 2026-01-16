@@ -69,6 +69,7 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 avgCost: h.avgCostNative,
                 avgCostArs: h.avgCostArs,
                 avgCostUsd: h.avgCostUsd,
+                avgCostUsdEq: h.avgCostUsdEq, // Add this
                 currentPrice: price,
                 byAccount: [h],
             })
@@ -84,6 +85,7 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
         agg.avgCost = agg.totalCostBasis / agg.totalQuantity
         agg.avgCostArs = agg.totalCostBasisArs / agg.totalQuantity
         agg.avgCostUsd = agg.totalCostBasisUsd / agg.totalQuantity
+        agg.avgCostUsdEq = agg.totalCostBasisUsd / agg.totalQuantity // Add this (same as avgCostUsd for FIFO)
 
         // Calculate Valuation using the Engine
         const valResult = calculateValuation(

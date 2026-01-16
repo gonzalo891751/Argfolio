@@ -142,7 +142,7 @@ export function useComputedPortfolio() {
             const { baseFx, stableFx } = getUserPreferences()
 
             // Compute holdings
-            const holdings = computeHoldings(movements, instruments, accounts, fxRates)
+            const holdings = computeHoldings(movements, instruments, accounts)
 
             // Compute cash balances (only if tracking cash is enabled)
             const trackCash = getUserPreferences().trackCash

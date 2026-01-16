@@ -123,6 +123,7 @@ export interface Holding {
     avgCostNative: number   // cost basis / quantity
     avgCostArs: number
     avgCostUsd: number
+    avgCostUsdEq: number // new: weighted average cost in historical USD
     currentPriceNative?: number
     currentValueNative?: number
     unrealizedPnLNative?: number
@@ -139,6 +140,7 @@ export interface HoldingAggregated {
     avgCost: number // native
     avgCostArs: number
     avgCostUsd: number
+    avgCostUsdEq: number // new: weighted average cost in historical USD
     currentPrice?: number
     currentValue?: number // native
     unrealizedPnL?: number // native

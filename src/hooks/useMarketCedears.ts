@@ -45,6 +45,7 @@ export interface UseMarketCedearsOptions {
     query?: string
     onlyFavorites?: boolean
     favoriteIds?: string[]
+    enabled?: boolean
 }
 
 // Interface matching PPI provider response
@@ -151,8 +152,19 @@ async function fetchUnderlyingPrices(tickers: string[]): Promise<Map<string, Und
     return results
 }
 
+
 export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
-    const { page = 1, pageSize = 50, sort = 'ticker', dir = 'asc', mode = 'top', query, onlyFavorites, favoriteIds } = options
+    const {
+        page = 1,
+        pageSize = 50,
+        sort = 'ticker',
+        dir = 'asc',
+        mode = 'top',
+        query,
+        onlyFavorites,
+        favoriteIds,
+        enabled = true
+    } = options
 
     const { data: instruments = [] } = useInstruments()
     const { data: fxRates } = useFxRates()
@@ -165,16 +177,24 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
         return map
     }, [masterList])
 
+    // 0. Early return if disabled
+    // We must still run hooks, but we can skip queries
+    // Actually, useQuery handles 'enabled' flag gracefully.
+    // But if we want to return empty lists immediately without processing:
+
     // 1. Fetch ALL PPI prices (cached for 2 min to match server)
     const { data: ppiPrices, isLoading: isPpiLoading } = useQuery({
         queryKey: ['cedears', 'ppi', 'all'],
         queryFn: fetchPpiCedears,
         staleTime: 2 * 60 * 1000,
         refetchInterval: 5 * 60 * 1000,
+        enabled: enabled,
     })
 
     // 2. Build Union List (PPI + Master)
     const unionList = useMemo(() => {
+        if (!enabled) return []
+
         const ppiSet = new Set(ppiPrices?.keys() || [])
         const masterSet = new Set(masterMap.keys())
         const allTickers = new Set([...ppiSet, ...masterSet])
@@ -240,10 +260,12 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
         })
 
         return list
-    }, [masterMap, ppiPrices, fxRates?.mep?.sell])
+    }, [masterMap, ppiPrices, fxRates?.mep?.sell, enabled])
 
     // 3. Filter based on mode AND query
     const filtered = useMemo(() => {
+        if (!enabled) return []
+
         let list = unionList
         if (mode === 'my') {
             const myTickers = new Set(
@@ -270,10 +292,12 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
         }
 
         return list
-    }, [unionList, mode, instruments, query, onlyFavorites, favoriteIds])
+    }, [unionList, mode, instruments, query, onlyFavorites, favoriteIds, enabled])
 
     // 4. Sort
     const sorted = useMemo(() => {
+        if (!enabled) return []
+
         const sortedList = [...filtered]
         sortedList.sort((a, b) => {
             let valA: any
@@ -312,30 +336,35 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
             return dir === 'asc' ? valA - valB : valB - valA
         })
         return sortedList
-    }, [filtered, sort, dir])
+    }, [filtered, sort, dir, enabled])
 
     // 5. Paginate
     const pagedSlice = useMemo(() => {
+        if (!enabled) return []
+
         const start = (page - 1) * pageSize
         return sorted.slice(start, start + pageSize)
-    }, [sorted, page, pageSize])
+    }, [sorted, page, pageSize, enabled])
 
     // 6. Fetch underlying USD for visible slice only
     const tickersForUnderlying = useMemo(() => {
+        if (!enabled) return []
         // Only fetch if we have a priceArs to calculate CCL with?
         // Or fetch anyway for the column display.
         return pagedSlice.map(item => item.ticker)
-    }, [pagedSlice])
+    }, [pagedSlice, enabled])
 
     const { data: underlyingPrices, isLoading: isUnderlyingLoading } = useQuery({
         queryKey: ['cedears', 'underlying', tickersForUnderlying.join(',')],
         queryFn: () => fetchUnderlyingPrices(tickersForUnderlying),
-        enabled: tickersForUnderlying.length > 0,
+        enabled: enabled && tickersForUnderlying.length > 0,
         staleTime: 5 * 60 * 1000,
     })
 
     // 7. Enrich with Underlying & Derived
     const rows: MarketCedearItem[] = useMemo(() => {
+        if (!enabled) return []
+
         return pagedSlice.map(item => {
             // Find underlying: exact match first
             // Note: fetchUnderlyingPrices returns map keyed by normalized ticker (usually same as request)
@@ -354,7 +383,7 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
                 cclImplicit,   // Now populated
             }
         })
-    }, [pagedSlice, underlyingPrices])
+    }, [pagedSlice, underlyingPrices, enabled])
 
     const refetch = () => {
         queryClient.invalidateQueries({ queryKey: ['cedears', 'ppi'] })
@@ -364,11 +393,11 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
 
     return {
         rows,
-        total: sorted.length,
+        total: enabled ? sorted.length : 0,
         page,
         pageSize,
-        isLoading: isPpiLoading,
-        isPricesLoading: isPpiLoading || isUnderlyingLoading,
+        isLoading: enabled ? isPpiLoading : false,
+        isPricesLoading: enabled ? (isPpiLoading || isUnderlyingLoading) : false,
         error: null,
         dataUpdatedAt: Date.now(),
         refetch,
