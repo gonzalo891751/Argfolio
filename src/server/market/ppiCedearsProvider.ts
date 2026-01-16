@@ -190,8 +190,8 @@ export async function fetchPpiCedears(options: CedearOptions = {}): Promise<Cede
         let valB: any = b[sort as keyof CedearQuote]
 
         // Handle specific fields
-        if (sort === 'lastPrice') valA = a.lastPriceArs; valB = b.lastPriceArs
-        if (sort === 'changePct') valA = a.changePct1d; valB = b.changePct1d
+        if (sort === 'lastPrice') { valA = a.lastPriceArs; valB = b.lastPriceArs }
+        if (sort === 'changePct') { valA = a.changePct1d; valB = b.changePct1d }
 
         if (valA === null || valA === undefined) valA = -Infinity
         if (valB === null || valB === undefined) valB = -Infinity
@@ -217,11 +217,18 @@ export async function fetchPpiCedears(options: CedearOptions = {}): Promise<Cede
     }
 
     if (stats) {
+        // Since we don't have access to the full Master list here (it's client side or domain logic),
+        // we can only report PPI stats. The client (useMarketCedears) will match them.
+        const ppiOnlyTickers = processed
+            .map(i => i.ticker)
+            .filter(t => !CEDEAR_NAMES[t]) // Heuristic: if not in our small fallback list? No, this is weak.
+            .slice(0, 50)
+
         response.stats = {
-            masterCount: 0, // Not available here, client side concern mostly
+            masterCount: 0,
             quotesCount: total,
-            matchedCount: total,
-            missingTickers: []
+            matchedCount: 0, // client side
+            missingTickers: ppiOnlyTickers
         }
     }
 

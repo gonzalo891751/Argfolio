@@ -5,13 +5,13 @@
  */
 export const onRequest = async (context: any) => {
     const url = new URL(context.request.url);
-    const tickerParam = url.searchParams.get('ticker');
+    const tickerParam = url.searchParams.get('ticker') || url.searchParams.get('tickers');
 
     if (!tickerParam) {
         return new Response(JSON.stringify({ error: 'Missing ticker parameter' }), { status: 400 });
     }
 
-    const tickers = tickerParam.split(',').map(t => t.trim().toUpperCase());
+    const tickers = tickerParam.split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
     if (tickers.length === 0) {
         return new Response(JSON.stringify({ error: 'No valid tickers' }), { status: 400 });
     }

@@ -79,7 +79,7 @@ function devApiMiddleware(): Plugin {
                     // /api/market/underlying
                     if (req.url && req.url.startsWith('/api/market/underlying')) {
                         const url = new URL(req.url, 'http://localhost')
-                        const tickerParam = url.searchParams.get('ticker')
+                        const tickerParam = url.searchParams.get('ticker') || url.searchParams.get('tickers')
 
                         if (!tickerParam) {
                             res.statusCode = 400
@@ -87,7 +87,7 @@ function devApiMiddleware(): Plugin {
                             return
                         }
 
-                        const tickers = tickerParam.split(',').map(t => t.trim().toUpperCase());
+                        const tickers = tickerParam.split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
                         const limitedTickers = tickers.slice(0, 50);
 
                         const mapToStooq = (t: string) => {
