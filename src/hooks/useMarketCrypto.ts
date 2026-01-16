@@ -18,6 +18,9 @@ export interface UseMarketCryptoOptions {
     pageSize?: number
     sort?: string // Client-side sort mainly
     dir?: 'asc' | 'desc'
+    query?: string
+    onlyFavorites?: boolean
+    favoriteIds?: string[]
 }
 
 interface CoinGeckoMarketItem {
@@ -98,12 +101,12 @@ async function fetchCryptoMarkets(mode: 'my' | 'top100' | 'top250'): Promise<Cry
 }
 
 export function useMarketCrypto(options: UseMarketCryptoOptions = {}) {
-    const { mode = 'my', page = 1, pageSize = 50, sort = 'marketCap', dir = 'desc' } = options
+    const { mode = 'my', page = 1, pageSize = 50, sort = 'marketCap', dir = 'desc', query, onlyFavorites, favoriteIds } = options
     const queryClient = useQueryClient()
 
     const cached = getCachedData(mode)
 
-    const query = useQuery({
+    const cryptoQuery = useQuery({
         queryKey: ['market', 'crypto', mode],
         queryFn: async () => {
             try {
@@ -130,11 +133,28 @@ export function useMarketCrypto(options: UseMarketCryptoOptions = {}) {
 
     // Client-side pagination & sorting
     // We treat the "data" as the full dataset for that mode
-    const allRows = Array.isArray(query.data) ? query.data : []
-    const total = allRows.length
+    const allRows = Array.isArray(cryptoQuery.data) ? cryptoQuery.data : []
 
-    // Sort
-    const sorted = [...allRows].sort((a, b) => {
+    // 1. Filter
+    let filtered = allRows
+
+    if (onlyFavorites && favoriteIds && favoriteIds.length > 0) {
+        const favSet = new Set(favoriteIds)
+        filtered = filtered.filter(c => favSet.has(c.id))
+    }
+
+    if (query && query.trim()) {
+        const q = query.toLowerCase().trim()
+        filtered = filtered.filter((c: CryptoMarketItem) =>
+            c.ticker.toLowerCase().includes(q) ||
+            c.name.toLowerCase().includes(q)
+        )
+    }
+
+    const total = filtered.length
+
+    // 2. Sort
+    const sorted = [...filtered].sort((a, b) => {
         let valA: any = a[sort as keyof CryptoMarketItem]
         let valB: any = b[sort as keyof CryptoMarketItem]
 
@@ -160,8 +180,8 @@ export function useMarketCrypto(options: UseMarketCryptoOptions = {}) {
         total,
         page,
         pageSize,
-        isLoading: query.isLoading,
-        error: query.error,
+        isLoading: cryptoQuery.isLoading,
+        error: cryptoQuery.error,
         refetch,
     }
 }

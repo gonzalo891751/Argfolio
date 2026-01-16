@@ -42,6 +42,9 @@ export interface UseMarketCedearsOptions {
     sort?: string
     dir?: 'asc' | 'desc'
     mode?: 'top' | 'all' | 'my'
+    query?: string
+    onlyFavorites?: boolean
+    favoriteIds?: string[]
 }
 
 // Interface matching PPI provider response
@@ -149,7 +152,7 @@ async function fetchUnderlyingPrices(tickers: string[]): Promise<Map<string, Und
 }
 
 export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
-    const { page = 1, pageSize = 50, sort = 'ticker', dir = 'asc', mode = 'top' } = options
+    const { page = 1, pageSize = 50, sort = 'ticker', dir = 'asc', mode = 'top', query, onlyFavorites, favoriteIds } = options
 
     const { data: instruments = [] } = useInstruments()
     const { data: fxRates } = useFxRates()
@@ -238,7 +241,7 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
         return list
     }, [masterMap, ppiPrices, fxRates?.mep])
 
-    // 3. Filter based on mode
+    // 3. Filter based on mode AND query
     const filtered = useMemo(() => {
         let list = unionList
         if (mode === 'my') {
@@ -249,10 +252,24 @@ export function useMarketCedears(options: UseMarketCedearsOptions = {}) {
             )
             list = unionList.filter(c => myTickers.has(c.ticker.toUpperCase()))
         }
-        // "top": currently we don't strictly filter to top 50, we let pagination sort/show.
-        // We return everything.
+
+        // Filter Favorites
+        if (onlyFavorites && favoriteIds && favoriteIds.length > 0) {
+            const favSet = new Set(favoriteIds)
+            list = list.filter(c => favSet.has(c.ticker))
+        }
+
+        // Apply Search Filter (Global)
+        if (query && query.trim().length > 0) {
+            const q = query.toLowerCase().trim()
+            list = list.filter(item =>
+                item.ticker.toLowerCase().includes(q) ||
+                item.name.toLowerCase().includes(q)
+            )
+        }
+
         return list
-    }, [unionList, mode, instruments])
+    }, [unionList, mode, instruments, query, onlyFavorites, favoriteIds])
 
     // 4. Sort
     const sorted = useMemo(() => {

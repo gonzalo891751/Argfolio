@@ -480,6 +480,11 @@ export function MarketPage() {
     const [selectedCedear, setSelectedCedear] = useState<MarketCedearItem | null>(null)
     const [selectedCrypto, setSelectedCrypto] = useState<CryptoMarketItem | null>(null)
 
+    // Memoize favorite Arrays to prevent hook re-runs
+    const cedearFavIds = useMemo(() => Array.from(cedearFavorites), [cedearFavorites])
+    const cryptoFavIds = useMemo(() => Array.from(cryptoFavorites), [cryptoFavorites])
+
+
     // CEDEARs State
     const [cedearPage, setCedearPage] = useState(1)
     const [cedearSort, setCedearSort] = useState('ticker')
@@ -502,6 +507,9 @@ export function MarketPage() {
         mode: 'all',
         sort: cedearSort,
         dir: cedearDir,
+        query: searchText,
+        onlyFavorites: favFilter === 'favorites',
+        favoriteIds: cedearFavIds,
     })
 
     const {
@@ -515,6 +523,9 @@ export function MarketPage() {
         pageSize: PAGE_SIZE,
         sort: cryptoSort,
         dir: cryptoDir,
+        query: searchText,
+        onlyFavorites: favFilter === 'favorites',
+        favoriteIds: cryptoFavIds,
     })
 
     const { data: indicatorsData, isLoading: indicatorsLoading, refetch: refetchIndicators } = useMarketIndicators()
@@ -548,35 +559,9 @@ export function MarketPage() {
     }, [])
 
     // Filtering and display logic
-    const displayedCedears = useMemo(() => {
-        let items = cedearRows
-        if (favFilter === 'favorites') {
-            items = items.filter(c => cedearFavorites.has(c.ticker))
-        }
-        if (searchText.trim()) {
-            const q = searchText.toLowerCase()
-            items = items.filter(c =>
-                c.ticker.toLowerCase().includes(q) ||
-                c.name.toLowerCase().includes(q)
-            )
-        }
-        return items
-    }, [cedearRows, favFilter, cedearFavorites, searchText])
-
-    const displayedCryptos = useMemo(() => {
-        let items = cryptoRows
-        if (favFilter === 'favorites') {
-            items = items.filter(c => cryptoFavorites.has(c.id))
-        }
-        if (searchText.trim()) {
-            const q = searchText.toLowerCase()
-            items = items.filter(c =>
-                c.ticker.toLowerCase().includes(q) ||
-                c.name.toLowerCase().includes(q)
-            )
-        }
-        return items
-    }, [cryptoRows, favFilter, cryptoFavorites, searchText])
+    // Filtering is now handled by hooks
+    const displayedCedears = cedearRows
+    const displayedCryptos = cryptoRows
 
     // Sorting handlers
     const handleCedearSort = (column: string) => {
@@ -597,12 +582,12 @@ export function MarketPage() {
         }
     }
 
-    // Reset page on tab change
+    // Reset page on tab, search, or filter change
     useEffect(() => {
         setCedearPage(1)
         setCryptoPage(1)
-        setFavFilter('all')
-    }, [currentTab])
+    }, [currentTab, searchText, favFilter])
+
 
     // Derived values
     const isLoading = currentTab === 'cedears' ? cedearsLoading : cryptoLoading

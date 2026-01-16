@@ -100,7 +100,9 @@ function devApiMiddleware(): Plugin {
                         };
 
                         const symbols = limitedTickers.map(mapToStooq).join('+');
-                        const stooqUrl = `https://stooq.com/q/l/?s=${symbols}&f=sl1p2d1t1&h&e=csv`;
+
+                        // f=sd2t2c: Symbol, Date, Time, Close
+                        const stooqUrl = `https://stooq.com/q/l/?s=${symbols}&f=sd2t2c&h&e=csv`;
 
                         const response = await fetch(stooqUrl);
                         const csvText = await response.text();
@@ -111,18 +113,16 @@ function devApiMiddleware(): Plugin {
                             const line = lines[i].trim();
                             if (!line) continue;
                             const parts = line.split(',');
-                            if (parts.length < 3) continue;
+                            if (parts.length < 4) continue;
 
                             const stooqSym = parts[0];
-                            const priceStr = parts[1];
-                            const changeStr = parts[2];
+                            const closeStr = parts[3];
 
-                            if (priceStr === 'N/D') continue;
+                            if (closeStr === 'N/D') continue;
 
-                            const price = parseFloat(priceStr);
-                            const changePct = parseFloat(changeStr.replace('%', ''));
+                            const price = parseFloat(closeStr);
 
-                            if (!isNaN(price)) {
+                            if (!isNaN(price) && isFinite(price) && price > 0) {
                                 let cleanTicker = stooqSym.replace('.US', '');
                                 if (cleanTicker === 'BRK-B') cleanTicker = 'BRK.B';
                                 if (cleanTicker === 'BF-B') cleanTicker = 'BF.B';
@@ -131,7 +131,7 @@ function devApiMiddleware(): Plugin {
                                     ticker: cleanTicker,
                                     symbol: stooqSym,
                                     priceUsd: price,
-                                    changePct1d: !isNaN(changePct) ? changePct : null,
+                                    changePct1d: null,
                                     updatedAt: new Date().toISOString()
                                 });
                             }
