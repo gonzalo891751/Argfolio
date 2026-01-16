@@ -24,12 +24,15 @@ const categoryLabels: Record<AssetCategory, string> = {
 interface ComputeTotalsInput {
     holdings: Holding[]
     currentPrices: Map<string, number>
+    priceChanges: Map<string, number> // 1d change percent (0.01 = 1%)
     fxRates: FxRates
     baseFx: FxType
     stableFx: FxType
     cashBalances: Map<string, Map<string, number>>
     realizedPnL: number
 }
+
+import { getFxDailyChangePct } from '@/lib/daily-snapshot'
 
 /**
  * Compute portfolio totals including ARS/USD values, liquidity, and category breakdown.
@@ -40,7 +43,7 @@ import { calculateValuation } from './valuation'
  * Compute portfolio totals including ARS/USD values, liquidity, and category breakdown.
  */
 export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
-    const { holdings, currentPrices, fxRates, cashBalances, realizedPnL } = input
+    const { holdings, currentPrices, priceChanges, fxRates, cashBalances, realizedPnL } = input
 
     // Aggregate holdings by instrument
     const aggregatedMap = new Map<string, HoldingAggregated>()
@@ -105,7 +108,6 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 agg.totalCostBasis > 0 ? (agg.unrealizedPnL / agg.totalCostBasis) * 100 : 0
         }
 
-        // Calculate Dual PnL
         // Calculate Dual PnL (Safe check)
         if (agg.valueARS != null && agg.valueUSD != null) {
             agg.unrealizedPnL_ARS = agg.valueARS - agg.totalCostBasisArs
@@ -114,6 +116,37 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
             // Add to totals
             totalARS += agg.valueARS
             totalUSD += agg.valueUSD
+        }
+
+        // --- Calculate Daily Change ---
+        const changePctArs = priceChanges.get(agg.instrumentId)
+        if (changePctArs !== undefined) {
+            agg.changePct1dArs = changePctArs
+
+            // Compute Theoretical USD Change
+            // Formula: (1 + arsChange) / (1 + fxChange) - 1
+            if (agg.fxUsed) {
+                // Convert 'CCL' -> 'ccl' for key access
+                const fxKey = agg.fxUsed.toLowerCase() as keyof FxRates
+
+                // Ideally we want the daily change of the FX used for THIS asset.
+                // We can get it from storage via getFxDailyChangePct
+                // Note: we need the latest rate to be passed or just use the utility.
+                // The utility reads from storage.
+                // We need the RATE for the utility? No, utility compares current vs stored.
+                // So we need to pass CURRENT rate to utility.
+                const currentFxRate = fxRates[fxKey]
+                if (typeof currentFxRate === 'number') {
+                    const fxChangePct = getFxDailyChangePct(currentFxRate, fxKey)
+
+                    if (fxChangePct != null) {
+                        const onePlusArs = 1 + (changePctArs / 100)
+                        const onePlusFx = 1 + fxChangePct
+                        const usdChange = (onePlusArs / onePlusFx) - 1
+                        agg.changePct1dUsd = usdChange * 100
+                    }
+                }
+            }
         }
 
         // Accumulate Unrealized PnL only if valid

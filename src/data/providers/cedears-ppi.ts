@@ -1,6 +1,7 @@
 export interface CedearQuote {
     ticker: string
     lastPriceArs: number
+    changePct?: number
 }
 
 export interface CedearApiResponse {

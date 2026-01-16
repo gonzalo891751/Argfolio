@@ -76,6 +76,72 @@ function devApiMiddleware(): Plugin {
                         return
                     }
 
+                    // /api/market/underlying
+                    if (req.url && req.url.startsWith('/api/market/underlying')) {
+                        const url = new URL(req.url, 'http://localhost')
+                        const tickerParam = url.searchParams.get('ticker')
+
+                        if (!tickerParam) {
+                            res.statusCode = 400
+                            res.end(JSON.stringify({ error: 'Missing ticker' }))
+                            return
+                        }
+
+                        const tickers = tickerParam.split(',').map(t => t.trim().toUpperCase());
+                        const limitedTickers = tickers.slice(0, 50);
+
+                        const mapToStooq = (t: string) => {
+                            if (t === 'BRK.B' || t === 'BRK/B') return 'BRK-B.US';
+                            if (t === 'BF.B') return 'BF-B.US';
+                            if (t.includes('.')) {
+                                return t.replace('.', '-') + '.US';
+                            }
+                            return `${t}.US`;
+                        };
+
+                        const symbols = limitedTickers.map(mapToStooq).join('+');
+                        const stooqUrl = `https://stooq.com/q/l/?s=${symbols}&f=sl1p2d1t1&h&e=csv`;
+
+                        const response = await fetch(stooqUrl);
+                        const csvText = await response.text();
+                        const lines = csvText.split('\n');
+                        const items: any[] = [];
+
+                        for (let i = 1; i < lines.length; i++) {
+                            const line = lines[i].trim();
+                            if (!line) continue;
+                            const parts = line.split(',');
+                            if (parts.length < 3) continue;
+
+                            const stooqSym = parts[0];
+                            const priceStr = parts[1];
+                            const changeStr = parts[2];
+
+                            if (priceStr === 'N/D') continue;
+
+                            const price = parseFloat(priceStr);
+                            const changePct = parseFloat(changeStr.replace('%', ''));
+
+                            if (!isNaN(price)) {
+                                let cleanTicker = stooqSym.replace('.US', '');
+                                if (cleanTicker === 'BRK-B') cleanTicker = 'BRK.B';
+                                if (cleanTicker === 'BF-B') cleanTicker = 'BF.B';
+
+                                items.push({
+                                    ticker: cleanTicker,
+                                    symbol: stooqSym,
+                                    priceUsd: price,
+                                    changePct1d: !isNaN(changePct) ? changePct : null,
+                                    updatedAt: new Date().toISOString()
+                                });
+                            }
+                        }
+
+                        res.setHeader('Content-Type', 'application/json')
+                        res.end(JSON.stringify({ source: 'Stooq-Dev', items }))
+                        return
+                    }
+
                     // Not found
                     res.statusCode = 404
                     res.end(JSON.stringify({ error: 'API endpoint not found' }))

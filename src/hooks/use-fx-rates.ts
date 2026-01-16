@@ -31,6 +31,12 @@ export function useFxRates() {
                 // Cache successful response
                 localStorage.setItem(FX_STORAGE_KEY, JSON.stringify(data))
                 setLastRefreshTime(new Date())
+
+                // Update Daily Snapshot
+                import('@/lib/daily-snapshot').then(({ updateFxSnapshot }) => {
+                    updateFxSnapshot(data)
+                }).catch(err => console.error('Failed to update FX snapshot', err))
+
                 return data
             } catch (error) {
                 console.warn('FX API failed, attempting fallback...', error)

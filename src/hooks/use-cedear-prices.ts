@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchCedearPrices } from '@/data/providers/cedears-ppi'
 import { useEffect } from 'react'
 
-export type CedearPriceMap = Record<string, { lastPriceArs: number; updatedAt: string }>
+export type CedearPriceMap = Record<string, { lastPriceArs: number; changePct?: number; updatedAt: string }>
 
 const STORAGE_KEY = 'argfolio.cedearPrices.v1'
 const REFRESH_INTERVAL = 5 * 60 * 1000 // 5 minutes
@@ -40,7 +40,14 @@ export function useCedearPrices(enabled: boolean = true) {
             for (const item of data.items) {
                 map[item.ticker] = {
                     lastPriceArs: item.lastPriceArs,
+                    // If changePct is missing, maybe default to 0 or null?
+                    // Let's store it if present.
+                    // But TypeScript needs consistent type.
+                    // We need to update CedearPriceMap definition too.
                     updatedAt: data.updatedAt
+                }
+                if (item.changePct !== undefined) {
+                    (map[item.ticker] as any).changePct = item.changePct
                 }
             }
             return map

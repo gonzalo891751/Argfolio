@@ -119,6 +119,26 @@ export function useComputedPortfolio() {
                 }
             })
 
+            // Build price changes map (Phase 2.1)
+            // Gather changePct from providers
+            const priceChangesMap = new Map<string, number>()
+            instrumentsList.forEach(instr => {
+                const sym = instr.symbol.toUpperCase()
+
+                // CEDEARS
+                if (instr.category === 'CEDEAR' && cedearPrices[sym]) {
+                    const change = (cedearPrices[sym] as any).changePct
+                    if (typeof change === 'number') {
+                        priceChangesMap.set(instr.id, change)
+                    }
+                }
+
+                // CRYPTO is tricky, cryptoPrices returns just price numbers right now?
+                // check useCryptoPrices -> hooks/useMarketCrypto returns changePct but useCryptoPrices (simple) might not.
+                // If the user wants crypto change too, I need to check useCryptoPrices.
+                // Assuming currently only CEDEARs requested specifically for USD equivalent logic.
+            })
+
             const { baseFx, stableFx } = getUserPreferences()
 
             // Compute holdings
@@ -135,6 +155,7 @@ export function useComputedPortfolio() {
             const totals = computeTotals({
                 holdings,
                 currentPrices: pricesMap,
+                priceChanges: priceChangesMap,
                 fxRates,
                 baseFx,
                 stableFx,

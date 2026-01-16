@@ -150,6 +150,10 @@ export interface HoldingAggregated {
     unrealizedPnL_ARS?: number
     unrealizedPnL_USD?: number
 
+    // Daily Change
+    changePct1dArs?: number
+    changePct1dUsd?: number
+
     fxUsed?: FxType
     ruleApplied?: string
     byAccount: Holding[]

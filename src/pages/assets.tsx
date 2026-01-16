@@ -53,6 +53,8 @@ export function AssetsPage() {
                 valueUSD: item.valueUSD ?? 0,
                 unrealizedPnL: item.unrealizedPnL ?? 0,
                 unrealizedPnLPercent: item.unrealizedPnLPercent ?? 0,
+                changePct1dArs: item.changePct1dArs,
+                changePct1dUsd: item.changePct1dUsd,
                 fxUsed: item.fxUsed,
             }))
         )
@@ -154,6 +156,7 @@ export function AssetsPage() {
                                         <th className="text-left p-4 text-sm font-medium text-muted-foreground">Categoría</th>
                                         <th className="text-right p-4 text-sm font-medium text-muted-foreground">Cantidad</th>
                                         <th className="text-right p-4 text-sm font-medium text-muted-foreground">Precio Actual</th>
+                                        <th className="text-right p-4 text-sm font-medium text-muted-foreground">Var 1d</th>
                                         <th className="text-right p-4 text-sm font-medium text-muted-foreground">Valuación</th>
                                         <th className="text-right p-4 text-sm font-medium text-muted-foreground">FX</th>
                                         <th className="text-right p-4 text-sm font-medium text-muted-foreground">PnL</th>
@@ -218,6 +221,23 @@ export function AssetsPage() {
                                                                     </Badge>
                                                                 ) : null}
                                                             </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <div className="flex flex-col items-end gap-0.5">
+                                                        {holding.changePct1dUsd !== undefined ? (
+                                                            <span className={cn("font-medium text-xs", getChangeColor(holding.changePct1dUsd))}>
+                                                                USD {formatPercent(holding.changePct1dUsd)}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">—</span>
+                                                        )}
+
+                                                        {holding.changePct1dArs !== undefined && holding.changePct1dUsd !== undefined && Math.abs((holding.changePct1dArs) - (holding.changePct1dUsd)) > 0.01 && (
+                                                            <span className={cn("text-[10px]", getChangeColor(holding.changePct1dArs))}>
+                                                                ARS {formatPercent(holding.changePct1dArs)}
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </td>

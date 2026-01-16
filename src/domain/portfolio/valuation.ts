@@ -87,8 +87,11 @@ export function calculateValuation(
         }
 
         const valueArs = quantity * price
-        const fxUsed = 'MEP'
-        const exchangeRate = fxRates.mep
+
+        // Prefer CCL for theoretical USD valuation of CEDEARs
+        const useCcl = fxRates.ccl && fxRates.ccl > 0
+        const fxUsed = useCcl ? 'CCL' : 'MEP'
+        const exchangeRate = useCcl ? fxRates.ccl : fxRates.mep
 
         let valueUsd: number | null = null
         if (Number.isFinite(valueArs) && Number.isFinite(exchangeRate) && exchangeRate > 0) {

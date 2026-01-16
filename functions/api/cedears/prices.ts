@@ -1,4 +1,4 @@
-export const onRequest: PagesFunction = async (context) => {
+export const onRequest = async (context: any) => {
     const PPI_URL = 'https://www.portfoliopersonal.com/Cotizaciones/Cedears';
 
     try {
@@ -14,7 +14,7 @@ export const onRequest: PagesFunction = async (context) => {
 
         const html = await response.text();
 
-        const items: Array<{ ticker: string; lastPriceArs: number }> = [];
+        const items: Array<{ ticker: string; lastPriceArs: number; changePct?: number }> = [];
 
         // Naive parsing based on common table structures
         const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
@@ -45,21 +45,33 @@ export const onRequest: PagesFunction = async (context) => {
                     // Let's look for the first valid price formatting in cells l, 2, 3
 
                     let foundPrice = false;
-                    // Search cells 1, 2, 3 for price
-                    for (let i = 1; i <= 3; i++) {
-                        if (foundPrice) break;
-                        if (!cells[i]) continue;
+                    let lastPriceArs = 0;
+                    let changePct = 0;
 
-                        const cellText = cells[i].replace(/<[^>]+>/g, '').trim();
-                        // Check match 1.234,56 or 123,45
-                        if (/^[0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}$/.test(cellText) || /^[0-9]+,[0-9]{2}$/.test(cellText)) {
-                            const priceStr = cellText.replace(/\./g, '').replace(',', '.');
-                            const price = parseFloat(priceStr);
-                            if (!isNaN(price) && price > 0) {
-                                items.push({ ticker, lastPriceArs: price });
-                                foundPrice = true;
-                            }
+                    // Search cells for Price and Var %
+                    // Typical columns: [0] Ticker [1] Vto [2] Ultimo [3] Var [4] Var% ...
+                    // Let's try to map by index if possible, but fallback to regex
+
+                    if (cells[2]) {
+                        const priceText = cells[2].replace(/<[^>]+>/g, '').trim();
+                        // Format: 1.234,56
+                        if (/^[0-9.]+,[0-9]{2}$/.test(priceText)) {
+                            lastPriceArs = parseFloat(priceText.replace(/\./g, '').replace(',', '.'));
+                            if (!isNaN(lastPriceArs) && lastPriceArs > 0) foundPrice = true;
                         }
+                    }
+
+                    // Try cell 4 for Var % (e.g. "1,50%", "-0,30%")
+                    if (foundPrice && cells[4]) {
+                        const varText = cells[4].replace(/<[^>]+>/g, '').trim().replace('%', '');
+                        // Format: -1,23 or 1,23
+                        if (/^-?[0-9.]+,[0-9]{2}$/.test(varText)) {
+                            changePct = parseFloat(varText.replace(/\./g, '').replace(',', '.'));
+                        }
+                    }
+
+                    if (foundPrice) {
+                        items.push({ ticker, lastPriceArs, changePct });
                     }
                 }
             }
