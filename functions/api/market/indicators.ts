@@ -3,7 +3,7 @@
  * Fetches market indicators (MERVAL, S&P500, CCL, Riesgo País)
  */
 
-import { fetchIndicators } from '../../src/server/market/indicatorsProvider'
+import { fetchIndicators } from '../../../src/server/market/indicatorsProvider'
 
 export const onRequest: PagesFunction = async (context) => {
     try {

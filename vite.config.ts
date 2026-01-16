@@ -19,9 +19,22 @@ function devApiMiddleware(): Plugin {
 
                 try {
                     // /api/market/cedears
-                    if (req.url === '/api/market/cedears') {
+                    if (req.url && req.url.startsWith('/api/market/cedears')) {
                         const { fetchPpiCedears } = await import('./src/server/market/ppiCedearsProvider')
-                        const data = await fetchPpiCedears()
+
+                        // Parse query params manually since we don't have a full Request object in middleware
+                        const url = new URL(req.url, 'http://localhost')
+                        const params = url.searchParams
+
+                        const options = {
+                            page: params.get('page') ? parseInt(params.get('page')!) : undefined,
+                            pageSize: params.get('pageSize') ? parseInt(params.get('pageSize')!) : undefined,
+                            sort: params.get('sort') || undefined,
+                            dir: (params.get('dir') as 'asc' | 'desc') || undefined,
+                            mode: (params.get('mode') as 'top' | 'all') || undefined
+                        }
+
+                        const data = await fetchPpiCedears(options)
 
                         res.setHeader('Content-Type', 'application/json')
                         res.setHeader('Access-Control-Allow-Origin', '*')
@@ -31,7 +44,7 @@ function devApiMiddleware(): Plugin {
                     }
 
                     // /api/market/indicators
-                    if (req.url === '/api/market/indicators') {
+                    if (req.url && req.url.startsWith('/api/market/indicators')) {
                         const { fetchIndicators } = await import('./src/server/market/indicatorsProvider')
                         const data = await fetchIndicators()
 
@@ -43,9 +56,9 @@ function devApiMiddleware(): Plugin {
                     }
 
                     // /api/cedears/prices (legacy endpoint)
-                    if (req.url === '/api/cedears/prices') {
+                    if (req.url && req.url.startsWith('/api/cedears/prices')) {
                         const { fetchPpiCedears } = await import('./src/server/market/ppiCedearsProvider')
-                        const fullData = await fetchPpiCedears()
+                        const fullData = await fetchPpiCedears({ mode: 'all', pageSize: 1000 })
 
                         // Transform to legacy format
                         const legacyData = {
