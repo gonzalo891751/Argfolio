@@ -19,7 +19,8 @@ import { useInstruments, useAccounts } from '@/hooks/use-instruments'
 import { useCreateMovement, useUpdateMovement } from '@/hooks/use-movements'
 import { useFxRates } from '@/hooks/use-fx-rates'
 import { formatMoney, formatNumberAR } from '@/lib/format'
-import type { Movement, MovementType, Currency } from '@/domain/types'
+import type { Movement, MovementType, Currency, MovementFxSnapshot } from '@/domain/types'
+import { buildFxQuote, getFxForTradeSnapshot } from '@/domain/fx/convert'
 
 const movementTypes: { value: MovementType; label: string }[] = [
     { value: 'BUY', label: 'Compra' },
@@ -186,6 +187,51 @@ export function MovementModal({
             feeAmount: data.feeAmount,
             feeCurrency: data.feeCurrency as Currency | undefined,
             notes: data.notes,
+        }
+
+        // NEW: Populate FX Snapshot for historical accuracy (Step D)
+        if (selectedInstrument) {
+            const isCrypto = selectedInstrument.category === 'CRYPTO' || selectedInstrument.category === 'STABLE'
+            const isCedear = selectedInstrument.category === 'CEDEAR'
+
+            // Determine FX Kind
+            // - Crypto/Stable -> CRIPTO
+            // - CEDEAR -> MEP (usually)
+            // - Cash USD -> MEP
+            // - Cash ARS -> MEP
+            let fxKind: MovementFxSnapshot['kind'] = 'MEP'
+            if (isCrypto) fxKind = 'CRIPTO'
+            else if (isCedear) fxKind = 'NONE' // Per plan: CEDEARs trade in ARS usually, so no FX needed for cost basis, or implicit
+
+            // If trading USD assets, we usually want an FX attached
+            if (data.tradeCurrency === 'USD' || data.tradeCurrency === 'USDT' || data.tradeCurrency === 'USDC') {
+                if (isCrypto) fxKind = 'CRIPTO'
+                else fxKind = 'MEP'
+            }
+
+            // Determine Side
+            // - BUY Asset (USD) -> getFxForTradeSnapshot('buy') -> returns Ask/Sell rate
+            // - SELL Asset (USD) -> getFxForTradeSnapshot('sell') -> returns Bid/Buy rate
+            const movSide = data.type === 'BUY' ? 'buy' : (data.type === 'SELL' ? 'sell' : 'buy')
+
+            // Get Rates for Kind
+            const rawPair = fxKind === 'CRIPTO' ? fxRates?.cripto : fxRates?.mep
+            const quote = buildFxQuote(rawPair)
+
+            // Compute Snapshot defaults
+            const { rate: defaultRate, sideLabel } = getFxForTradeSnapshot(movSide, quote)
+
+            const finalRate = data.fxAtTrade ?? defaultRate
+
+            if (finalRate && finalRate > 0) {
+                movementData.fx = {
+                    kind: fxKind,
+                    side: sideLabel,
+                    rate: finalRate,
+                    asOf: data.datetimeISO, // Snapshot time
+                    source: 'user_entry_snapshot'
+                }
+            }
         }
 
         try {

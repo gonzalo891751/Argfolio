@@ -70,7 +70,7 @@ export function Topbar() {
                             <FxBadge label="Blue" value={fxRates.blue.sell ?? 0} variant="blue" />
                             <FxBadge label="MEP" value={fxRates.mep.sell ?? 0} variant="mep" />
                             <FxBadge label="CCL" value={fxRates.ccl.sell ?? 0} />
-                            <FxBadge label="Cripto" value={fxRates.cripto.sell ?? 0} variant="crypto" />
+                            <FxBadge label="Cripto (C)" value={fxRates.cripto.buy ?? 0} variant="crypto" />
                         </>
                     ) : null}
                 </div>

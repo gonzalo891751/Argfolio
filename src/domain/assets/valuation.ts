@@ -3,7 +3,7 @@
  * Computes asset metrics with correct FX application per asset class
  */
 
-import type { FxQuotes, ValuationMode, FxKey } from '@/domain/fx/types'
+import type { FxQuotes, FxKey } from '@/domain/fx/types'
 import { toUsdFromArs, toArsFromUsd, getEffectiveRate } from '@/domain/fx/convert'
 import type { AssetMetrics, AssetInput, AssetPrices, CedearDetails, PortfolioAssetTotals } from './types'
 
@@ -11,9 +11,9 @@ import type { AssetMetrics, AssetInput, AssetPrices, CedearDetails, PortfolioAss
  * FX labels for display
  */
 const FX_LABELS: Record<FxKey, string> = {
-    oficial: 'Dólar Oficial',
-    mep: 'Dólar MEP',
-    cripto: 'Dólar Cripto',
+    oficial: 'Oficial',
+    mep: 'MEP',
+    cripto: 'Cripto',
 }
 
 /**
@@ -81,8 +81,7 @@ function safePct(value: number | null, base: number | null): number | null {
 export function computeAssetMetrics(
     asset: AssetInput,
     prices: AssetPrices,
-    fxQuotes: FxQuotes,
-    mode: ValuationMode
+    fxQuotes: FxQuotes
 ): AssetMetrics {
     const fxKey = getFxKeyForAsset(asset.category)
     const fx = fxQuotes[fxKey]
@@ -104,9 +103,15 @@ export function computeAssetMetrics(
                 valArs = asset.quantity * priceArs
             }
 
-            // Convert to USD using MEP
-            valUsdEq = toUsdFromArs(valArs, fx, mode)
-            costUsdEq = toUsdFromArs(costArs, fx, mode)
+            // Convert to USD using MEP (Liquidation: Venta/Ask)
+            valUsdEq = toUsdFromArs(valArs, fx)
+
+            // Cost: Use historical USD cost if available (to fix drift)
+            if (asset.costBasisUsdEq != null && asset.costBasisUsdEq !== 0) {
+                costUsdEq = asset.costBasisUsdEq
+            } else {
+                costUsdEq = toUsdFromArs(costArs, fx)
+            }
 
             // Compute CEDEAR structural details
             cedearDetails = computeCedearDetails(
@@ -128,27 +133,31 @@ export function computeAssetMetrics(
                 valUsd = asset.quantity * priceUsd
             }
 
-            // Primary valuation is USD, ARS is equivalent
+            // Primary valuation is USD, ARS is equivalent (Liquidation: Bid/Compra)
             valUsdEq = valUsd
-            valArs = toArsFromUsd(valUsd, fx, mode)
+            valArs = toArsFromUsd(valUsd, fx)
 
-            // Cost was tracked in ARS, convert to USD
-            costUsdEq = toUsdFromArs(costArs, fx, mode)
+            // Cost: Use historical USD cost if available (fixes drift), otherwise fallback
+            if (asset.costBasisUsdEq != null && asset.costBasisUsdEq !== 0) {
+                costUsdEq = asset.costBasisUsdEq
+            } else {
+                costUsdEq = toUsdFromArs(costArs, fx)
+            }
             break
         }
 
         case 'CASH_ARS': {
             // CASH_ARS: Quantity IS the ARS value
             valArs = asset.quantity
-            valUsdEq = toUsdFromArs(valArs, fx, mode)
-            costUsdEq = toUsdFromArs(costArs, fx, mode)
+            valUsdEq = toUsdFromArs(valArs, fx)
+            costUsdEq = toUsdFromArs(costArs, fx)
             break
         }
 
         case 'CASH_USD': {
             // CASH_USD: Quantity IS the USD value
             valUsdEq = asset.quantity
-            valArs = toArsFromUsd(valUsdEq, fx, mode)
+            valArs = toArsFromUsd(valUsdEq, fx)
             costUsdEq = asset.quantity // Cost in USD = current value
             break
         }
@@ -158,13 +167,18 @@ export function computeAssetMetrics(
             if (asset.nativeCurrency === 'USD') {
                 const priceUsd = prices.currentPrice ?? 1
                 valUsdEq = asset.quantity * priceUsd
-                valArs = toArsFromUsd(valUsdEq, fx, mode)
-                costUsdEq = toUsdFromArs(costArs, fx, mode)
+                valArs = toArsFromUsd(valUsdEq, fx)
+
+                if (asset.costBasisUsdEq != null && asset.costBasisUsdEq !== 0) {
+                    costUsdEq = asset.costBasisUsdEq
+                } else {
+                    costUsdEq = toUsdFromArs(costArs, fx)
+                }
             } else {
                 const priceArs = prices.currentPrice ?? 1
                 valArs = asset.quantity * priceArs
-                valUsdEq = toUsdFromArs(valArs, fx, mode)
-                costUsdEq = toUsdFromArs(costArs, fx, mode)
+                valUsdEq = toUsdFromArs(valArs, fx)
+                costUsdEq = toUsdFromArs(costArs, fx)
             }
         }
     }
@@ -179,7 +193,7 @@ export function computeAssetMetrics(
 
     // Get effective FX rate used
     const direction = asset.nativeCurrency === 'USD' ? 'usd-to-ars' : 'ars-to-usd'
-    const fxRate = getEffectiveRate(fx, mode, direction)
+    const fxRate = getEffectiveRate(fx, direction)
 
     // Compute Daily Change in ARS
     let changeArs1d: number | null = null
@@ -214,8 +228,9 @@ export function computeAssetMetrics(
         fxUsedLabel: FX_LABELS[fxKey],
         fxRate,
         currentPrice: prices.currentPrice,
-        avgCost: asset.avgCostNative,
-        avgCostUsdEq: asset.avgCostUsdEq, // Pass through historical USD cost
+        // Force average cost calculation from basis to ensure consistency (especially for CEDEARs ARS vs USD)
+        avgCost: asset.quantity > 0 ? (asset.category === 'CEDEAR' ? costArs / asset.quantity : asset.avgCostNative) : 0,
+        avgCostUsdEq: (asset.quantity > 0 && costUsdEq != null) ? costUsdEq / asset.quantity : 0,
         investedArs: costArs,
         nativeCurrency: asset.nativeCurrency,
         cedearDetails,

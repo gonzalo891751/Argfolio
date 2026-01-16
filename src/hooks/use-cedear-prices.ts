@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchCedearPrices } from '@/data/providers/cedears-ppi'
 import { useEffect } from 'react'
 
-export type CedearPriceMap = Record<string, { lastPriceArs: number; changePct?: number; updatedAt: string }>
+export type CedearPriceMap = Record<string, { lastPriceArs: number; changePct?: number; underlyingPrice?: number; updatedAt: string }>
 
 const STORAGE_KEY = 'argfolio.cedearPrices.v1'
 const REFRESH_INTERVAL = 5 * 60 * 1000 // 5 minutes

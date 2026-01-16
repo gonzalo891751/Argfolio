@@ -47,65 +47,46 @@ describe('buildFxQuote', () => {
 describe('toUsdFromArs', () => {
     const mep: FxQuote = { bid: 1470, ask: 1485, mid: 1477.5 }
 
-    it('uses mid in market mode', () => {
-        const result = toUsdFromArs(98950, mep, 'market')
-
-        // 98950 / 1477.5 ≈ 66.9712
-        expect(result).toBeCloseTo(66.9712, 2)
-    })
-
-    it('uses ask in liquidation mode (selling ARS)', () => {
-        const result = toUsdFromArs(98950, mep, 'liquidation')
+    it('uses ask always (selling ARS)', () => {
+        const result = toUsdFromArs(98950, mep)
 
         // 98950 / 1485 ≈ 66.6330
         expect(result).toBeCloseTo(66.6330, 2)
     })
 
     it('returns null for null input', () => {
-        expect(toUsdFromArs(null, mep, 'market')).toBeNull()
+        expect(toUsdFromArs(null, mep)).toBeNull()
     })
 
     it('returns null for zero rate', () => {
         const zeroFx: FxQuote = { bid: 0, ask: 0, mid: 0 }
-        expect(toUsdFromArs(1000, zeroFx, 'market')).toBeNull()
+        expect(toUsdFromArs(1000, zeroFx)).toBeNull()
     })
 })
 
 describe('toArsFromUsd', () => {
     const cripto: FxQuote = { bid: 1520, ask: 1535, mid: 1527.5 }
 
-    it('uses mid in market mode', () => {
-        const result = toArsFromUsd(860, cripto, 'market')
-
-        // 860 * 1527.5 = 1,313,650
-        expect(result).toBeCloseTo(1313650, 0)
-    })
-
-    it('uses bid in liquidation mode (selling USD)', () => {
-        const result = toArsFromUsd(860, cripto, 'liquidation')
+    it('uses bid always (selling USD)', () => {
+        const result = toArsFromUsd(860, cripto)
 
         // 860 * 1520 = 1,307,200
         expect(result).toBeCloseTo(1307200, 0)
     })
 
     it('returns null for null input', () => {
-        expect(toArsFromUsd(null, cripto, 'market')).toBeNull()
+        expect(toArsFromUsd(null, cripto)).toBeNull()
     })
 })
 
 describe('getEffectiveRate', () => {
     const fx: FxQuote = { bid: 1470, ask: 1485, mid: 1477.5 }
 
-    it('returns mid for market mode', () => {
-        expect(getEffectiveRate(fx, 'market', 'ars-to-usd')).toBe(1477.5)
-        expect(getEffectiveRate(fx, 'market', 'usd-to-ars')).toBe(1477.5)
+    it('returns ask for ars-to-usd', () => {
+        expect(getEffectiveRate(fx, 'ars-to-usd')).toBe(1485)
     })
 
-    it('returns ask for liquidation ars-to-usd', () => {
-        expect(getEffectiveRate(fx, 'liquidation', 'ars-to-usd')).toBe(1485)
-    })
-
-    it('returns bid for liquidation usd-to-ars', () => {
-        expect(getEffectiveRate(fx, 'liquidation', 'usd-to-ars')).toBe(1470)
+    it('returns bid for usd-to-ars', () => {
+        expect(getEffectiveRate(fx, 'usd-to-ars')).toBe(1470)
     })
 })

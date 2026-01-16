@@ -97,7 +97,9 @@ export interface AssetInput {
     quantity: number
     avgCostNative: number
     avgCostUsdEq?: number // New field
+
     costBasisArs: number
+    costBasisUsdEq?: number // New field: Historical Total USD Cost
 
     // CEDEAR-specific
     cedearRatio?: number

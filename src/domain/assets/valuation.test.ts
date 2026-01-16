@@ -50,14 +50,14 @@ describe('computeAssetMetrics - CEDEAR', () => {
         changePct1d: 1.5,
     }
 
-    it('calculates valuations correctly in market mode', () => {
-        const result = computeAssetMetrics(cedearInput, cedearPrices, fxQuotes, 'market')
+    it('calculates valuations correctly (Liquidation Mode)', () => {
+        const result = computeAssetMetrics(cedearInput, cedearPrices, fxQuotes)
 
         // valArs = 5 * 19790 = 98,950
         expect(result.valArs).toBe(98950)
 
-        // valUsdEq = 98950 / 1477.5 (mid) ≈ 66.9712
-        expect(result.valUsdEq).toBeCloseTo(66.9712, 2)
+        // valUsdEq: MEP Ask (Sell) for ARS->USD = 98950 / 1485 ≈ 66.6330
+        expect(result.valUsdEq).toBeCloseTo(66.6330, 2)
 
         // costArs = 75,000
         expect(result.costArs).toBe(75000)
@@ -71,18 +71,8 @@ describe('computeAssetMetrics - CEDEAR', () => {
         expect(result.fxKeyUsed).toBe('mep')
     })
 
-    it('calculates valuations correctly in liquidation mode', () => {
-        const result = computeAssetMetrics(cedearInput, cedearPrices, fxQuotes, 'liquidation')
-
-        // valArs = 5 * 19790 = 98,950
-        expect(result.valArs).toBe(98950)
-
-        // valUsdEq = 98950 / 1485 (ask) ≈ 66.6330
-        expect(result.valUsdEq).toBeCloseTo(66.6330, 2)
-    })
-
     it('includes CEDEAR structural details', () => {
-        const result = computeAssetMetrics(cedearInput, cedearPrices, fxQuotes, 'market')
+        const result = computeAssetMetrics(cedearInput, cedearPrices, fxQuotes)
 
         expect(result.cedearDetails).toBeDefined()
 
@@ -112,26 +102,16 @@ describe('computeAssetMetrics - CRYPTO', () => {
         currentPrice: 43000,
     }
 
-    it('calculates valuations correctly in market mode', () => {
-        const result = computeAssetMetrics(btcInput, btcPrices, fxQuotes, 'market')
+    it('calculates valuations correctly (Liquidation Mode)', () => {
+        const result = computeAssetMetrics(btcInput, btcPrices, fxQuotes)
 
         // valUsdEq = 0.02 * 43000 = 860
         expect(result.valUsdEq).toBe(860)
 
-        // valArs = 860 * 1527.5 (cripto mid) = 1,313,650
-        expect(result.valArs).toBeCloseTo(1313650, 0)
+        // valArs = 860 * 1520 (cripto bid, selling USD) = 1,307,200
+        expect(result.valArs).toBeCloseTo(1307200, 0)
 
         expect(result.fxKeyUsed).toBe('cripto')
-    })
-
-    it('calculates valuations correctly in liquidation mode', () => {
-        const result = computeAssetMetrics(btcInput, btcPrices, fxQuotes, 'liquidation')
-
-        // valUsdEq = 860
-        expect(result.valUsdEq).toBe(860)
-
-        // valArs = 860 * 1520 (bid, selling USD) = 1,307,200
-        expect(result.valArs).toBeCloseTo(1307200, 0)
     })
 })
 
@@ -151,28 +131,13 @@ describe('computeAssetMetrics - CASH_ARS', () => {
         currentPrice: null,
     }
 
-    it('calculates valuations correctly in market mode', () => {
-        const result = computeAssetMetrics(cashInput, cashPrices, fxQuotes, 'market')
+    it('calculates valuations correctly (Liquidation Mode)', () => {
+        const result = computeAssetMetrics(cashInput, cashPrices, fxQuotes)
 
         // valArs = 250,000
         expect(result.valArs).toBe(250000)
 
-        // valUsdEq = 250000 / 1070 (oficial mid) ≈ 233.64
-        expect(result.valUsdEq).toBeCloseTo(233.64, 0)
-
-        // PnL = 0 (cash has no change)
-        expect(result.pnlArs).toBe(0)
-
-        expect(result.fxKeyUsed).toBe('oficial')
-    })
-
-    it('calculates valuations correctly in liquidation mode', () => {
-        const result = computeAssetMetrics(cashInput, cashPrices, fxQuotes, 'liquidation')
-
-        // valArs = 250,000
-        expect(result.valArs).toBe(250000)
-
-        // valUsdEq = 250000 / 1080 (ask) ≈ 231.48
+        // valUsdEq = 250000 / 1080 (oficial ask) ≈ 231.48
         expect(result.valUsdEq).toBeCloseTo(231.48, 0)
     })
 })

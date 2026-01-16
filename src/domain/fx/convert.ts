@@ -3,7 +3,7 @@
  * Handles ARS ↔ USD conversions with Market and Liquidation modes
  */
 
-import type { FxQuote, ValuationMode } from './types'
+import type { FxQuote } from './types'
 import type { FxPair } from '@/domain/types'
 
 /**
@@ -43,12 +43,12 @@ export function buildFxQuote(pair: FxPair | undefined | null): FxQuote {
  */
 export function toUsdFromArs(
     ars: number | null | undefined,
-    fx: FxQuote,
-    mode: ValuationMode
+    fx: FxQuote
 ): number | null {
     if (ars == null || !Number.isFinite(ars)) return null
 
-    const rate = mode === 'market' ? fx.mid : fx.ask
+    // Always Liquidation: ARS -> USD = Pay Ask
+    const rate = fx.ask
 
     if (!rate || rate === 0 || !Number.isFinite(rate)) return null
 
@@ -58,17 +58,16 @@ export function toUsdFromArs(
 
 /**
  * Convert USD to ARS
- * - Market mode: multiplies by mid
  * - Liquidation mode: multiplies by bid (you're selling USD = get bid)
  */
 export function toArsFromUsd(
     usd: number | null | undefined,
-    fx: FxQuote,
-    mode: ValuationMode
+    fx: FxQuote
 ): number | null {
     if (usd == null || !Number.isFinite(usd)) return null
 
-    const rate = mode === 'market' ? fx.mid : fx.bid
+    // Always Liquidation: USD -> ARS = Get Bid
+    const rate = fx.bid
 
     if (!Number.isFinite(rate)) return null
 
@@ -77,21 +76,58 @@ export function toArsFromUsd(
 }
 
 /**
- * Get the effective FX rate used for a conversion based on mode and direction
+ * Get the effective FX rate used for a conversion based on direction
  */
 export function getEffectiveRate(
     fx: FxQuote,
-    mode: ValuationMode,
     direction: 'ars-to-usd' | 'usd-to-ars'
 ): number {
-    if (mode === 'market') {
-        return fx.mid
-    }
+    // FORCE LIQUIDATION MODE (User Request)
+    // Always use realizable value (Bid/Ask)
+    // Market/Mid is removed.
 
-    // Liquidation mode
+    // Liquidation mode logic:
     if (direction === 'ars-to-usd') {
         return fx.ask // Selling ARS, buying USD → pay ask
     } else {
         return fx.bid // Selling USD, buying ARS → get bid
     }
+}
+
+
+/**
+ * Get the label for the effective rate (e.g. "Mid", "Compra", "Venta")
+ */
+export function getFxRateLabel(
+    direction: 'ars-to-usd' | 'usd-to-ars'
+): string {
+    // Always Liquidation Labels
+    if (direction === 'ars-to-usd') return 'Venta' // Paying Ask
+    return 'Compra' // Getting Bid
+}
+
+/**
+ * Helper to determine the correct FX rate for a movement snapshot
+ * Rules:
+ * - BUY USD Assets -> You are performing ARS->USD (buying USD) -> You pay Seller's Price -> USE SELL (Ask)
+ * - SELL USD Assets -> You are performing USD->ARS (selling USD) -> You get Buyer's Price -> USE BUY (Bid)
+ */
+export function getFxForTradeSnapshot(
+    side: 'buy' | 'sell', // Movement side (BUY asset or SELL asset)
+    rates: FxQuote
+): { rate: number; sideLabel: 'buy' | 'sell' | 'mid' } {
+    // If movement is BUY (Buying Asset/USD), we need the Rate to convert ARS to USD.
+    // We pay the Ask price (Venta).
+    if (side === 'buy') {
+        const r = rates.ask || rates.mid
+        return { rate: r, sideLabel: 'sell' }
+    }
+
+    // If movement is SELL (Selling Asset/USD), we get the Bid price (Compra).
+    if (side === 'sell') {
+        const r = rates.bid || rates.mid
+        return { rate: r, sideLabel: 'buy' }
+    }
+
+    return { rate: rates.mid, sideLabel: 'mid' }
 }

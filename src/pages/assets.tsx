@@ -7,9 +7,7 @@ import { useAssetsRows } from '@/features/assets/useAssetsRows'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortfolioSummaryCard } from '@/components/assets/PortfolioSummaryCard'
-import { ValuationModeToggle } from '@/components/assets/ValuationModeToggle'
 import { AssetDrawer } from '@/components/assets/AssetDrawer'
-import type { ValuationMode } from '@/domain/fx/types'
 import type { AssetClass, AssetRowMetrics } from '@/domain/assets/types'
 
 const categoryLabels: Record<AssetClass | 'all', string> = {
@@ -29,7 +27,6 @@ const categoryLabels: Record<AssetClass | 'all', string> = {
 
 export function AssetsPage() {
     // State
-    const [mode, setMode] = useState<ValuationMode>('market')
     const [categoryFilter, setCategoryFilter] = useState<AssetClass | 'all'>('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedAsset, setSelectedAsset] = useState<AssetRowMetrics | null>(null)
@@ -40,7 +37,6 @@ export function AssetsPage() {
         totals,
         isLoading,
     } = useAssetsRows({
-        mode,
         categoryFilter,
         searchQuery,
     })
@@ -65,16 +61,11 @@ export function AssetsPage() {
                     totalUsdEq={totals.totalUsdEq}
                     pnlArs={totals.totalPnlArs}
                     pnlPct={totals.totalPnlPct}
-                    mode={mode}
                     className="lg:max-w-md"
                 />
 
                 {/* Controls */}
                 <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                    <ValuationModeToggle
-                        value={mode}
-                        onChange={setMode}
-                    />
 
                     {/* Search */}
                     <div className="relative">
@@ -129,6 +120,7 @@ export function AssetsPage() {
                 // Count types
                 const cedearsCount = metrics.filter(m => m.category === 'CEDEAR').length
                 const cryptosCount = metrics.filter(m => m.category === 'CRYPTO').length
+                const stablesCount = metrics.filter(m => m.category === 'STABLE').length
                 const fciCount = metrics.filter(m => m.category === 'FCI').length
 
                 return (
@@ -145,6 +137,7 @@ export function AssetsPage() {
                                 <div className="flex gap-2 mt-2 text-xs text-muted-foreground">
                                     {cedearsCount > 0 && <span className="bg-muted px-2 py-0.5 rounded">CEDEAR: {cedearsCount}</span>}
                                     {cryptosCount > 0 && <span className="bg-muted px-2 py-0.5 rounded">CRYPTO: {cryptosCount}</span>}
+                                    {stablesCount > 0 && <span className="bg-muted px-2 py-0.5 rounded">Stablecoins: {stablesCount}</span>}
                                     {fciCount > 0 && <span className="bg-muted px-2 py-0.5 rounded">FCI: {fciCount}</span>}
                                 </div>
                             </div>
@@ -293,12 +286,17 @@ export function AssetsPage() {
                                                         </div>
                                                     </td>
 
-                                                    {/* 6. Valor actual (ARS + USD Mkt) */}
+                                                    {/* 6. Valor actual (Liquidation) */}
                                                     <td className="p-4 text-right align-top pt-5">
                                                         <div className="flex flex-col items-end">
                                                             <span className="font-numeric font-medium">
                                                                 {formatMoneyARS(row.valArs)}
                                                             </span>
+                                                            {row.fxUsedLabel && (
+                                                                <span className="text-[10px] text-muted-foreground uppercase tracking-tighter">
+                                                                    {row.fxUsedLabel === 'Cripto' ? 'Cripto (C)' : row.fxUsedLabel}
+                                                                </span>
+                                                            )}
                                                             {row.valUsdEq != null && (
                                                                 <span className="text-xs font-mono text-sky-500">
                                                                     ≈ {formatMoneyUSD(row.valUsdEq)}

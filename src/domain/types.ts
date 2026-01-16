@@ -81,6 +81,17 @@ export interface Movement {
     debtId?: string
     // For import tracking
     importBatchId?: string
+
+    // FX Snapshot (New for Step D)
+    fx?: MovementFxSnapshot
+}
+
+export interface MovementFxSnapshot {
+    kind: FxType | 'NONE'
+    side: 'buy' | 'sell' | 'mid'
+    rate: number
+    asOf: string // ISO timestamp
+    source?: string
 }
 
 export interface Snapshot {

@@ -5,14 +5,11 @@
 
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD } from '@/lib/format'
-import type { ValuationMode } from '@/domain/fx/types'
-
 interface PortfolioSummaryCardProps {
     totalArs: number
     totalUsdEq: number
     pnlArs?: number | null
     pnlPct?: number | null
-    mode: ValuationMode
     className?: string
 }
 
@@ -21,14 +18,8 @@ export function PortfolioSummaryCard({
     totalUsdEq,
     pnlArs,
     pnlPct,
-    mode,
     className,
 }: PortfolioSummaryCardProps) {
-    const modeLabel = mode === 'market' ? 'Market (Mid)' : 'Liquidación'
-    const modeBadgeClass = mode === 'market'
-        ? 'bg-blue-500/10 text-blue-500'
-        : 'bg-amber-500/10 text-amber-500'
-
     const pnlColor = (pnlArs ?? 0) >= 0 ? 'text-success' : 'text-destructive'
     const pnlSign = (pnlArs ?? 0) >= 0 ? '+' : ''
 
@@ -42,8 +33,8 @@ export function PortfolioSummaryCard({
                         ≈ {formatMoneyUSD(totalUsdEq)}
                     </p>
                 </div>
-                <span className={cn("px-2.5 py-1 text-xs font-medium rounded-full", modeBadgeClass)}>
-                    {modeLabel}
+                <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-amber-500/10 text-amber-500">
+                    Liquidación (si vendo hoy)
                 </span>
             </div>
 

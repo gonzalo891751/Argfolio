@@ -1,7 +1,7 @@
 /**
  * useAssetsRows Hook
  * Unified hook for "Mis Activos" page that combines holdings, prices, and FX
- * with support for Market and Liquidation valuation modes
+ * with support for Liquidation valuation ONLY.
  */
 
 import { useMemo } from 'react'
@@ -13,7 +13,7 @@ import { useManualPrices } from '@/hooks/use-manual-prices'
 import { useInstruments } from '@/hooks/use-instruments'
 import { buildFxQuote } from '@/domain/fx/convert'
 import { computeAssetMetrics, computePortfolioTotals } from '@/domain/assets/valuation'
-import type { ValuationMode, FxQuotes } from '@/domain/fx/types'
+import type { FxQuotes } from '@/domain/fx/types'
 import type { AssetRowMetrics, AssetInput, AssetPrices, PortfolioAssetTotals, AssetClass } from '@/domain/assets/types'
 import type { HoldingAggregated, Holding } from '@/domain/types'
 
@@ -21,14 +21,12 @@ import type { HoldingAggregated, Holding } from '@/domain/types'
 import { getCedearMeta, type CedearMasterItem } from '@/domain/cedears/master'
 
 export interface UseAssetsRowsOptions {
-    mode: ValuationMode
     categoryFilter?: AssetClass | 'all'
     searchQuery?: string
 }
 
 export interface UseAssetsRowsResult {
-    // Legacy rows (kept for potential other uses or type compat, but empty in this mode)
-    rows: AssetRowMetrics[]
+    rows: AssetRowMetrics[] // Kept for compatibility if needed
     // Grouped by Account ID
     groupedRows: Record<string, {
         accountName: string
@@ -40,7 +38,7 @@ export interface UseAssetsRowsResult {
             pnlUsd: number
         }
     }>
-    filteredRows: AssetRowMetrics[]
+    filteredRows: AssetRowMetrics[] // Kept for compatibility
     totals: PortfolioAssetTotals
     fxQuotes: FxQuotes | null
     isLoading: boolean
@@ -85,10 +83,10 @@ function getCedearRatioLocal(symbol: string): number {
 }
 
 /**
- * Main hook for assets page with valuation mode support
+ * Main hook for assets page
  */
 export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResult {
-    const { mode, categoryFilter = 'all', searchQuery = '' } = options
+    const { categoryFilter = 'all', searchQuery = '' } = options
     const { trackCash, cedearAuto } = getUserPreferences()
 
     // Data sources
@@ -99,20 +97,25 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
 
     // Get crypto symbols from portfolio
     const cryptoSymbols = useMemo(() => {
-        if (!portfolio) return ['USDT', 'USDC'] // Defaults
+        if (!portfolio) return ['USDT', 'USDC']
         const symbols = new Set<string>()
+
+        // Traverse portfolio categories to find cryptos
         portfolio.categories.forEach(cat => {
-            cat.items
-                .filter(item => item.instrument.category === 'CRYPTO' || item.instrument.category === 'STABLE')
-                .forEach(item => symbols.add(item.instrument.symbol.toUpperCase()))
+            cat.items.forEach(agg => {
+                if (agg.instrument.category === 'CRYPTO' || agg.instrument.category === 'STABLE') {
+                    symbols.add(agg.instrument.symbol.toUpperCase())
+                }
+            })
         })
+
         symbols.add('USDT')
         symbols.add('USDC')
         return Array.from(symbols)
     }, [portfolio])
 
-    const { data: cryptoPrices = {} } = useCryptoPrices(cryptoSymbols)
-    const { data: cedearPrices = {} } = useCedearPrices(cedearAuto)
+    const { data: cryptoPrices = {}, isLoading: isCryptoLoading } = useCryptoPrices(cryptoSymbols)
+    const { data: cedearPrices = {}, isLoading: isCedearLoading } = useCedearPrices(cedearAuto)
 
     // Build FX quotes from rates
     const fxQuotes = useMemo((): FxQuotes | null => {
@@ -154,17 +157,18 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                         instrumentId: holding.instrumentId,
                         symbol: holding.instrument.symbol,
                         name: holding.instrument.name,
-                        category,
-                        nativeCurrency: holding.instrument.nativeCurrency,
+                        category: holding.instrument.category as any, // Cast to match stricter AssetInput type if needed
+                        nativeCurrency: holding.instrument.nativeCurrency as any,
                         quantity: holding.quantity,
                         avgCostNative: holding.avgCostNative,
                         avgCostUsdEq: holding.avgCostUsdEq,
                         costBasisArs: holding.costBasisArs,
+                        costBasisUsdEq: holding.costBasisUsd, // Pass historical USD cost
                         cedearRatio: category === 'CEDEAR' ? getCedearRatioLocal(holding.instrument.symbol) : undefined,
                         underlyingSymbol: holding.instrument.underlyingSymbol,
                     }
 
-                    // Build AssetPrices (same logic as before, shared across holdings of same instrument)
+                    // Build AssetPrices
                     const sym = holding.instrument.symbol.toUpperCase()
                     let currentPrice: number | null = null
                     let underlyingUsd: number | null = null
@@ -175,6 +179,7 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                         currentPrice = manualPrices.get(holding.instrumentId) ?? null
                     } else if (category === 'CEDEAR' && cedearPrices[sym]) {
                         currentPrice = cedearPrices[sym].lastPriceArs ?? null
+                        underlyingUsd = cedearPrices[sym].underlyingPrice ?? null
                         changePct1d = cedearPrices[sym].changePct != null
                             ? cedearPrices[sym].changePct! / 100
                             : null
@@ -190,8 +195,8 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                         changePct1d,
                     }
 
-                    // Compute Metrics
-                    const metricsBase = computeAssetMetrics(assetInput, assetPrices, fxQuotes, mode)
+                    // Compute Metrics (NO MODE PASSED)
+                    const metricsBase = computeAssetMetrics(assetInput, assetPrices, fxQuotes)
 
                     // Augment with Account Info
                     const metrics: AssetRowMetrics = {
@@ -201,7 +206,6 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                     }
 
                     // Apply Filters (Category & Search)
-                    // We filter individual holdings here to avoid empty groups later
                     let passesFilter = true
                     if (categoryFilter !== 'all' && metrics.category !== categoryFilter) passesFilter = false
                     if (searchQuery) {
@@ -233,23 +237,22 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
         })
 
         return groups
-    }, [portfolio, fxQuotes, mode, trackCash, manualPrices, cedearPrices, cryptoPrices, categoryFilter, searchQuery])
+    }, [portfolio, fxQuotes, trackCash, manualPrices, cedearPrices, cryptoPrices, categoryFilter, searchQuery])
 
     // Compute Global Totals from Grouped Rows
-    // We can just sum up the group totals or re-use existing logic if adapted
     const totals = useMemo(() => {
         const flatMetrics = Object.values(groupedRows).flatMap(g => g.metrics)
         return computePortfolioTotals(flatMetrics)
     }, [groupedRows])
 
-    const isLoading = portfolioLoading || fxLoading
+    const isLoading = portfolioLoading || fxLoading || isCedearLoading || isCryptoLoading
     const error = portfolioError as Error | null
     const asOf = fxRates ? new Date(fxRates.updatedAtISO) : null
 
     return {
-        rows: [], // Deprecated/Unused in new view
+        rows: [],
         groupedRows,
-        filteredRows: [], // Deprecated/Unused
+        filteredRows: [],
         totals,
         fxQuotes,
         isLoading,

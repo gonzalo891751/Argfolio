@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Movimientos</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Icons (Lucide) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Configuración Brand Book -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        bg: {
+                            app: '#0B1121', // Deep Navy
+                            surface: '#151E32',
+                            card: '#1E293B',
+                        },
+                        brand: {
+                            primary: '#6366f1', // Indigo
+                            accent: '#0ea5e9', // Sky
+                        },
+                        semantic: {
+                            up: '#10b981', // Emerald
+                            down: '#f43f5e', // Rose
+                            warn: '#f59e0b', // Amber
+                            info: '#3b82f6', // Blue
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-sm': '0 0 10px -2px rgba(99, 102, 241, 0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Styles & Utilities */
+        :root {
+            --border-subtle: rgba(255,255,255,0.08);
+            --border-highlight: rgba(255,255,255,0.15);
+        }
+        
+        body {
+            background-color: #0B1121;
+            color: #F8FAFC;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .input-base {
+            background-color: #0f172a;
+            border: 1px solid var(--border-subtle);
+            color: white;
+            transition: all 0.2s;
+        }
+        
+        .input-base:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 1px #6366f1;
+            outline: none;
+        }
+
+        /* Scrollbar custom */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0B1121; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Animation utilities */
+        .slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        .fade-in { animation: fadeIn 0.2s ease-out; }
+        
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Step styles */
+        .step-active { border-color: #6366f1; background-color: rgba(99, 102, 241, 0.1); color: #818cf8; }
+        .step-completed { border-color: #10b981; color: #10b981; }
+        .step-inactive { border-color: rgba(255,255,255,0.1); color: #64748B; }
+
+        /* Radio Card Selection */
+        input[type="radio"]:checked + div {
+            border-color: #6366f1;
+            background-color: rgba(99, 102, 241, 0.05);
+            box-shadow: 0 0 15px -3px rgba(99, 102, 241, 0.15);
+        }
+        input[type="radio"]:checked + div .radio-indicator {
+            background-color: #6366f1;
+            border-color: #6366f1;
+        }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden antialiased selection:bg-brand-primary/30 selection:text-white">
+
+    <!-- SIDEBAR (Collapsed Mock) -->
+    <aside class="w-20 lg:w-64 border-r border-white/5 bg-[#0d1326] flex-col hidden md:flex z-20">
+        <div class="h-16 flex items-center px-6 border-b border-white/5">
+            <div class="flex items-center gap-3">
+                <svg class="w-8 h-8 text-brand-primary" viewBox="0 0 40 40" fill="none">
+                    <path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/>
+                    <circle cx="20" cy="14" r="3" fill="white"/>
+                </svg>
+                <span class="font-display font-bold text-xl tracking-tight hidden lg:block text-white">Argfolio</span>
+            </div>
+        </div>
+        
+        <nav class="flex-1 py-6 space-y-1 px-3">
+            <a href="#" class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition group">
+                <i data-lucide="layout-dashboard" class="w-5 h-5 group-hover:text-brand-primary transition-colors"></i>
+                <span class="hidden lg:block font-medium text-sm">Dashboard</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 px-3 py-2 text-white bg-brand-primary/10 rounded-lg transition border border-brand-primary/20">
+                <i data-lucide="arrow-left-right" class="w-5 h-5 text-brand-primary"></i>
+                <span class="hidden lg:block font-medium text-sm">Movimientos</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition group">
+                <i data-lucide="pie-chart" class="w-5 h-5 group-hover:text-brand-primary transition-colors"></i>
+                <span class="hidden lg:block font-medium text-sm">Tenencias</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t border-white/5">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-primary to-brand-accent flex items-center justify-center font-bold text-xs">JP</div>
+                <div class="hidden lg:block">
+                    <div class="text-sm font-medium text-white">Juan Pérez</div>
+                    <div class="text-xs text-slate-500">Pro Plan</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 flex flex-col relative overflow-hidden bg-bg-app">
+        
+        <!-- Mobile Header -->
+        <header class="md:hidden h-16 border-b border-white/5 flex items-center justify-between px-4 bg-bg-surface/80 backdrop-blur-md sticky top-0 z-30">
+            <svg class="w-6 h-6 text-brand-primary" viewBox="0 0 40 40" fill="none"><path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/></svg>
+            <span class="font-display font-bold">Movimientos</span>
+            <button class="p-2 text-slate-400"><i data-lucide="menu" class="w-5 h-5"></i></button>
+        </header>
+
+        <!-- Scrollable Area -->
+        <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 scroll-smooth">
+            <div class="max-w-7xl mx-auto space-y-8">
+
+                <!-- SECTION HEADER -->
+                <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div>
+                        <h1 class="font-display text-3xl md:text-4xl font-bold text-white mb-2">Movimientos</h1>
+                        <p class="text-slate-400 text-sm">Gestioná tus operaciones históricas.</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button class="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                            <span class="hidden sm:inline">Importar</span>
+                        </button>
+                        <button onclick="openWizard()" class="px-4 py-2 bg-brand-primary hover:bg-indigo-500 text-white shadow-glow rounded-lg text-sm font-medium transition flex items-center gap-2 group">
+                            <i data-lucide="plus" class="w-4 h-4 group-hover:rotate-90 transition-transform"></i>
+                            Nuevo movimiento
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPI CARDS -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Purchases -->
+                    <div class="glass-panel p-4 rounded-xl border-t border-white/10 relative overflow-hidden group hover:border-white/20 transition">
+                        <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition"><i data-lucide="trending-up" class="w-12 h-12 text-semantic-up"></i></div>
+                        <div class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Compras (Mes)</div>
+                        <div class="font-mono text-lg md:text-xl text-white font-medium">$ 1.250k</div>
+                        <div class="text-[10px] text-slate-500 mt-1">USD 1,020.50 equiv.</div>
+                    </div>
+                    <!-- Sales -->
+                    <div class="glass-panel p-4 rounded-xl border-t border-white/10 relative overflow-hidden group hover:border-white/20 transition">
+                        <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition"><i data-lucide="trending-down" class="w-12 h-12 text-semantic-down"></i></div>
+                        <div class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Ventas (Mes)</div>
+                        <div class="font-mono text-lg md:text-xl text-white font-medium">$ 420.5k</div>
+                        <div class="text-[10px] text-slate-500 mt-1">USD 340.20 equiv.</div>
+                    </div>
+                    <!-- Commissions -->
+                    <div class="glass-panel p-4 rounded-xl border-t border-white/10 relative overflow-hidden group hover:border-white/20 transition">
+                         <div class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Comisiones</div>
+                         <div class="font-mono text-lg md:text-xl text-slate-200 font-medium">$ 4.250</div>
+                         <div class="text-[10px] text-semantic-down mt-1 flex items-center gap-1">
+                             <i data-lucide="arrow-down-right" class="w-3 h-3"></i> 0.35% avg
+                         </div>
+                    </div>
+                    <!-- FX Used -->
+                    <div class="glass-panel p-4 rounded-xl border-t border-white/10 flex flex-col justify-center gap-2">
+                        <div class="text-xs font-mono text-slate-400 uppercase tracking-wider">FX Promedio</div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="px-2 py-1 rounded bg-white/5 border border-white/10 text-[10px] font-mono text-slate-300">MEP $1180</span>
+                            <span class="px-2 py-1 rounded bg-white/5 border border-white/10 text-[10px] font-mono text-slate-300">USDT $1210</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FILTERS BAR -->
+                <div class="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-bg-surface/50 p-1 rounded-xl border border-white/5">
+                    <div class="relative w-full lg:w-96 group">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="search" class="h-4 w-4 text-slate-500 group-focus-within:text-brand-primary transition-colors"></i>
+                        </div>
+                        <input type="text" class="block w-full pl-10 pr-3 py-2 border-none rounded-lg leading-5 bg-transparent text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-0 sm:text-sm transition-colors" placeholder="Buscar por ticker, nombre o cuenta...">
+                    </div>
+                    
+                    <div class="flex items-center gap-2 overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 px-2 lg:px-0 no-scrollbar">
+                        <button class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-primary/10 text-brand-primary text-xs font-medium border border-brand-primary/20 whitespace-nowrap">
+                            Todos
+                        </button>
+                        <button class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 text-xs font-medium border border-white/5 transition whitespace-nowrap">
+                            Compra
+                        </button>
+                        <button class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 text-xs font-medium border border-white/5 transition whitespace-nowrap">
+                            Venta
+                        </button>
+                        <div class="w-px h-4 bg-white/10 mx-1"></div>
+                        <button class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-400 hover:text-white text-xs font-medium whitespace-nowrap">
+                            <i data-lucide="calendar" class="w-3 h-3"></i> Últimos 30 días
+                        </button>
+                    </div>
+                </div>
+
+                <!-- MAIN TABLE -->
+                <div class="glass-panel rounded-xl overflow-hidden border border-white/10 shadow-xl">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="text-xs text-slate-500 font-mono uppercase tracking-wider border-b border-white/5 bg-white/[0.02]">
+                                    <th class="px-6 py-4 font-medium">Fecha</th>
+                                    <th class="px-6 py-4 font-medium">Operación</th>
+                                    <th class="px-6 py-4 font-medium">Activo</th>
+                                    <th class="px-6 py-4 font-medium hidden md:table-cell">Cuenta</th>
+                                    <th class="px-6 py-4 font-medium text-right">Cantidad</th>
+                                    <th class="px-6 py-4 font-medium text-right hidden lg:table-cell">Precio</th>
+                                    <th class="px-6 py-4 font-medium text-right">Total</th>
+                                    <th class="px-6 py-4 font-medium w-10"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/5 text-sm" id="movements-table-body">
+                                <!-- Filas generadas por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Empty State (Hidden by default) -->
+                    <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-center">
+                        <div class="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4">
+                            <i data-lucide="clipboard-list" class="w-8 h-8 text-slate-600"></i>
+                        </div>
+                        <h3 class="text-white font-medium text-lg">Todavía no cargaste movimientos</h3>
+                        <p class="text-slate-400 text-sm max-w-sm mx-auto mt-2 mb-6">Empezá a registrar tus compras y ventas para ver tu rendimiento real.</p>
+                        <button onclick="openWizard()" class="px-4 py-2 bg-white/10 hover:bg-white/15 text-white rounded-lg text-sm font-medium border border-white/10 transition">
+                            Cargar primer movimiento
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- DETAILS DRAWER (Right Side Panel) -->
+    <div id="details-drawer-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 hidden transition-opacity opacity-0" onclick="closeDrawer()"></div>
+    <aside id="details-drawer" class="fixed inset-y-0 right-0 w-full max-w-md bg-[#0F172A] border-l border-white/10 z-50 transform translate-x-full transition-transform duration-300 ease-in-out shadow-2xl flex flex-col">
+        <!-- Drawer Header -->
+        <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-[#0F172A]">
+            <h2 class="font-display text-lg font-bold text-white">Detalle de Operación</h2>
+            <button onclick="closeDrawer()" class="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        
+        <!-- Drawer Content -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-6" id="drawer-content">
+            <!-- Content Injected via JS -->
+        </div>
+
+        <!-- Drawer Footer -->
+        <div class="p-4 border-t border-white/10 bg-[#0F172A] flex gap-3">
+            <button class="flex-1 py-2.5 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 text-sm font-medium transition">Editar</button>
+            <button class="flex-1 py-2.5 rounded-lg bg-brand-primary text-white hover:bg-indigo-500 shadow-glow-sm text-sm font-medium transition">Duplicar</button>
+        </div>
+    </aside>
+
+    <!-- WIZARD MODAL (Nuevo Movimiento) -->
+    <div id="wizard-modal" class="fixed inset-0 z-50 hidden">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-[#0B1121]/90 backdrop-blur-md" onclick="closeWizard()"></div>
+        
+        <!-- Modal Content -->
+        <div class="absolute inset-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 w-full md:max-w-4xl h-full md:h-[85vh] bg-[#0F172A] md:rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            <!-- Wizard Header -->
+            <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-[#0F172A]">
+                <div>
+                    <h2 class="font-display text-xl font-bold text-white">Nuevo Movimiento</h2>
+                    <div class="flex gap-2 mt-2">
+                        <div id="step-dot-1" class="h-1 w-8 rounded-full bg-brand-primary transition-all duration-300"></div>
+                        <div id="step-dot-2" class="h-1 w-8 rounded-full bg-white/10 transition-all duration-300"></div>
+                        <div id="step-dot-3" class="h-1 w-8 rounded-full bg-white/10 transition-all duration-300"></div>
+                        <div id="step-dot-4" class="h-1 w-8 rounded-full bg-white/10 transition-all duration-300"></div>
+                    </div>
+                </div>
+                <button onclick="closeWizard()" class="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition">
+                    <span class="sr-only">Cerrar</span>
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+
+            <!-- Wizard Body (Scrollable) -->
+            <div class="flex-1 overflow-y-auto p-6 md:p-8 bg-[#0F172A]">
+                
+                <!-- STEP 1: CLASE -->
+                <div id="step-1" class="wizard-step space-y-6">
+                    <h3 class="text-lg font-medium text-white mb-4">¿Qué tipo de activo operaste?</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <!-- Card Options -->
+                        <label class="cursor-pointer group relative">
+                            <input type="radio" name="asset_class" value="cedear" class="peer sr-only" checked onchange="handleClassChange()">
+                            <div class="p-5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] transition-all peer-checked:border-brand-primary peer-checked:bg-brand-primary/10 peer-checked:shadow-[0_0_20px_rgba(99,102,241,0.15)] flex flex-col gap-3 h-full">
+                                <div class="w-10 h-10 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center radio-indicator transition-colors"><i data-lucide="building-2" class="w-5 h-5"></i></div>
+                                <div>
+                                    <span class="block font-medium text-white">CEDEAR / Acción</span>
+                                    <span class="text-xs text-slate-400 mt-1">Apple, Coca-Cola, GGAL...</span>
+                                </div>
+                            </div>
+                        </label>
+
+                        <label class="cursor-pointer group relative">
+                            <input type="radio" name="asset_class" value="crypto" class="peer sr-only" onchange="handleClassChange()">
+                            <div class="p-5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] transition-all peer-checked:border-brand-primary peer-checked:bg-brand-primary/10 peer-checked:shadow-[0_0_20px_rgba(99,102,241,0.15)] flex flex-col gap-3 h-full">
+                                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center radio-indicator transition-colors"><i data-lucide="bitcoin" class="w-5 h-5"></i></div>
+                                <div>
+                                    <span class="block font-medium text-white">Cripto</span>
+                                    <span class="text-xs text-slate-400 mt-1">Bitcoin, USDT, Ethereum...</span>
+                                </div>
+                            </div>
+                        </label>
+
+                        <label class="cursor-pointer group relative">
+                            <input type="radio" name="asset_class" value="pf" class="peer sr-only" onchange="handleClassChange()">
+                            <div class="p-5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] transition-all peer-checked:border-brand-primary peer-checked:bg-brand-primary/10 peer-checked:shadow-[0_0_20px_rgba(99,102,241,0.15)] flex flex-col gap-3 h-full">
+                                <div class="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center radio-indicator transition-colors"><i data-lucide="hourglass" class="w-5 h-5"></i></div>
+                                <div>
+                                    <span class="block font-medium text-white">Plazo Fijo</span>
+                                    <span class="text-xs text-slate-400 mt-1">Tradicional o UVA</span>
+                                </div>
+                            </div>
+                        </label>
+
+                        <label class="cursor-pointer group relative">
+                            <input type="radio" name="asset_class" value="fci" class="peer sr-only" onchange="handleClassChange()">
+                            <div class="p-5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] transition-all peer-checked:border-brand-primary peer-checked:bg-brand-primary/10 peer-checked:shadow-[0_0_20px_rgba(99,102,241,0.15)] flex flex-col gap-3 h-full">
+                                <div class="w-10 h-10 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center radio-indicator transition-colors"><i data-lucide="pie-chart" class="w-5 h-5"></i></div>
+                                <div>
+                                    <span class="block font-medium text-white">FCI</span>
+                                    <span class="text-xs text-slate-400 mt-1">Money Market, Renta Mixta...</span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- STEP 2: OPERACIÓN & ACTIVO -->
+                <div id="step-2" class="wizard-step hidden space-y-8 animate-in slide-in-from-right-4 fade-in duration-300">
+                    <!-- Tipo Operación -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-3">Tipo de operación</label>
+                        <div class="flex p-1 bg-black/40 rounded-lg border border-white/10 w-fit" id="operation-selector">
+                            <!-- Dynamic Content via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Input Activo (Typeahead Mock) -->
+                    <div id="asset-input-container">
+                        <label class="block text-sm font-medium text-slate-400 mb-2">Activo / Ticker</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i data-lucide="search" class="h-5 w-5 text-slate-500"></i>
+                            </div>
+                            <input type="text" id="asset-search" placeholder="Ej: AAPL, BTC, o nombre..." class="input-base w-full rounded-lg pl-10 pr-4 py-3 text-white placeholder-slate-500" autocomplete="off" oninput="showSuggestions(this.value)">
+                            <!-- Dropdown Suggestions -->
+                            <div id="asset-suggestions" class="absolute z-10 w-full mt-1 bg-[#1E293B] border border-white/10 rounded-lg shadow-xl hidden">
+                                <ul class="py-1 text-sm text-slate-300 max-h-60 overflow-auto" id="suggestion-list">
+                                    <!-- Filled by JS -->
+                                </ul>
+                            </div>
+                        </div>
+                        <div id="selected-asset-badge" class="mt-3 hidden">
+                            <div class="inline-flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                                <div class="w-6 h-6 rounded-full bg-white text-black flex items-center justify-center font-bold text-xs" id="badge-icon">A</div>
+                                <div>
+                                    <div class="text-white font-mono text-xs font-bold" id="badge-ticker">AAPL</div>
+                                    <div class="text-[10px] text-slate-400" id="badge-name">Apple Inc.</div>
+                                </div>
+                                <button onclick="clearAssetSelection()" class="ml-2 text-slate-500 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fecha y Cuenta -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-400 mb-2">Fecha y Hora</label>
+                            <input type="datetime-local" class="input-base w-full rounded-lg px-4 py-2.5 text-white" id="date-input">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-400 mb-2">Cuenta / Broker</label>
+                            <select class="input-base w-full rounded-lg px-4 py-2.5 text-white appearance-none">
+                                <option>InvertirOnline</option>
+                                <option>Binance</option>
+                                <option>Banco Galicia</option>
+                                <option>Caja de Ahorro USD</option>
+                                <option>Efectivo</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STEP 3: MONTOS & FX -->
+                <div id="step-3" class="wizard-step hidden space-y-8 animate-in slide-in-from-right-4 fade-in duration-300">
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        <!-- Left: Inputs -->
+                        <div class="lg:col-span-7 space-y-6">
+                            <!-- Moneda Toggle -->
+                            <div>
+                                <label class="block text-xs font-mono text-slate-500 uppercase mb-2">Moneda de operación</label>
+                                <div class="flex space-x-4">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="currency" value="ARS" checked class="text-brand-primary focus:ring-brand-primary bg-slate-800 border-slate-600" onchange="updateCalculations()">
+                                        <span class="text-white font-mono">ARS (Pesos)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="currency" value="USD" class="text-brand-primary focus:ring-brand-primary bg-slate-800 border-slate-600" onchange="updateCalculations()">
+                                        <span class="text-white font-mono">USD (Dólares)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-400 mb-2">Cantidad</label>
+                                    <input type="number" id="input-qty" placeholder="0" class="input-base w-full rounded-lg px-4 py-3 text-white font-mono text-lg" oninput="updateCalculations()">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-400 mb-2">Precio Unitario</label>
+                                    <div class="relative">
+                                        <span class="absolute left-3 top-3.5 text-slate-500 font-mono" id="curr-symbol">$</span>
+                                        <input type="number" id="input-price" placeholder="0.00" class="input-base w-full rounded-lg pl-8 pr-4 py-3 text-white font-mono text-lg" oninput="updateCalculations()">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- FX Section (Collapsible/Contextual) -->
+                            <div class="p-4 rounded-xl bg-slate-900/50 border border-white/5 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm font-medium text-slate-300 flex items-center gap-2">
+                                        <i data-lucide="refresh-cw" class="w-4 h-4 text-brand-primary"></i>
+                                        Tipo de Cambio
+                                    </label>
+                                    <span class="text-xs text-brand-accent cursor-pointer hover:underline">Editar fuente</span>
+                                </div>
+                                
+                                <div class="grid grid-cols-2 gap-4">
+                                    <select id="fx-type" class="input-base rounded-lg px-3 py-2 text-sm text-slate-300" onchange="updateFXValue()">
+                                        <option value="mep">Dólar MEP</option>
+                                        <option value="crypto">Dólar Cripto</option>
+                                        <option value="blue">Dólar Blue</option>
+                                        <option value="official">Oficial</option>
+                                    </select>
+                                    <div class="relative">
+                                        <span class="absolute left-3 top-2 text-slate-500 text-sm">$</span>
+                                        <input type="number" id="input-fx" value="1180.50" class="input-base w-full rounded-lg pl-6 pr-3 py-2 text-white font-mono text-sm" oninput="updateCalculations()">
+                                    </div>
+                                </div>
+                                <p class="text-[10px] text-slate-500 text-right">Cotización histórica sugerida por DollarAPI</p>
+                            </div>
+                        </div>
+
+                        <!-- Right: Live Summary Card -->
+                        <div class="lg:col-span-5">
+                            <div class="p-6 rounded-xl bg-gradient-to-br from-brand-primary/10 to-transparent border border-brand-primary/20 sticky top-0">
+                                <h4 class="text-xs font-mono text-brand-primary uppercase tracking-widest mb-4">Resumen Estimado</h4>
+                                
+                                <div class="space-y-4">
+                                    <div>
+                                        <div class="text-sm text-slate-400 mb-1">Total Operación</div>
+                                        <div class="text-3xl font-mono font-bold text-white tracking-tight" id="display-total">
+                                            $ 0,00
+                                        </div>
+                                    </div>
+
+                                    <div class="h-px bg-white/10 my-4"></div>
+
+                                    <div class="grid grid-cols-1 gap-3">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-xs text-slate-400">Equivalente USD</span>
+                                            <span class="text-sm font-mono text-white" id="display-usd-equiv">USD 0.00</span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-xs text-slate-400">Equivalente ARS</span>
+                                            <span class="text-sm font-mono text-white" id="display-ars-equiv">$ 0,00</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STEP 4: REVIEW -->
+                <div id="step-4" class="wizard-step hidden space-y-6 animate-in slide-in-from-right-4 fade-in duration-300 text-center py-8">
+                     <div class="w-20 h-20 bg-brand-primary/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                         <i data-lucide="check" class="w-10 h-10 text-brand-primary"></i>
+                     </div>
+                     <h3 class="font-display text-2xl text-white font-bold">¡Todo listo!</h3>
+                     <p class="text-slate-400 max-w-md mx-auto">Revisá los datos antes de confirmar. Esta operación impactará en tu tablero de tenencias.</p>
+                     
+                     <div class="max-w-md mx-auto bg-slate-900 border border-white/10 rounded-xl p-6 text-left space-y-4 mt-6">
+                         <div class="flex justify-between border-b border-white/5 pb-2">
+                             <span class="text-slate-500 text-sm">Operación</span>
+                             <span class="text-white font-medium" id="review-op">Compra CEDEAR</span>
+                         </div>
+                         <div class="flex justify-between border-b border-white/5 pb-2">
+                            <span class="text-slate-500 text-sm">Activo</span>
+                            <span class="text-white font-medium" id="review-asset">AAPL</span>
+                        </div>
+                        <div class="flex justify-between border-b border-white/5 pb-2">
+                            <span class="text-slate-500 text-sm">Total</span>
+                            <span class="text-brand-primary font-mono font-bold" id="review-total">$ 1.250.000,00</span>
+                        </div>
+                        <div class="flex justify-between pt-1">
+                            <span class="text-slate-500 text-xs">FX Aplicado</span>
+                            <span class="text-slate-300 font-mono text-xs" id="review-fx">MEP $1180</span>
+                        </div>
+                     </div>
+                </div>
+
+            </div>
+
+            <!-- Wizard Footer -->
+            <div class="px-6 py-4 border-t border-white/10 bg-[#0F172A] flex justify-between items-center">
+                <button onclick="prevStep()" id="btn-back" class="px-4 py-2 text-slate-400 hover:text-white font-medium text-sm transition hidden">
+                    Atrás
+                </button>
+                <div class="ml-auto flex gap-3">
+                    <button onclick="closeWizard()" class="px-4 py-2 text-slate-400 hover:text-white font-medium text-sm transition">
+                        Cancelar
+                    </button>
+                    <button onclick="nextStep()" id="btn-next" class="px-6 py-2 bg-brand-primary hover:bg-indigo-500 text-white shadow-glow rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        Siguiente <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="finishWizard()" id="btn-finish" class="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white shadow-glow rounded-lg text-sm font-medium transition hidden flex items-center gap-2">
+                        <i data-lucide="check" class="w-4 h-4"></i> Confirmar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <div class="bg-slate-800 border border-emerald-500/30 text-white px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <i data-lucide="check" class="w-4 h-4"></i>
+            </div>
+            <div>
+                <h4 class="font-medium text-sm">Movimiento guardado</h4>
+                <p class="text-xs text-slate-400">Tu portafolio se actualizó correctamente.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // Init Icons
+        lucide.createIcons();
+
+        // --- MOCK DATA ---
+        const mockMovements = [
+            { id: 1, date: '2024-03-15 14:30', type: 'Compra', class: 'CEDEAR', ticker: 'AAPL', name: 'Apple Inc.', account: 'IOL', qty: 10, price: 18500.50, currency: 'ARS', total: 185005.00, fx: 'MEP 1150', usd_equiv: 160.87 },
+            { id: 2, date: '2024-03-14 10:15', type: 'Venta', class: 'CEDEAR', ticker: 'KO', name: 'Coca-Cola', account: 'IOL', qty: 5, price: 12100.00, currency: 'ARS', total: 60500.00, fx: 'MEP 1145', usd_equiv: 52.83 },
+            { id: 3, date: '2024-03-12 09:20', type: 'Compra', class: 'Crypto', ticker: 'BTC', name: 'Bitcoin', account: 'Binance', qty: 0.0025, price: 68500.00, currency: 'USD', total: 171.25, fx: 'Cripto 1180', usd_equiv: 171.25 },
+            { id: 4, date: '2024-03-10 11:00', type: 'Suscripción', class: 'FCI', ticker: 'FIMA', name: 'Fima Premium', account: 'Galicia', qty: 150000, price: 1.00, currency: 'ARS', total: 150000.00, fx: 'N/A', usd_equiv: 130.43 },
+            { id: 5, date: '2024-03-05 15:45', type: 'Compra', class: 'Crypto', ticker: 'USDT', name: 'Tether', account: 'Lemon', qty: 500, price: 1.00, currency: 'USD', total: 500.00, fx: 'Cripto 1160', usd_equiv: 500.00 },
+            { id: 6, date: '2024-03-01 12:30', type: 'PF Const.', class: 'Plazo Fijo', ticker: 'PF-UVA', name: 'PF UVA Precanc.', account: 'Nación', qty: 1, price: 500000.00, currency: 'ARS', total: 500000.00, fx: 'N/A', usd_equiv: 450.00 },
+            { id: 7, date: '2024-02-28 14:00', type: 'Venta', class: 'Acción', ticker: 'GGAL', name: 'Grupo Galicia', account: 'IOL', qty: 100, price: 2450.00, currency: 'ARS', total: 245000.00, fx: 'MEP 1120', usd_equiv: 218.75 },
+            { id: 8, date: '2024-02-20 10:00', type: 'Compra', class: 'Moneda', ticker: 'USD', name: 'Dólar MEP', account: 'Balanz', qty: 200, price: 1110.00, currency: 'ARS', total: 222000.00, fx: 'MEP', usd_equiv: 200.00 },
+        ];
+
+        const mockAssets = [
+            { ticker: 'AAPL', name: 'Apple Inc.', class: 'CEDEAR', icon: 'building-2' },
+            { ticker: 'MSFT', name: 'Microsoft', class: 'CEDEAR', icon: 'building-2' },
+            { ticker: 'GGAL', name: 'Grupo Fin. Galicia', class: 'Acción', icon: 'building-2' },
+            { ticker: 'BTC', name: 'Bitcoin', class: 'Crypto', icon: 'bitcoin' },
+            { ticker: 'ETH', name: 'Ethereum', class: 'Crypto', icon: 'bitcoin' },
+            { ticker: 'USDT', name: 'Tether', class: 'Crypto', icon: 'bitcoin' },
+            { ticker: 'AL30', name: 'Bono Rep. Arg 2030', class: 'Bono', icon: 'landmark' },
+        ];
+
+        // --- FORMATTERS ---
+        const fmtARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+        const fmtUSD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+        const fmtNum = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2 });
+
+        // --- RENDER TABLE ---
+        function renderTable() {
+            const tbody = document.getElementById('movements-table-body');
+            tbody.innerHTML = '';
+
+            mockMovements.forEach(m => {
+                const isPositive = m.type.includes('Venta') || m.type.includes('Rescate');
+                const badgeColor = isPositive ? 'bg-semantic-down/10 text-semantic-down border-semantic-down/20' : 'bg-semantic-up/10 text-semantic-up border-semantic-up/20';
+                
+                // Hack for semantic colors (Argfolio logic: Buy is usually outlay/investment, Sell is cash in?)
+                // Actually Brand Book: Profit/Up (Green), Loss/Down (Red). 
+                // Let's use neutral/badges for Types to avoid confusion.
+                let typeBadgeClass = 'bg-white/5 text-slate-300';
+                if(m.type.includes('Compra')) typeBadgeClass = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                if(m.type.includes('Venta')) typeBadgeClass = 'bg-rose-500/10 text-rose-400 border border-rose-500/20';
+                if(m.type.includes('PF')) typeBadgeClass = 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+
+                const row = `
+                    <tr class="hover:bg-white/[0.02] transition cursor-pointer group" onclick="openDrawer(${m.id})">
+                        <td class="px-6 py-4 whitespace-nowrap text-slate-400 font-mono text-xs">
+                            ${m.date.split(' ')[0]} <span class="text-slate-600 ml-1">${m.date.split(' ')[1]}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium ${typeBadgeClass}">
+                                ${m.type}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-xs font-bold text-slate-300">
+                                    ${m.ticker.substring(0,2)}
+                                </div>
+                                <div>
+                                    <div class="text-white font-bold text-sm font-mono">${m.ticker}</div>
+                                    <div class="text-slate-500 text-xs truncate max-w-[100px]">${m.name}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-slate-400 hidden md:table-cell">
+                            ${m.account}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">
+                            ${m.qty}
+                        </td>
+                         <td class="px-6 py-4 whitespace-nowrap text-right font-mono text-slate-400 text-xs hidden lg:table-cell">
+                            ${m.currency === 'USD' ? fmtUSD.format(m.price) : fmtARS.format(m.price)}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white font-medium">
+                            ${m.currency === 'USD' ? fmtUSD.format(m.total) : fmtARS.format(m.total)}
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <button class="p-1.5 hover:bg-white/10 rounded-md text-slate-500 hover:text-white transition opacity-0 group-hover:opacity-100">
+                                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                tbody.insertAdjacentHTML('beforeend', row);
+            });
+            lucide.createIcons();
+        }
+
+        // --- DRAWER LOGIC ---
+        function openDrawer(id) {
+            const m = mockMovements.find(x => x.id === id);
+            if(!m) return;
+
+            const content = document.getElementById('drawer-content');
+            content.innerHTML = `
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                        <span class="font-display font-bold text-2xl text-white">${m.ticker.substring(0,2)}</span>
+                    </div>
+                    <div>
+                        <h3 class="font-display text-2xl font-bold text-white">${m.ticker}</h3>
+                        <p class="text-slate-400 text-sm">${m.name}</p>
+                        <span class="inline-block mt-2 px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-300 border border-white/10">${m.class}</span>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="p-4 rounded-xl bg-slate-900 border border-white/5 space-y-3">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-500">Operación</span>
+                            <span class="text-white font-medium">${m.type}</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-500">Fecha</span>
+                            <span class="text-white font-mono">${m.date}</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-500">Cuenta</span>
+                            <span class="text-white">${m.account}</span>
+                        </div>
+                        <div class="h-px bg-white/5 my-2"></div>
+                        <div class="flex justify-between items-end">
+                            <span class="text-slate-500 text-sm">Total Operado</span>
+                            <div class="text-right">
+                                <div class="text-xl font-mono font-bold text-brand-primary">${m.currency === 'USD' ? fmtUSD.format(m.total) : fmtARS.format(m.total)}</div>
+                                <div class="text-xs text-slate-500 font-mono">Qty: ${m.qty} @ ${m.price}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="p-3 rounded-lg border border-white/5 bg-white/[0.02]">
+                            <div class="text-xs text-slate-500 uppercase mb-1">Total ARS Hist.</div>
+                            <div class="font-mono text-white text-sm">${fmtARS.format(m.currency === 'ARS' ? m.total : m.total * 1180)}</div>
+                        </div>
+                        <div class="p-3 rounded-lg border border-white/5 bg-white/[0.02]">
+                            <div class="text-xs text-slate-500 uppercase mb-1">Total USD Hist.</div>
+                            <div class="font-mono text-white text-sm">${fmtUSD.format(m.usd_equiv)}</div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 rounded-lg border border-white/5 bg-white/[0.02] flex justify-between items-center">
+                         <span class="text-xs text-slate-500 uppercase">FX Aplicado</span>
+                         <span class="font-mono text-emerald-400 text-sm">${m.fx}</span>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('details-drawer-overlay').classList.remove('hidden');
+            setTimeout(() => document.getElementById('details-drawer-overlay').classList.remove('opacity-0'), 10);
+            document.getElementById('details-drawer').classList.remove('translate-x-full');
+        }
+
+        function closeDrawer() {
+            document.getElementById('details-drawer').classList.add('translate-x-full');
+            document.getElementById('details-drawer-overlay').classList.add('opacity-0');
+            setTimeout(() => {
+                document.getElementById('details-drawer-overlay').classList.add('hidden');
+            }, 300);
+        }
+
+        // --- WIZARD LOGIC ---
+        let currentStep = 1;
+        let wizardData = { class: 'cedear', currency: 'ARS', price: 0, qty: 0, fx: 1180 };
+
+        function openWizard() {
+            document.getElementById('wizard-modal').classList.remove('hidden');
+            currentStep = 1;
+            updateStepUI();
+            
+            // Set default date
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('date-input').value = now.toISOString().slice(0,16);
+        }
+
+        function closeWizard() {
+            document.getElementById('wizard-modal').classList.add('hidden');
+        }
+
+        function updateStepUI() {
+            // Hide all steps
+            document.querySelectorAll('.wizard-step').forEach(el => el.classList.add('hidden'));
+            // Show current
+            document.getElementById(`step-${currentStep}`).classList.remove('hidden');
+            
+            // Update dots
+            for(let i=1; i<=4; i++) {
+                const dot = document.getElementById(`step-dot-${i}`);
+                if (i < currentStep) {
+                     dot.classList.remove('bg-white/10', 'bg-brand-primary');
+                     dot.classList.add('bg-emerald-500');
+                } else if (i === currentStep) {
+                     dot.classList.remove('bg-white/10', 'bg-emerald-500');
+                     dot.classList.add('bg-brand-primary');
+                } else {
+                     dot.classList.remove('bg-brand-primary', 'bg-emerald-500');
+                     dot.classList.add('bg-white/10');
+                }
+            }
+
+            // Update buttons
+            const btnBack = document.getElementById('btn-back');
+            const btnNext = document.getElementById('btn-next');
+            const btnFinish = document.getElementById('btn-finish');
+
+            if(currentStep === 1) btnBack.classList.add('hidden');
+            else btnBack.classList.remove('hidden');
+
+            if(currentStep === 4) {
+                btnNext.classList.add('hidden');
+                btnFinish.classList.remove('hidden');
+                prepareReview();
+            } else {
+                btnNext.classList.remove('hidden');
+                btnFinish.classList.add('hidden');
+            }
+        }
+
+        function nextStep() {
+            if(currentStep < 4) {
+                currentStep++;
+                updateStepUI();
+            }
+        }
+
+        function prevStep() {
+            if(currentStep > 1) {
+                currentStep--;
+                updateStepUI();
+            }
+        }
+
+        function handleClassChange() {
+            const selected = document.querySelector('input[name="asset_class"]:checked').value;
+            wizardData.class = selected;
+
+            // Update Operation Selector in Step 2 based on Class
+            const opContainer = document.getElementById('operation-selector');
+            let opsHTML = '';
+            
+            if (selected === 'pf') {
+                opsHTML = `
+                    <label class="px-4 py-2 rounded-md cursor-pointer hover:bg-white/5 has-[:checked]:bg-brand-primary has-[:checked]:text-white transition">
+                        <input type="radio" name="op_type" value="constitucion" class="sr-only" checked>
+                        <span class="text-sm font-medium">Constituir (Inversión)</span>
+                    </label>
+                     <label class="px-4 py-2 rounded-md cursor-pointer hover:bg-white/5 has-[:checked]:bg-brand-primary has-[:checked]:text-white transition">
+                        <input type="radio" name="op_type" value="cancelacion" class="sr-only">
+                        <span class="text-sm font-medium">Cobro / Vencimiento</span>
+                    </label>
+                `;
+            } else {
+                opsHTML = `
+                    <label class="px-4 py-2 rounded-md cursor-pointer hover:bg-white/5 has-[:checked]:bg-emerald-500/20 has-[:checked]:text-emerald-400 transition">
+                        <input type="radio" name="op_type" value="compra" class="sr-only" checked>
+                        <span class="text-sm font-medium">Compra</span>
+                    </label>
+                     <label class="px-4 py-2 rounded-md cursor-pointer hover:bg-white/5 has-[:checked]:bg-rose-500/20 has-[:checked]:text-rose-400 transition">
+                        <input type="radio" name="op_type" value="venta" class="sr-only">
+                        <span class="text-sm font-medium">Venta</span>
+                    </label>
+                `;
+            }
+            opContainer.innerHTML = opsHTML;
+
+            // Set FX defaults
+            const fxSelect = document.getElementById('fx-type');
+            if(selected === 'crypto') fxSelect.value = 'crypto';
+            else fxSelect.value = 'mep';
+            updateFXValue(); // Refresh rate mock
+        }
+
+        // --- TYPEAHEAD LOGIC ---
+        function showSuggestions(val) {
+            const list = document.getElementById('suggestion-list');
+            const container = document.getElementById('asset-suggestions');
+            
+            if(val.length < 1) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            const filtered = mockAssets.filter(a => a.ticker.toLowerCase().includes(val.toLowerCase()) || a.name.toLowerCase().includes(val.toLowerCase()));
+            
+            list.innerHTML = '';
+            if(filtered.length === 0) {
+                list.innerHTML = '<li class="px-4 py-2 text-slate-500 italic">No se encontraron activos</li>';
+            } else {
+                filtered.forEach(a => {
+                    const li = document.createElement('li');
+                    li.className = 'px-4 py-2 hover:bg-white/5 cursor-pointer flex items-center gap-3 transition';
+                    li.innerHTML = `
+                        <div class="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-xs font-bold">${a.ticker.substring(0,2)}</div>
+                        <div>
+                            <div class="text-white font-mono text-xs font-bold">${a.ticker}</div>
+                            <div class="text-slate-500 text-[10px]">${a.name}</div>
+                        </div>
+                        <span class="ml-auto text-[10px] px-2 py-0.5 rounded bg-slate-800 border border-white/10 text-slate-400">${a.class}</span>
+                    `;
+                    li.onclick = () => selectAsset(a);
+                    list.appendChild(li);
+                });
+            }
+            container.classList.remove('hidden');
+        }
+
+        function selectAsset(asset) {
+            wizardData.asset = asset;
+            document.getElementById('asset-search').value = '';
+            document.getElementById('asset-suggestions').classList.add('hidden');
+            
+            // Show Badge
+            document.getElementById('asset-input-container').querySelector('input').classList.add('hidden');
+            document.getElementById('selected-asset-badge').classList.remove('hidden');
+            document.getElementById('badge-ticker').textContent = asset.ticker;
+            document.getElementById('badge-name').textContent = asset.name;
+        }
+
+        function clearAssetSelection() {
+            wizardData.asset = null;
+            document.getElementById('selected-asset-badge').classList.add('hidden');
+            document.getElementById('asset-input-container').querySelector('input').classList.remove('hidden');
+        }
+
+        // --- CALCULATIONS ---
+        function updateFXValue() {
+            const type = document.getElementById('fx-type').value;
+            let rate = 1180.50;
+            if(type === 'crypto') rate = 1210.00;
+            if(type === 'official') rate = 890.50;
+            if(type === 'blue') rate = 1230.00;
+            
+            document.getElementById('input-fx').value = rate;
+            updateCalculations();
+        }
+
+        function updateCalculations() {
+            const qty = parseFloat(document.getElementById('input-qty').value) || 0;
+            const price = parseFloat(document.getElementById('input-price').value) || 0;
+            const fx = parseFloat(document.getElementById('input-fx').value) || 1;
+            const currency = document.querySelector('input[name="currency"]:checked').value;
+
+            // Symbols
+            document.getElementById('curr-symbol').innerText = currency === 'USD' ? 'u$s' : '$';
+
+            const total = qty * price;
+            
+            let totalARS, totalUSD;
+
+            if(currency === 'ARS') {
+                totalARS = total;
+                totalUSD = total / fx;
+                document.getElementById('display-total').innerText = fmtARS.format(total);
+            } else {
+                totalUSD = total;
+                totalARS = total * fx;
+                document.getElementById('display-total').innerText = fmtUSD.format(total);
+            }
+
+            document.getElementById('display-usd-equiv').innerText = fmtUSD.format(totalUSD);
+            document.getElementById('display-ars-equiv').innerText = fmtARS.format(totalARS);
+
+            // Store for review
+            wizardData.qty = qty;
+            wizardData.price = price;
+            wizardData.currency = currency;
+            wizardData.total = total;
+            wizardData.fxRate = fx;
+        }
+
+        function prepareReview() {
+            document.getElementById('review-op').innerText = (document.querySelector('input[name="op_type"]:checked').value === 'compra' ? 'Compra' : 'Venta') + ' ' + (wizardData.asset?.ticker || 'Activo');
+            document.getElementById('review-asset').innerText = wizardData.asset?.name || '---';
+            
+            const totalFmt = wizardData.currency === 'USD' ? fmtUSD.format(wizardData.total) : fmtARS.format(wizardData.total);
+            document.getElementById('review-total').innerText = totalFmt;
+            
+            const fxType = document.getElementById('fx-type').options[document.getElementById('fx-type').selectedIndex].text;
+            document.getElementById('review-fx').innerText = `${fxType} $${wizardData.fxRate}`;
+        }
+
+        function finishWizard() {
+            // Mock Save
+            closeWizard();
+            
+            // Show Toast
+            const toast = document.getElementById('toast');
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+
+            // Add mock row logic here if desired
+        }
+
+        // Init
+        renderTable();
+
+    </script>
+</body>
+</html>

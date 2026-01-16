@@ -3,5 +3,5 @@ export { BuyLotsTable } from './BuyLotsTable'
 export { SellMovementsTable } from './SellMovementsTable'
 export { SellPreviewPanel } from './SellPreviewPanel'
 export { PortfolioSummaryCard } from './PortfolioSummaryCard'
-export { ValuationModeToggle } from './ValuationModeToggle'
+
 export { AssetDrawer } from './AssetDrawer'
