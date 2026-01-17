@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD, formatQty, formatPercent } from '@/lib/format'
@@ -9,6 +9,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortfolioSummaryCard } from '@/components/assets/PortfolioSummaryCard'
 import { AssetDrawer } from '@/components/assets/AssetDrawer'
 import type { AssetClass, AssetRowMetrics } from '@/domain/assets/types'
+import { pfStore } from '@/domain/pf/store'
+import { PFPosition } from '@/domain/pf/types'
+import { PFList } from './assets/components/PFList'
+import { useToast } from '@/components/ui/toast'
 
 const categoryLabels: Record<AssetClass | 'all', string> = {
     all: 'Todos',
@@ -30,6 +34,45 @@ export function AssetsPage() {
     const [categoryFilter, setCategoryFilter] = useState<AssetClass | 'all'>('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedAsset, setSelectedAsset] = useState<AssetRowMetrics | null>(null)
+    const [activePFs, setActivePFs] = useState<PFPosition[]>([])
+    const { toast } = useToast()
+
+    // PF Lifecycle & Loading
+    useEffect(() => {
+        // Load PFs
+        const allPFs = pfStore.list()
+        const now = new Date()
+
+        let maturedCount = 0
+        let maturedTotal = 0
+
+        allPFs.forEach(pf => {
+            if (pf.status === 'active') {
+                const maturity = new Date(pf.maturityTs)
+                if (maturity <= now) {
+                    // Matured!
+                    pf.status = 'matured'
+                    pfStore.save(pf)
+                    maturedCount++
+                    maturedTotal += pf.expectedTotalARS
+                }
+            }
+        })
+
+        // Reload active only
+        // Re-read from store or just filter? If we mutated checks above...
+        // Best to re-read or use local variable if we modified objects in place (we did pf.status = ...)
+        const active = allPFs.filter(p => p.status === 'active')
+        setActivePFs(active)
+
+        if (maturedCount > 0) {
+            toast({
+                title: '¡Plazo Fijo Vencido!',
+                description: `${maturedCount} plazo(s) fijo(s) han vencido por un total de ${formatMoneyARS(maturedTotal)}.`,
+                variant: 'default',
+            })
+        }
+    }, []) // Run once on mount
 
     // Data Hooks
     const {
@@ -99,11 +142,16 @@ export function AssetsPage() {
                 </Tabs>
             )}
 
-            {/* Empty State */}
-            {!isLoading && Object.keys(groupedRows).length === 0 && (
+            {/* Empty State (Modified to check PFs too) */}
+            {!isLoading && Object.keys(groupedRows).length === 0 && activePFs.length === 0 && (
                 <div className="text-center py-20 border rounded-xl bg-muted/5 border-dashed">
                     <p className="text-muted-foreground">No se encontraron activos.</p>
                 </div>
+            )}
+
+            {/* PF SECTION */}
+            {activePFs.length > 0 && (categoryFilter === 'all' || categoryFilter === ('pf' as any)) && (
+                <PFList positions={activePFs} />
             )}
 
             {/* SECTIONS PER ACCOUNT */}

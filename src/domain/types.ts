@@ -57,6 +57,7 @@ export interface Instrument {
     // Placeholders for future
     cedearRatio?: number
     underlyingSymbol?: string
+    coingeckoId?: string // for real price fetching
 }
 
 export interface Account {
@@ -113,6 +114,18 @@ export interface Movement {
     // Fallback fields for display when instrumentId is not resolvable
     ticker?: string
     assetName?: string
+
+    // Plazo Fijo Specific Fields
+    bank?: string
+    alias?: string
+    principalARS?: number
+    termDays?: number
+    tna?: number
+    tea?: number
+    startDate?: string // ISO
+    maturityDate?: string // ISO
+    expectedInterest?: number
+    expectedTotal?: number
 }
 
 export interface MovementFxSnapshot {

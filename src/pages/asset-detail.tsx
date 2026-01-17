@@ -25,6 +25,8 @@ const categoryLabels: Record<AssetCategory, string> = {
     PF: 'Plazo Fijo',
     WALLET: 'Wallet',
     DEBT: 'Deuda',
+    STOCK: 'Acciones',
+    CURRENCY: 'Moneda',
 }
 
 const categoryIcons: Record<AssetCategory, typeof Bitcoin> = {
@@ -37,6 +39,8 @@ const categoryIcons: Record<AssetCategory, typeof Bitcoin> = {
     PF: Coins,
     WALLET: Coins,
     DEBT: Coins,
+    STOCK: Coins,
+    CURRENCY: Coins,
 }
 
 export function AssetDetailPage() {

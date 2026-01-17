@@ -20,7 +20,13 @@ export function MovementsTable({
     onRowClick,
     onNewClick,
 }: MovementsTableProps) {
-    const getTypeBadgeClass = (type: string) => {
+    const getTypeBadgeClass = (m: Movement) => {
+        if (m.assetClass === 'pf') {
+            if (m.type === 'BUY') return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' // PF / Constitucion
+            if (m.type === 'SELL') return 'bg-amber-500/10 text-amber-400 border border-amber-500/20' // Rescate
+        }
+
+        const type = m.type
         if (type === 'BUY') return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
         if (type === 'SELL') return 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
         if (type === 'DEPOSIT' || type === 'INTEREST' || type === 'DIVIDEND')
@@ -30,7 +36,13 @@ export function MovementsTable({
         return 'bg-white/5 text-slate-300 border border-white/10'
     }
 
-    const getTypeLabel = (type: string) => {
+    const getTypeLabel = (m: Movement) => {
+        if (m.assetClass === 'pf') {
+            if (m.type === 'BUY') return 'PF'
+            if (m.type === 'SELL') return 'Rescate'
+        }
+
+        const type = m.type
         const labels: Record<string, string> = {
             BUY: 'Compra',
             SELL: 'Venta',
@@ -112,8 +124,8 @@ export function MovementsTable({
                                     {date} <span className="text-slate-600 ml-1">{time}</span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-medium', getTypeBadgeClass(m.type))}>
-                                        {getTypeLabel(m.type)}
+                                    <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-medium', getTypeBadgeClass(m))}>
+                                        {getTypeLabel(m)}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">

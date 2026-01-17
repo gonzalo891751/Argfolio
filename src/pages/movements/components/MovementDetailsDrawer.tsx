@@ -59,6 +59,12 @@ export function MovementDetailsDrawer({
             INTEREST: 'Interés',
             FEE: 'Comisión',
         }
+
+        if (movement.assetClass === 'pf') {
+            if (type === 'BUY') return 'PF'
+            if (type === 'SELL') return 'Rescate'
+        }
+
         return labels[type] || type
     }
 

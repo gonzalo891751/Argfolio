@@ -19,6 +19,8 @@ const categoryLabels: Record<AssetCategory, string> = {
     PF: 'Plazos Fijos',
     WALLET: 'Wallets',
     DEBT: 'Deudas',
+    STOCK: 'Acciones',
+    CURRENCY: 'Moneda',
 }
 
 interface ComputeTotalsInput {
