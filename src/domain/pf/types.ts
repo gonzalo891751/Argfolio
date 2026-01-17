@@ -12,6 +12,7 @@ export interface PFPosition {
     expectedTotalARS: number
     status: 'active' | 'matured'
     movementId: string // Link to the creation movement
+    initialFx?: number // Historical FX at constitution
 }
 
 export type BankSuggestion = {

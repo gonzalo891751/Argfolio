@@ -43,6 +43,17 @@ export const movementsRepo = {
     },
 
     async delete(id: string): Promise<void> {
+        // Cascade Delete for Plazos Fijos
+        const m = await db.movements.get(id)
+        if (m && m.pf?.kind === 'constitute') {
+            // Find orphans
+            const related = await db.movements.filter(x => x.pf?.kind === 'redeem' && x.pf?.pfId === id).toArray()
+            const idsToDelete = related.map(r => r.id)
+            if (idsToDelete.length > 0) {
+                await db.movements.bulkDelete(idsToDelete)
+            }
+        }
+
         await db.movements.delete(id)
     },
 

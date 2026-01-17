@@ -1,18 +1,17 @@
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatMoneyARS, formatMoneyUSD, formatQty, formatPercent } from '@/lib/format'
+import { formatMoneyARS, formatMoneyUSD, formatQty, formatPercent, formatDeltaMoneyARS, formatDeltaMoneyUSD } from '@/lib/format'
 import { useAssetsRows } from '@/features/assets/useAssetsRows'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortfolioSummaryCard } from '@/components/assets/PortfolioSummaryCard'
 import { AssetDrawer } from '@/components/assets/AssetDrawer'
 import type { AssetClass, AssetRowMetrics } from '@/domain/assets/types'
-import { pfStore } from '@/domain/pf/store'
-import { PFPosition } from '@/domain/pf/types'
 import { PFList } from './assets/components/PFList'
-import { useToast } from '@/components/ui/toast'
+import { usePF } from '@/hooks/use-pf'
+// pfStore removed
 
 const categoryLabels: Record<AssetClass | 'all', string> = {
     all: 'Todos',
@@ -34,45 +33,11 @@ export function AssetsPage() {
     const [categoryFilter, setCategoryFilter] = useState<AssetClass | 'all'>('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedAsset, setSelectedAsset] = useState<AssetRowMetrics | null>(null)
-    const [activePFs, setActivePFs] = useState<PFPosition[]>([])
-    const { toast } = useToast()
 
-    // PF Lifecycle & Loading
-    useEffect(() => {
-        // Load PFs
-        const allPFs = pfStore.list()
-        const now = new Date()
+    // PF Hook (Handles logic, toast, and valuation)
+    const { active: activePFs, totals: pfTotals } = usePF()
 
-        let maturedCount = 0
-        let maturedTotal = 0
 
-        allPFs.forEach(pf => {
-            if (pf.status === 'active') {
-                const maturity = new Date(pf.maturityTs)
-                if (maturity <= now) {
-                    // Matured!
-                    pf.status = 'matured'
-                    pfStore.save(pf)
-                    maturedCount++
-                    maturedTotal += pf.expectedTotalARS
-                }
-            }
-        })
-
-        // Reload active only
-        // Re-read from store or just filter? If we mutated checks above...
-        // Best to re-read or use local variable if we modified objects in place (we did pf.status = ...)
-        const active = allPFs.filter(p => p.status === 'active')
-        setActivePFs(active)
-
-        if (maturedCount > 0) {
-            toast({
-                title: '¡Plazo Fijo Vencido!',
-                description: `${maturedCount} plazo(s) fijo(s) han vencido por un total de ${formatMoneyARS(maturedTotal)}.`,
-                variant: 'default',
-            })
-        }
-    }, []) // Run once on mount
 
     // Data Hooks
     const {
@@ -100,9 +65,9 @@ export function AssetsPage() {
             <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
                 {/* Portfolio Summary */}
                 <PortfolioSummaryCard
-                    totalArs={totals.totalArs}
-                    totalUsdEq={totals.totalUsdEq}
-                    pnlArs={totals.totalPnlArs}
+                    totalArs={totals.totalArs + pfTotals.totalActiveARS + pfTotals.totalMaturedARS}
+                    totalUsdEq={totals.totalUsdEq + pfTotals.totalActiveUSD + pfTotals.totalMaturedUSD}
+                    pnlArs={totals.totalPnlArs} // PF PnL not currently tracked in same way, could add interest as PnL?
                     pnlPct={totals.totalPnlPct}
                     className="lg:max-w-md"
                 />
@@ -163,7 +128,6 @@ export function AssetsPage() {
                 const investedArs = groupTotals.valArs - groupTotals.pnlArs
                 const groupRoiPct = investedArs !== 0 ? (groupTotals.pnlArs / investedArs) : 0
                 const groupPnlColor = groupTotals.pnlArs >= 0 ? 'text-emerald-500' : 'text-red-500'
-                const pnlSign = groupTotals.pnlArs >= 0 ? '+' : ''
 
                 // Count types
                 const cedearsCount = metrics.filter(m => m.category === 'CEDEAR').length
@@ -196,29 +160,58 @@ export function AssetsPage() {
                                 <div className="text-right">
                                     <span className="block text-xs uppercase tracking-wider text-muted-foreground">Valuación</span>
                                     <div className="flex flex-col items-end">
-                                        <span className="font-bold font-numeric text-lg">{formatMoneyARS(groupTotals.valArs)}</span>
-                                        <span className="text-xs font-mono text-sky-500">
-                                            ≈ {formatMoneyUSD(groupTotals.valUsd)}
-                                        </span>
+                                        {metrics[0]?.category === 'CRYPTO' || metrics[0]?.category === 'STABLE' ? (
+                                            <>
+                                                <span className="font-bold font-numeric text-lg">{formatMoneyUSD(groupTotals.valUsd)}</span>
+                                                <span className="text-xs font-mono text-muted-foreground">{formatMoneyARS(groupTotals.valArs)}</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="font-bold font-numeric text-lg">{formatMoneyARS(groupTotals.valArs)}</span>
+                                                <span className="text-xs font-mono text-sky-500">
+                                                    ≈ {formatMoneyUSD(groupTotals.valUsd)}
+                                                </span>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                                 {/* PnL */}
                                 <div className="text-right pl-4 border-l">
                                     <span className="block text-xs uppercase tracking-wider text-muted-foreground">Ganancia</span>
                                     <div className="flex flex-col items-end">
-                                        <span className={cn("font-bold font-numeric text-lg", groupPnlColor)}>
-                                            {pnlSign}{formatMoneyARS(Math.abs(groupTotals.pnlArs))}
-                                        </span>
-                                        <span className={cn("text-xs font-mono opacity-90", groupPnlColor)}>
-                                            ≈ {groupTotals.pnlUsd >= 0 ? '+' : ''}{formatMoneyUSD(Math.abs(groupTotals.pnlUsd))}
-                                        </span>
+                                        {metrics[0]?.category === 'CRYPTO' || metrics[0]?.category === 'STABLE' ? (
+                                            <>
+                                                <span className={cn("font-bold font-numeric text-lg", groupPnlColor)}>
+                                                    {formatDeltaMoneyUSD(groupTotals.pnlUsd)}
+                                                </span>
+                                                <span className={cn("text-xs font-mono opacity-90", groupPnlColor)}>
+                                                    {formatDeltaMoneyARS(groupTotals.pnlArs)}
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className={cn("font-bold font-numeric text-lg", groupPnlColor)}>
+                                                    {formatDeltaMoneyARS(groupTotals.pnlArs)}
+                                                </span>
+                                                <span className={cn("text-xs font-mono opacity-90", groupPnlColor)}>
+                                                    ≈ {formatDeltaMoneyUSD(groupTotals.pnlUsd)}
+                                                </span>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                                 {/* ROI */}
                                 <div className="text-right pl-4 border-l">
                                     <span className="block text-xs uppercase tracking-wider text-muted-foreground">Rendimiento %</span>
                                     <span className={cn("font-bold font-numeric text-lg block", groupPnlColor)}>
-                                        {formatPercent(groupRoiPct)}
+                                        {/* For Crypto Group, calculate ROI on USD basis if possible, else fallback to groupRoiPct (ARS) */}
+                                        {(() => {
+                                            const isCryptoGroup = metrics[0]?.category === 'CRYPTO' || metrics[0]?.category === 'STABLE'
+                                            if (isCryptoGroup && groupTotals.totalCostUsdEq) {
+                                                return formatPercent(groupTotals.pnlUsd / groupTotals.totalCostUsdEq)
+                                            }
+                                            return formatPercent(groupRoiPct)
+                                        })()}
                                     </span>
                                 </div>
                             </div>
@@ -252,12 +245,10 @@ export function AssetsPage() {
                                         {metrics.map((row) => {
                                             const pnlColor = (row.pnlPct ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500'
                                             const roiColor = (row.roiPct ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500'
-                                            const pnlSignRow = (row.pnlArs ?? 0) >= 0 ? '+' : ''
-
                                             // USD Mkt Price (Derived from Valuation / Qty or explicitly passed if calc'd)
-                                            // row.valUsdEq is Market Value USD.
-                                            // inferred price:
                                             const impliedPriceUsd = (row.valUsdEq && row.quantity) ? row.valUsdEq / row.quantity : 0
+
+                                            const isCrypto = row.category === 'CRYPTO' || row.category === 'STABLE'
 
                                             return (
                                                 <tr
@@ -292,77 +283,158 @@ export function AssetsPage() {
                                                         </Badge>
                                                     </td>
 
-                                                    {/* 3. Costo prom (ARS + USD) */}
+                                                    {/* 3. Costo prom */}
                                                     <td className="p-4 text-right align-top pt-5">
                                                         <div className="flex flex-col items-end">
-                                                            <span className="font-numeric font-medium">
-                                                                {formatMoneyARS(row.avgCost)}
-                                                            </span>
-                                                            {row.avgCostUsdEq != null && (
-                                                                <span className="text-xs font-mono text-sky-500">
-                                                                    ≈ {formatMoneyUSD(row.avgCostUsdEq)}
-                                                                </span>
+                                                            {isCrypto ? (
+                                                                <>
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatMoneyUSD(row.avgCostUsdEq)}
+                                                                    </span>
+                                                                    <span className="text-xs font-mono text-muted-foreground">
+                                                                        {row.costArs && row.quantity ? formatMoneyARS(row.costArs / row.quantity) : '-'}
+                                                                    </span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatMoneyARS(row.avgCost)}
+                                                                    </span>
+                                                                    {row.avgCostUsdEq != null && (
+                                                                        <span className="text-xs font-mono text-sky-500">
+                                                                            ≈ {formatMoneyUSD(row.avgCostUsdEq)}
+                                                                        </span>
+                                                                    )}
+                                                                </>
                                                             )}
                                                         </div>
                                                     </td>
 
-                                                    {/* 4. Invertido (ARS + USD) */}
+                                                    {/* 4. Invertido */}
                                                     <td className="p-4 text-right align-top pt-5">
                                                         <div className="flex flex-col items-end">
-                                                            <span className="font-numeric font-medium">
-                                                                {formatMoneyARS(row.investedArs)}
-                                                            </span>
-                                                            {row.costUsdEq != null && (
-                                                                <span className="text-xs font-mono text-sky-500">
-                                                                    ≈ {formatMoneyUSD(row.costUsdEq)}
-                                                                </span>
+                                                            {isCrypto ? (
+                                                                <>
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatMoneyUSD(row.costUsdEq)}
+                                                                    </span>
+                                                                    <span className="text-xs font-mono text-muted-foreground">
+                                                                        {formatMoneyARS(row.investedArs)}
+                                                                    </span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatMoneyARS(row.investedArs)}
+                                                                    </span>
+                                                                    {row.costUsdEq != null && (
+                                                                        <span className="text-xs font-mono text-sky-500">
+                                                                            ≈ {formatMoneyUSD(row.costUsdEq)}
+                                                                        </span>
+                                                                    )}
+                                                                </>
                                                             )}
                                                         </div>
                                                     </td>
 
-                                                    {/* 5. Precio actual (ARS + USD Mkt) */}
+                                                    {/* 5. Precio actual */}
                                                     <td className="p-4 text-right align-top pt-5">
                                                         <div className="flex flex-col items-end">
-                                                            <span className="font-numeric font-medium">
-                                                                {formatMoneyARS(row.currentPrice)}
-                                                            </span>
-                                                            {impliedPriceUsd > 0 && (
-                                                                <span className="text-xs font-mono text-sky-500">
-                                                                    ≈ {formatMoneyUSD(impliedPriceUsd)}
-                                                                </span>
+                                                            {isCrypto ? (
+                                                                <>
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatMoneyUSD(row.currentPrice)}
+                                                                    </span>
+                                                                    {/* Implied ARS Price = Price USD * FX Now */}
+                                                                    <span className="text-xs font-mono text-muted-foreground">
+                                                                        {formatMoneyARS((row.currentPrice || 0) * (row.fxRate || 0))}
+                                                                    </span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatMoneyARS(row.currentPrice)}
+                                                                    </span>
+                                                                    {impliedPriceUsd > 0 && (
+                                                                        <span className="text-xs font-mono text-sky-500">
+                                                                            ≈ {formatMoneyUSD(impliedPriceUsd)}
+                                                                        </span>
+                                                                    )}
+                                                                </>
                                                             )}
                                                         </div>
                                                     </td>
 
-                                                    {/* 6. Valor actual (Liquidation) */}
+                                                    {/* 6. Valor actual */}
                                                     <td className="p-4 text-right align-top pt-5">
                                                         <div className="flex flex-col items-end">
-                                                            <span className="font-numeric font-medium">
-                                                                {formatMoneyARS(row.valArs)}
-                                                            </span>
+                                                            {isCrypto ? (
+                                                                <>
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatMoneyUSD(row.valUsdEq)}
+                                                                    </span>
+                                                                    <span className="text-xs font-mono text-muted-foreground">
+                                                                        {formatMoneyARS(row.valArs)}
+                                                                    </span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatMoneyARS(row.valArs)}
+                                                                    </span>
+                                                                    {row.valUsdEq != null && (
+                                                                        <span className="text-xs font-mono text-sky-500">
+                                                                            ≈ {formatMoneyUSD(row.valUsdEq)}
+                                                                        </span>
+                                                                    )}
+                                                                </>
+                                                            )}
+
                                                             {row.fxUsedLabel && (
-                                                                <span className="text-[10px] text-muted-foreground uppercase tracking-tighter">
+                                                                <span className="text-[10px] text-muted-foreground uppercase tracking-tighter mt-0.5">
                                                                     {row.fxUsedLabel === 'Cripto' ? 'Cripto (C)' : row.fxUsedLabel}
                                                                 </span>
                                                             )}
-                                                            {row.valUsdEq != null && (
-                                                                <span className="text-xs font-mono text-sky-500">
-                                                                    ≈ {formatMoneyUSD(row.valUsdEq)}
-                                                                </span>
-                                                            )}
                                                         </div>
                                                     </td>
 
-                                                    {/* 7. Ganancia (ARS + USD Hist) */}
+                                                    {/* 7. Ganancia */}
                                                     <td className="p-4 text-right align-top pt-5">
                                                         <div className={cn("flex flex-col items-end", pnlColor)}>
-                                                            <span className="font-numeric font-medium">
-                                                                {row.pnlArs != null ? `${pnlSignRow}${formatMoneyARS(Math.abs(row.pnlArs))}` : '—'}
-                                                            </span>
-                                                            {row.pnlUsdEq != null && (
-                                                                <span className="text-xs font-mono opacity-90">
-                                                                    ≈ {row.pnlUsdEq >= 0 ? '+' : ''}{formatMoneyUSD(Math.abs(row.pnlUsdEq))}
-                                                                </span>
+                                                            {isCrypto ? (
+                                                                <>
+                                                                    {/* Primary: Real USD PnL */}
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatDeltaMoneyUSD(row.pnlUsdEq)}
+                                                                    </span>
+                                                                    {/* Secondary: ARS PnL (Liquidación) */}
+                                                                    <div className="flex items-center justify-end gap-1.5 opacity-90">
+                                                                        <span className="text-xs font-mono">
+                                                                            {formatDeltaMoneyARS(row.pnlArs)}
+                                                                        </span>
+                                                                        {row.category === 'STABLE' && (
+                                                                            <span className="text-[9px] font-bold text-muted-foreground bg-muted px-1 rounded h-3.5 flex items-center" title="Impacto por tipo de cambio">
+                                                                                FX
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="font-numeric font-medium">
+                                                                        {formatDeltaMoneyARS(row.pnlArs)}
+                                                                    </span>
+                                                                    {/* Secondary: USD Equivalent of ARS PnL */}
+                                                                    {(() => {
+                                                                        const pnlUsdEquiv = (row.pnlArs !== null && row.fxRate) ? row.pnlArs / row.fxRate : row.pnlUsdEq
+                                                                        if (pnlUsdEquiv == null) return null
+                                                                        return (
+                                                                            <span className="text-xs font-mono opacity-90">
+                                                                                ≈ {formatDeltaMoneyUSD(pnlUsdEquiv)}
+                                                                            </span>
+                                                                        )
+                                                                    })()}
+                                                                </>
                                                             )}
                                                         </div>
                                                     </td>

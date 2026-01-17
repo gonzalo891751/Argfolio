@@ -22,9 +22,8 @@ import { useInstruments, useAccounts, useCreateInstrument } from '@/hooks/use-in
 import { useCreateMovement, useUpdateMovement } from '@/hooks/use-movements'
 import { useToast } from '@/components/ui/toast'
 import { listCedears } from '@/domain/cedears/master'
-import { pfStore } from '@/domain/pf/store'
+// pfStore removed
 import { CryptoTypeahead, type CryptoOption } from './CryptoTypeahead'
-import type { PFPosition } from '@/domain/pf/types'
 
 // Asset class type for wizard
 type AssetClass = 'cedear' | 'crypto' | 'pf' | 'fci' | 'currency' | 'wallet'
@@ -38,6 +37,7 @@ interface WizardState {
     accountId: string
     currency: Currency
     qty: number
+    qtyStr: string
     price: number
     fxType: FxType
     fxRate: number
@@ -112,6 +112,7 @@ const FX_RATES_FALLBACK: Record<FxType, number> = {
 
 export function MovementWizard({ open, onOpenChange, prefillMovement }: MovementWizardProps) {
     const [step, setStep] = useState(1)
+    const [autoBalanceUsdt, setAutoBalanceUsdt] = useState(true) // Auto-balance default ON
     const { data: fxRates } = useFxRates()
     const { data: instrumentsList = [] } = useInstruments()
     const { data: accountsList = [] } = useAccounts()
@@ -162,6 +163,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 accountId: pm.accountId,
                 currency: pm.tradeCurrency,
                 qty: pm.quantity || 0,
+                qtyStr: (pm.quantity || 0).toString().replace('.', ','),
                 price: pm.unitPrice || 0,
                 fxType: (pm.fx?.kind as FxType) || 'MEP',
                 fxRate: pm.fxAtTrade || pm.fx?.rate || 0,
@@ -181,6 +183,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
             accountId: accountsList[0]?.id || '',
             currency: 'ARS',
             qty: 0,
+            qtyStr: '',
             price: 0,
             fxType: 'MEP',
             fxRate: fxRates?.mep?.sell ?? FX_RATES_FALLBACK.MEP,
@@ -231,7 +234,9 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
             currency = 'USD'
             fxType = 'CRIPTO'
         } else if (cls === 'pf') {
-            opType = 'constitute'
+            asset = null
+            opType = 'constitute' // Default
+            fxType = 'OFICIAL' // Force Official FX for PF
         } else if (cls === 'currency') {
             opType = 'buy_usd'
             currency = 'ARS' // Paying in ARS to buy USD usually
@@ -347,7 +352,19 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 if (!state.qty || state.qty <= 0) {
                     toast({
                         title: 'Error de validación',
-                        description: 'La cantidad debe ser mayor a 0.',
+                        description: state.assetClass === 'crypto'
+                            ? 'Ingresá una cantidad mayor a 0. Podés usar decimales.'
+                            : 'La cantidad debe ser mayor a 0 y entera.',
+                        variant: 'error',
+                    })
+                    return
+                }
+
+                // Integer check for non-crypto
+                if (state.assetClass === 'cedear' && !Number.isInteger(state.qty)) {
+                    toast({
+                        title: 'Error de validación',
+                        description: 'La cantidad de CEDEARs o Acciones debe ser un número entero.',
                         variant: 'error',
                     })
                     return
@@ -473,37 +490,31 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 totalUSD: totals.netUsd,
             }
 
+
             if (state.assetClass === 'pf' && state.opType === 'constitute') {
-                // Save to PF Store
-                const principal = state.qty
+                const principal = state.qty || 0
                 const rate = (state.tna || 0) / 100
                 const days = state.termDays || 30
                 const interest = principal * rate * (days / 365)
                 const total = principal + interest
 
-                // TEA = (1 + r)^n - 1
-                const tea = (Math.pow(1 + rate * (days / 365), 365 / days) - 1) * 100
-
                 const maturityDate = new Date(state.datetime)
                 maturityDate.setDate(maturityDate.getDate() + days)
 
-                const pfPos: PFPosition = {
-                    id: crypto.randomUUID(),
-                    bank: state.bank || 'Banco',
+                movementPayload.pf = {
+                    kind: 'constitute',
+                    pfId: movementId, // Stable ID is this movement's ID
+                    bank: state.bank,
                     alias: state.alias,
-                    principalARS: principal,
+                    capitalARS: principal,
+                    tna: state.tna,
                     termDays: days,
-                    tna: state.tna || 0,
-                    tea,
-                    startTs: new Date(state.datetime).toISOString(),
-                    maturityTs: maturityDate.toISOString(),
-                    expectedInterestARS: interest,
-                    expectedTotalARS: total,
-                    status: 'active',
-                    movementId: movementId
+                    startAtISO: new Date(state.datetime).toISOString(),
+                    maturityISO: maturityDate.toISOString(),
+                    fxOficialVentaHist: state.fxRate, // Snapshot
+                    interestARS: interest,
+                    totalToCollectARS: total
                 }
-
-                pfStore.save(pfPos)
             }
 
             if (prefillMovement?.id) {
@@ -522,12 +533,78 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     id: movementId
                 } as Movement)
 
-                toast({
-                    title: 'Movimiento creado',
-                    description: 'Tu portafolio se actualizó correctamente.',
-                    variant: 'default',
-                })
-            }
+                // AUTO-BALANCE LOGIC (USDT)
+                // If creating a Crypto Trade in an Exchange (and not USDT itself), 
+                // automatically create the counterpart USDT movement (Buy/Sell) to reflect liquidity change.
+                const account = accountsList.find(a => a.id === state.accountId)
+                const isExchange = account?.kind === 'EXCHANGE'
+                const isCryptoTrade = state.assetClass === 'crypto' && ['BUY', 'SELL'].includes(movementType)
+                const isNotUSDT = state.asset?.ticker !== 'USDT'
+
+                if (isExchange && isCryptoTrade && isNotUSDT && autoBalanceUsdt) {
+                    const autoType = movementType === 'BUY' ? 'SELL' : 'BUY'
+                    // Fix: USDT Quantity is the TOTAL USD Value of the trade
+                    const autoQty = movementPayload.totalUSD || 0
+
+                    if (autoQty > 0) {
+                        // Find USDT Instrument
+                        const usdtInst = instrumentsList.find(i => i.symbol === 'USDT')
+
+                        const autoMovement: Movement = {
+                            id: crypto.randomUUID(),
+                            datetimeISO: movementPayload.datetimeISO,
+                            type: autoType,
+                            assetClass: 'crypto',
+                            instrumentId: usdtInst?.id,
+                            ticker: 'USDT',
+                            assetName: 'Tether USD',
+                            accountId: state.accountId,
+                            quantity: autoQty,
+                            unitPrice: 1, // Stable
+                            tradeCurrency: 'USD',
+
+                            // Totals (no fee on this side, purely balance adjustment)
+                            totalAmount: autoQty,
+                            netAmount: autoQty,
+                            totalUSD: autoQty,
+                            totalARS: totals.netArs, // ARS Eq
+
+                            fxAtTrade: movementPayload.fxAtTrade,
+
+                            isAuto: true,
+                            linkedMovementId: movementId,
+                            reason: 'auto_usdt_balance'
+                        }
+
+                        await createMovement.mutateAsync(autoMovement)
+
+                        toast({
+                            title: 'Movimiento creado',
+                            description: 'Se generó también el balanceo automático de USDT.',
+                            variant: 'default',
+                        })
+                        toast({
+                            title: 'Movimiento creado',
+                            description: 'Se generó también el balanceo automático de USDT.',
+                            variant: 'default',
+                        })
+                    } else {
+                        // AutoQty 0 case (shouldn't happen if price > 0)
+                        toast({
+                            title: 'Movimiento creado',
+                            description: 'Tu portafolio se actualizó correctamente.',
+                            variant: 'default',
+                        })
+                    }
+                } else {
+                    // Standard success without auto-balance
+                    toast({
+                        title: 'Movimiento creado',
+                        description: 'Tu portafolio se actualizó correctamente.',
+                        variant: 'default',
+                    })
+                }
+            } // Close create block
 
             onOpenChange(false)
         } catch (error) {
@@ -924,10 +1001,11 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                     <span className="absolute left-3 top-3.5 text-slate-500 font-mono">$</span>
                                                     <input
                                                         type="number"
-                                                        value={state.qty || ''}
-                                                        onChange={e =>
-                                                            setState(s => ({ ...s, qty: parseFloat(e.target.value) || 0, price: 1, currency: 'ARS' }))
-                                                        }
+                                                        value={state.qtyStr || ''}
+                                                        onChange={e => {
+                                                            const val = parseFloat(e.target.value) || 0;
+                                                            setState(s => ({ ...s, qtyStr: e.target.value, qty: val, price: 1, currency: 'ARS' }));
+                                                        }}
                                                         placeholder="0.00"
                                                         className="input-base w-full rounded-lg pl-8 pr-4 py-3 text-white font-mono text-lg"
                                                     />
@@ -1008,14 +1086,33 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                         {state.assetClass === 'wallet' ? 'Monto Total' : 'Cantidad'}
                                                     </label>
                                                     <input
-                                                        type="number"
-                                                        value={state.qty || ''}
-                                                        onChange={e =>
-                                                            setState(s => ({ ...s, qty: parseFloat(e.target.value) || 0 }))
-                                                        }
-                                                        placeholder="0"
+                                                        type={state.assetClass === 'crypto' ? "text" : "number"}
+                                                        value={state.qtyStr || ''}
+                                                        onChange={e => {
+                                                            const rawVal = e.target.value;
+                                                            // Sanitize for decimals: allow digits, one comma/dot, and up to 8 decimals for crypto
+                                                            if (state.assetClass === 'crypto') {
+                                                                const sanitized = rawVal.replace(/[^0-9,.]/g, '');
+                                                                // Ensure only one separator
+                                                                const parts = sanitized.split(/[.,]/);
+                                                                if (parts.length > 2) return; // Ignore if more than one dot/comma
+                                                                if (parts[1] && parts[1].length > 8) return; // Max 8 decimals
+
+                                                                const normalized = sanitized.replace(',', '.');
+                                                                setState(s => ({
+                                                                    ...s,
+                                                                    qtyStr: sanitized,
+                                                                    qty: parseFloat(normalized) || 0
+                                                                }));
+                                                            } else {
+                                                                // Standard integer/number input for others
+                                                                const val = parseFloat(rawVal) || 0;
+                                                                setState(s => ({ ...s, qtyStr: rawVal, qty: val }));
+                                                            }
+                                                        }}
+                                                        placeholder={state.assetClass === 'crypto' ? "0,00000000" : "0"}
                                                         step={state.assetClass === 'crypto' ? "0.00000001" : "1"}
-                                                        inputMode={state.assetClass === 'crypto' ? "decimal" : "numeric"}
+                                                        inputMode="decimal"
                                                         onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                                         className="input-base w-full rounded-lg px-4 py-3 text-white font-mono text-lg"
                                                     />
@@ -1223,6 +1320,29 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                     </div>
                                 </div>
                             </div>
+                            {!state.assetClass || state.assetClass === 'crypto' ? ( // Show for crypto
+                                state.assetClass === 'crypto' &&
+                                accountsList.find(a => a.id === state.accountId)?.kind === 'EXCHANGE' &&
+                                state.asset?.ticker !== 'USDT' && (
+                                    <div className="flex items-center space-x-2 py-4 border-t border-white/10 mt-4">
+                                        <div className="flex items-center h-5">
+                                            <input
+                                                type="checkbox"
+                                                id="autoBalance"
+                                                checked={autoBalanceUsdt}
+                                                onChange={(e) => setAutoBalanceUsdt(e.target.checked)}
+                                                className="h-4 w-4 rounded border-gray-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                        <div className="ml-2 text-sm">
+                                            <label htmlFor="autoBalance" className="font-medium text-slate-300">
+                                                Liquidación automática en USDT
+                                            </label>
+                                            <p className="text-xs text-slate-500">Generar movimiento espejo en USDT</p>
+                                        </div>
+                                    </div>
+                                )
+                            ) : null}
                         </div>
                     )}
 
@@ -1367,7 +1487,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     </div>
                 </div>
             </div>
-        </div>,
+        </div >,
         document.body
     )
 }

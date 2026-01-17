@@ -111,11 +111,15 @@ export interface Movement {
     // FX Snapshot (New for Step D)
     fx?: MovementFxSnapshot
 
-    // Fallback fields for display when instrumentId is not resolvable
+    // PF Metadata (New for Stable ID)
+    pf?: MovementPFMetadata
+
+
+    // Fallback fields when instrumentId is not resolvable
     ticker?: string
     assetName?: string
 
-    // Plazo Fijo Specific Fields
+    // Plazo Fijo Specific Fields (Legacy/Flat)
     bank?: string
     alias?: string
     principalARS?: number
@@ -126,6 +130,29 @@ export interface Movement {
     maturityDate?: string // ISO
     expectedInterest?: number
     expectedTotal?: number
+    // Auto-balance fields
+    isAuto?: boolean
+    linkedMovementId?: string
+    reason?: 'auto_usdt_balance' | string
+}
+
+export interface MovementPFMetadata {
+    kind: 'constitute' | 'redeem'
+    pfId: string // The ID of the constitution movement
+    // For constitution
+    bank?: string
+    alias?: string
+    capitalARS?: number
+    tna?: number
+    termDays?: number
+    startAtISO?: string
+    maturityISO?: string
+    fxOficialVentaHist?: number
+    interestARS?: number
+    totalToCollectARS?: number
+    // For redeem
+    redeemedARS?: number
+    redeemedAtISO?: string
 }
 
 export interface MovementFxSnapshot {

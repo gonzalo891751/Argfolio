@@ -187,9 +187,22 @@ export function computeAssetMetrics(
     const pnlArs = (valArs != null && costArs != null) ? valArs - costArs : null
     const pnlUsdEq = (valUsdEq != null && costUsdEq != null) ? valUsdEq - costUsdEq : null
 
-    // safePct for ROI
-    const pnlPct = safePct(pnlArs, costArs)
-    const roiPct = pnlPct // ROI is essentially the PnL %
+    // PnL % / ROI logic:
+    // For USD assets (Crypto/Stable), we want ROI in USD.
+    // For ARS assets (Cedear, Cash ARS), we want ROI in ARS (usually).
+    // Actually, prompt says: "% rendimiento coincide con USD real" for Crypto.
+    let roiPct: number | null = null
+
+    if (asset.nativeCurrency === 'USD') {
+        // Use USD basis
+        roiPct = safePct(pnlUsdEq, costUsdEq)
+    } else {
+        // Use ARS basis
+        roiPct = safePct(pnlArs, costArs)
+    }
+
+    // Legacy pnlPct field (often same as ROI)
+    const pnlPct = roiPct
 
     // Get effective FX rate used
     const direction = asset.nativeCurrency === 'USD' ? 'usd-to-ars' : 'ars-to-usd'

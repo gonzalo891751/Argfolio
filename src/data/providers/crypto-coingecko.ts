@@ -16,6 +16,7 @@ const COINGECKO_MAP: Record<string, string> = {
     USDT: 'tether',
     USDC: 'usd-coin',
     DAI: 'dai',
+    BNB: 'binancecoin',
 }
 
 export async function fetchCryptoPrices(symbols: string[]): Promise<Record<string, number>> {

@@ -36,6 +36,11 @@ export interface UseAssetsRowsResult {
             valUsd: number
             pnlArs: number
             pnlUsd: number
+            totalCostArs: number
+            totalCostUsdEq: number
+            // New breakdown
+            pnlUsdReal: number // For CRYPTO
+            pnlUsdFx: number   // For STABLE
         }
     }>
     filteredRows: AssetRowMetrics[] // Kept for compatibility
@@ -135,7 +140,16 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
         const groups: Record<string, {
             accountName: string
             metrics: AssetRowMetrics[]
-            totals: { valArs: number; valUsd: number; pnlArs: number; pnlUsd: number }
+            totals: {
+                valArs: number
+                valUsd: number
+                pnlArs: number
+                pnlUsd: number
+                totalCostArs: number
+                totalCostUsdEq: number
+                pnlUsdReal: number
+                pnlUsdFx: number
+            }
         }> = {}
 
         portfolio.categories.forEach(cat => {
@@ -220,7 +234,16 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                             groups[accountId] = {
                                 accountName,
                                 metrics: [],
-                                totals: { valArs: 0, valUsd: 0, pnlArs: 0, pnlUsd: 0 }
+                                totals: {
+                                    valArs: 0,
+                                    valUsd: 0,
+                                    pnlArs: 0,
+                                    pnlUsd: 0,
+                                    totalCostArs: 0,
+                                    totalCostUsdEq: 0,
+                                    pnlUsdReal: 0,
+                                    pnlUsdFx: 0
+                                }
                             }
                         }
 
@@ -231,6 +254,15 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                         groups[accountId].totals.valUsd += metrics.valUsdEq ?? 0
                         groups[accountId].totals.pnlArs += metrics.pnlArs ?? 0
                         groups[accountId].totals.pnlUsd += metrics.pnlUsdEq ?? 0
+                        groups[accountId].totals.totalCostArs += metrics.costArs ?? 0
+                        groups[accountId].totals.totalCostUsdEq += metrics.costUsdEq ?? 0
+
+                        // Bucket PnL
+                        if (metrics.category === 'CRYPTO') {
+                            groups[accountId].totals.pnlUsdReal += metrics.pnlUsdEq ?? 0
+                        } else if (metrics.category === 'STABLE') {
+                            groups[accountId].totals.pnlUsdFx += metrics.pnlUsdEq ?? 0
+                        }
                     }
                 })
             })

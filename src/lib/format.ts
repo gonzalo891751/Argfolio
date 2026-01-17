@@ -113,3 +113,41 @@ export const formatPercent = (value: number | null | undefined): string => {
         maximumFractionDigits: 2,
     }).format(value)
 }
+
+/**
+ * Formats a monetary delta with explicit sign (+/-).
+ * Examples: +$ 1.234,56 or -$ 1.234,56
+ */
+export const formatDeltaMoneyARS = (value: number | null | undefined): string => {
+    if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+
+    // Force sign display? Intl doesn't always perform well with "always show sign" and currency "ARS" in some locales.
+    // We can manually prepend '+' for positive.
+    const formatted = new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Math.abs(value))
+
+    return value >= 0 ? `+${formatted}` : `-${formatted}`
+}
+
+/**
+ * Formats a monetary delta in USD with explicit sign (+/-).
+ * Examples: +US$ 12,34 or -US$ 12,34
+ */
+export const formatDeltaMoneyUSD = (value: number | null | undefined): string => {
+    if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+
+    const formatted = new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Math.abs(value))
+
+    // Replace "US$" to avoid "US$ -" layout issues if any, usually Intl handles "US$ 12,34"
+    // Just prepend sign.
+    return value >= 0 ? `+${formatted}` : `-${formatted}`
+}
