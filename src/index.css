@@ -141,3 +141,31 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Glass Panel Utility (from prototype) */
+.glass-panel {
+  background: rgba(30, 41, 59, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Input Base Styling (from prototype) */
+.input-base {
+  background-color: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: white;
+  transition: all 0.2s;
+}
+
+.input-base:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 1px #6366f1;
+  outline: none;
+}
+
+/* Font Display (Space Grotesk style) */
+.font-display {
+  font-family: var(--font-display, 'Inter', sans-serif);
+  font-weight: 600;
+}
+

@@ -9,12 +9,13 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { DashboardPage } from '@/pages/dashboard'
 import { AssetsPage } from '@/pages/assets'
 import { AssetDetailPage } from '@/pages/asset-detail'
-import { MovementsPage } from '@/pages/movements'
+import { MovementsPageV2 as MovementsPage } from '@/pages/movements/index'
 import { HistoryPage } from '@/pages/history'
 import { DebtsPage } from '@/pages/debts'
 import { SettingsPage } from '@/pages/settings'
 import { ImportPage } from '@/pages/import'
 import { MarketPage } from '@/pages/market'
+import { ToastProvider } from '@/components/ui/toast'
 import { seedDatabase } from '@/db'
 
 const queryClient = new QueryClient({
@@ -55,91 +56,93 @@ function App() {
 
     return (
         <QueryClientProvider client={queryClient}>
-            <ThemeProvider>
-                <RefreshProvider>
-                    <TooltipProvider>
-                        <BrowserRouter>
-                            <Routes>
-                                <Route element={<AppLayout />}>
-                                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                                    <Route
-                                        path="/dashboard"
-                                        element={
-                                            <ErrorBoundary>
-                                                <DashboardPage />
-                                            </ErrorBoundary>
-                                        }
-                                    />
-                                    <Route
-                                        path="/market"
-                                        element={
-                                            <ErrorBoundary>
-                                                <MarketPage />
-                                            </ErrorBoundary>
-                                        }
-                                    />
-                                    <Route
-                                        path="/assets"
-                                        element={
-                                            <ErrorBoundary>
-                                                <AssetsPage />
-                                            </ErrorBoundary>
-                                        }
-                                    />
-                                    <Route
-                                        path="/assets/:instrumentId"
-                                        element={
-                                            <ErrorBoundary>
-                                                <AssetDetailPage />
-                                            </ErrorBoundary>
-                                        }
-                                    />
-                                    <Route
-                                        path="/movements"
-                                        element={
-                                            <ErrorBoundary>
-                                                <MovementsPage />
-                                            </ErrorBoundary>
-                                        }
-                                    />
-                                    <Route
-                                        path="/history"
-                                        element={
-                                            <ErrorBoundary>
-                                                <HistoryPage />
-                                            </ErrorBoundary>
-                                        }
-                                    />
-                                    <Route
-                                        path="/debts"
-                                        element={
-                                            <ErrorBoundary>
-                                                <DebtsPage />
-                                            </ErrorBoundary>
-                                        }
-                                    />
-                                    <Route
-                                        path="/settings"
-                                        element={
-                                            <ErrorBoundary>
-                                                <SettingsPage />
-                                            </ErrorBoundary>
-                                        }
-                                    />
-                                    <Route
-                                        path="/import"
-                                        element={
-                                            <ErrorBoundary>
-                                                <ImportPage />
-                                            </ErrorBoundary>
-                                        }
-                                    />
-                                </Route>
-                            </Routes>
-                        </BrowserRouter>
-                    </TooltipProvider>
-                </RefreshProvider>
-            </ThemeProvider>
+            <ToastProvider>
+                <ThemeProvider>
+                    <RefreshProvider>
+                        <TooltipProvider>
+                            <BrowserRouter>
+                                <Routes>
+                                    <Route element={<AppLayout />}>
+                                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                                        <Route
+                                            path="/dashboard"
+                                            element={
+                                                <ErrorBoundary>
+                                                    <DashboardPage />
+                                                </ErrorBoundary>
+                                            }
+                                        />
+                                        <Route
+                                            path="/market"
+                                            element={
+                                                <ErrorBoundary>
+                                                    <MarketPage />
+                                                </ErrorBoundary>
+                                            }
+                                        />
+                                        <Route
+                                            path="/assets"
+                                            element={
+                                                <ErrorBoundary>
+                                                    <AssetsPage />
+                                                </ErrorBoundary>
+                                            }
+                                        />
+                                        <Route
+                                            path="/assets/:instrumentId"
+                                            element={
+                                                <ErrorBoundary>
+                                                    <AssetDetailPage />
+                                                </ErrorBoundary>
+                                            }
+                                        />
+                                        <Route
+                                            path="/movements"
+                                            element={
+                                                <ErrorBoundary>
+                                                    <MovementsPage />
+                                                </ErrorBoundary>
+                                            }
+                                        />
+                                        <Route
+                                            path="/history"
+                                            element={
+                                                <ErrorBoundary>
+                                                    <HistoryPage />
+                                                </ErrorBoundary>
+                                            }
+                                        />
+                                        <Route
+                                            path="/debts"
+                                            element={
+                                                <ErrorBoundary>
+                                                    <DebtsPage />
+                                                </ErrorBoundary>
+                                            }
+                                        />
+                                        <Route
+                                            path="/settings"
+                                            element={
+                                                <ErrorBoundary>
+                                                    <SettingsPage />
+                                                </ErrorBoundary>
+                                            }
+                                        />
+                                        <Route
+                                            path="/import"
+                                            element={
+                                                <ErrorBoundary>
+                                                    <ImportPage />
+                                                </ErrorBoundary>
+                                            }
+                                        />
+                                    </Route>
+                                </Routes>
+                            </BrowserRouter>
+                        </TooltipProvider>
+                    </RefreshProvider>
+                </ThemeProvider>
+            </ToastProvider>
         </QueryClientProvider>
     )
 }

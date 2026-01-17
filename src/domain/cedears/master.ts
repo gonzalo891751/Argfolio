@@ -46,11 +46,31 @@ function parseRatio(ratioText: string): number {
     return isNaN(val) ? 1 : val
 }
 
+// Manual ETF Pack for search availability
+const ETFS = [
+    { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', ratioText: '20:1', ratio: 20, market: 'BCBA' },
+    { ticker: 'QQQ', name: 'Invesco QQQ Trust', ratioText: '20:1', ratio: 20, market: 'BCBA' },
+    { ticker: 'DIA', name: 'SPDR Dow Jones Industrial Average', ratioText: '20:1', ratio: 20, market: 'BCBA' },
+    { ticker: 'IWM', name: 'iShares Russell 2000 ETF', ratioText: '10:1', ratio: 10, market: 'BCBA' },
+    { ticker: 'VOO', name: 'Vanguard S&P 500 ETF', ratioText: '20:1', ratio: 20, market: 'BCBA' },
+    { ticker: 'VTI', name: 'Vanguard Total Stock Market', ratioText: '2:1', ratio: 2, market: 'BCBA' },
+    { ticker: 'XLK', name: 'Technology Select Sector SPDR', ratioText: '2:1', ratio: 2, market: 'BCBA' },
+    { ticker: 'XLF', name: 'Financial Select Sector SPDR', ratioText: '2:1', ratio: 2, market: 'BCBA' },
+    { ticker: 'XLE', name: 'Energy Select Sector SPDR', ratioText: '2:1', ratio: 2, market: 'BCBA' },
+    { ticker: 'GLD', name: 'SPDR Gold Shares', ratioText: '10:1', ratio: 10, market: 'BCBA' },
+    { ticker: 'SLV', name: 'iShares Silver Trust', ratioText: '1:1', ratio: 1, market: 'BCBA' },
+    { ticker: 'TLT', name: 'iShares 20+ Year Treasury Bond', ratioText: '10:1', ratio: 10, market: 'BCBA' },
+    { ticker: 'EEM', name: 'iShares MSCI Emerging Markets', ratioText: '5:1', ratio: 5, market: 'BCBA' }
+]
+
 // Cast and enhance
-const CEDEARS = (comafiMaster as any[]).map(item => ({
-    ...item,
-    ratio: parseRatio(item.ratioText), // Ensure ratio is (A/B) for division logic: ARS = (USD*FX) / Ratio
-})) as CedearMasterItem[]
+const CEDEARS = [
+    ...(comafiMaster as any[]).map(item => ({
+        ...item,
+        ratio: parseRatio(item.ratioText),
+    })),
+    ...ETFS.map(etf => ({ ...etf, ratio: etf.ratio }))
+] as CedearMasterItem[]
 
 // Sort by ticker for consistency
 CEDEARS.sort((a, b) => a.ticker.localeCompare(b.ticker))

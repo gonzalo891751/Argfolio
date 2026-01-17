@@ -10,6 +10,7 @@ export type Currency = 'ARS' | 'USD' | 'USDT' | 'USDC' | 'BTC' | 'ETH'
 
 export type AssetCategory =
     | 'CEDEAR'
+    | 'STOCK'
     | 'CRYPTO'
     | 'STABLE'
     | 'USD_CASH'
@@ -18,6 +19,7 @@ export type AssetCategory =
     | 'PF'
     | 'WALLET'
     | 'DEBT'
+    | 'CURRENCY' // New for "Moneda / Dólares"
 
 export type MovementType =
     | 'BUY'
@@ -31,6 +33,9 @@ export type MovementType =
     | 'TRANSFER_OUT'
     | 'DEBT_ADD'
     | 'DEBT_PAY'
+    // New specific types
+    | 'BUY_USD'
+    | 'SELL_USD'
 
 export type AccountKind = 'BROKER' | 'EXCHANGE' | 'BANK' | 'WALLET' | 'OTHER'
 
@@ -61,19 +66,39 @@ export interface Account {
     defaultCurrency: Currency
 }
 
+export interface MovementFee {
+    mode: 'PERCENT' | 'FIXED'
+    percent?: number
+    amount: number // value in native currency
+    currency: Currency
+}
+
 export interface Movement {
     id: string
     datetimeISO: string
     type: MovementType
-    instrumentId?: string // null for pure cash movements
+    assetClass?: 'cedear' | 'crypto' | 'fci' | 'pf' | 'currency' | 'wallet'
+    instrumentId?: string // null for pure cash movements or new 'currency'/'wallet' flows
     accountId: string
     quantity?: number // null for fees, deposits of cash
     unitPrice?: number // null for deposits, withdraws
     tradeCurrency: Currency
-    totalAmount: number // computed: qty * price, or direct amount for deposits
+
+    // Totals logic
+    totalAmount: number // GROSS: qty * price (or raw amount for cash)
+    fee?: MovementFee
+    netAmount?: number // NET: gross +/- fee. This is the "real" money moved.
+
+    // Historical valuation in base currencies (derived from NET)
+    totalARS?: number
+    totalUSD?: number
+
     fxAtTrade?: number // FX rate at time of trade (for historical accuracy)
+
+    // Deprecated / Backwards Compat (can be derived from fee object)
     feeAmount?: number
     feeCurrency?: Currency
+
     notes?: string
     // For transfers
     toAccountId?: string
@@ -84,6 +109,10 @@ export interface Movement {
 
     // FX Snapshot (New for Step D)
     fx?: MovementFxSnapshot
+
+    // Fallback fields for display when instrumentId is not resolvable
+    ticker?: string
+    assetName?: string
 }
 
 export interface MovementFxSnapshot {
@@ -128,7 +157,7 @@ export interface Holding {
     instrument: Instrument
     account: Account
     quantity: number
-    costBasisNative: number // total cost in native currency
+    costBasisNative: number // total cost in native currency (NET)
     costBasisArs: number    // total cost tracked in ARS
     costBasisUsd: number    // total cost tracked in USD
     avgCostNative: number   // cost basis / quantity
