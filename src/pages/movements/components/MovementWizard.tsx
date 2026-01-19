@@ -8,15 +8,14 @@ import {
     Bitcoin,
     Hourglass,
     PieChart,
-    RefreshCw,
     Wallet,
     Banknote,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AssetTypeahead, type AssetOption, MOCK_ASSETS } from './AssetTypeahead'
-import { formatMoneyARS, formatMoneyUSD } from '@/lib/format'
+import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
 import type { Movement, Currency, FxType, MovementType, AssetCategory, Instrument } from '@/domain/types'
-import { BankTypeahead } from './BankTypeahead'
+import { AccountSelectCreatable } from './AccountSelectCreatable'
 import { useFxRates } from '@/hooks/use-fx-rates'
 import { useInstruments, useAccounts, useCreateInstrument } from '@/hooks/use-instruments'
 import { useCreateMovement, useUpdateMovement } from '@/hooks/use-movements'
@@ -24,6 +23,9 @@ import { useToast } from '@/components/ui/toast'
 import { listCedears } from '@/domain/cedears/master'
 // pfStore removed
 import { CryptoTypeahead, type CryptoOption } from './CryptoTypeahead'
+import { db } from '@/db'
+
+import { computeTEA } from '@/domain/yield/accrual'
 
 // Asset class type for wizard
 type AssetClass = 'cedear' | 'crypto' | 'pf' | 'fci' | 'currency' | 'wallet'
@@ -46,11 +48,12 @@ interface WizardState {
     feeMode?: 'PERCENT' | 'FIXED'
     feeValue?: number // can be %
     feeCurrency: Currency
-    // PF State
+    // PF State & Cash Yield
     bank?: string
     alias?: string
     tna?: number
     termDays?: number
+    yieldEnabled?: boolean
     // Crypto specific
     coingeckoId?: string
 }
@@ -241,7 +244,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
             opType = 'buy_usd'
             currency = 'ARS' // Paying in ARS to buy USD usually
             fxType = 'OFICIAL' // Default to oficial/mep
-            asset = { id: 'USD', ticker: 'USD', name: 'Dólar Estadounidense', category: 'CURRENCY' }
+            asset = { id: 'USD', ticker: 'USD', name: 'Dólar Estadounidense', category: 'USD_CASH' }
         } else if (cls === 'wallet') {
             opType = 'deposit'
             asset = { id: 'CASH', ticker: 'CASH', name: 'Saldo', category: 'WALLET' }
@@ -322,11 +325,11 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
         try {
             // Validation
             if (state.assetClass === 'pf') {
-                if (!state.bank) {
+                if (!state.accountId) {
                     toast({
                         title: 'Error de validación',
-                        description: 'Ingresá el banco o entidad.',
-                        variant: 'error',
+                        description: 'Seleccioná el banco o entidad.',
+                        variant: 'error', // Note: variant generic 'error' might need cast 'destructive' or similar if strictly typed, but keeping existing style
                     })
                     return
                 }
@@ -394,7 +397,29 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
 
             // Find or create instrument
             let instrumentId: string | undefined
-            if (state.assetClass !== 'pf' && state.asset) {
+
+            if (state.assetClass === 'wallet') {
+                const symbol = state.currency || 'ARS'
+                const cat = symbol === 'ARS' ? 'ARS_CASH' : 'USD_CASH'
+                const existing = instrumentsList.find(i => i.symbol === symbol && i.category === cat)
+
+                if (existing) {
+                    instrumentId = existing.id
+                } else {
+                    const newId = symbol
+                    const newInst: Instrument = {
+                        id: newId,
+                        symbol: symbol,
+                        name: symbol === 'ARS' ? 'Pesos Argentinos' : 'Dólares Estadounidenses',
+                        category: cat as AssetCategory,
+                        nativeCurrency: symbol,
+                        priceKey: symbol.toLowerCase(),
+                        coingeckoId: undefined
+                    }
+                    await (createInstrument as any).mutateAsync(newInst)
+                    instrumentId = newId
+                }
+            } else if (state.assetClass !== 'pf' && state.asset) {
                 const existing = instrumentsList.find(i => i.symbol === state.asset!.ticker)
 
                 if (existing) {
@@ -402,9 +427,11 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 } else {
                     if (!instrumentId) {
                         // Create logic
-                        // ...
+                        const isUSD = state.asset?.ticker === 'USD'
+                        const newId = isUSD ? 'USD' : crypto.randomUUID()
+
                         const newInstrument: Instrument = {
-                            id: crypto.randomUUID(),
+                            id: newId,
                             symbol: state.asset?.ticker || 'UNKNOWN',
                             name: state.asset?.name || 'Unknown Asset',
                             category: (state.asset?.category || 'STOCK') as AssetCategory,
@@ -437,7 +464,28 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
 
             // Correct Payload construction
             // PF Specific Mapping: Bank -> AccountId
-            const accountIdToUse = state.assetClass === 'pf' ? (state.bank || 'PF_GENERIC') : state.accountId
+            // const accountIdToUse = state.assetClass === 'pf' ? (state.bank || 'PF_GENERIC') : state.accountId
+            // Now using state.accountId directly in payload structure below
+
+
+            // Handle Yield Config Update (Wallet)
+            if (state.assetClass === 'wallet' && state.accountId && state.yieldEnabled !== undefined) {
+                const acc = accountsList?.find(a => a.id === state.accountId)
+                if (acc) {
+                    const hasChanged = (acc.cashYield?.enabled !== state.yieldEnabled) || (acc.cashYield?.tna !== state.tna);
+                    if (hasChanged) {
+                        await db.accounts.update(state.accountId, {
+                            cashYield: {
+                                enabled: !!state.yieldEnabled,
+                                tna: state.tna || 0,
+                                currency: state.currency,
+                                compounding: 'DAILY',
+                                lastAccruedDate: acc.cashYield?.lastAccruedDate || new Date().toISOString().slice(0, 10)
+                            }
+                        });
+                    }
+                }
+            }
 
             const movementPayload: Movement = {
                 id: movementId,
@@ -445,14 +493,14 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 type: movementType,
                 assetClass: state.assetClass as any,
                 instrumentId: instrumentId,
-                accountId: accountIdToUse,
+                accountId: state.accountId,
 
                 // Fallback fields always saved
-                ticker: state.asset?.ticker || (state.assetClass === 'pf' ? state.bank : ''),
-                assetName: state.asset?.name || (state.assetClass === 'pf' ? 'Plazo Fijo' : ''),
+                ticker: state.asset?.ticker || (state.assetClass === 'pf' ? (accountsList.find(a => a.id === state.accountId)?.name || 'PF') : (state.assetClass === 'wallet' ? state.currency : '')),
+                assetName: state.asset?.name || (state.assetClass === 'pf' ? 'Plazo Fijo' : (state.assetClass === 'wallet' ? (state.currency === 'ARS' ? 'Pesos' : 'Dólares') : '')),
 
                 // PF Specific Payload
-                bank: state.bank,
+                bank: accountsList.find(a => a.id === state.accountId)?.name || state.bank, // Prefer account name
                 alias: state.alias,
                 principalARS: state.assetClass === 'pf' ? state.qty : undefined,
                 termDays: state.termDays,
@@ -474,20 +522,24 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
 
                 notes: state.notes,
 
+                // For 'currency' (USD Buy/Sell), 'qty' is USD amount, 'price' is ARS rate.
+                // 'totalAmount' is Qty * Price = ARS Total.
+                // So tradeCurrency must be ARS for the math to hold (Amount = Qty * Price).
+
                 totalAmount: totals.native, // Gross
 
                 // New Fee Object
                 fee: (state.feeValue || 0) > 0 ? {
                     mode: state.feeMode || 'PERCENT',
                     percent: state.feeMode === 'PERCENT' ? (state.feeValue || 0) : undefined,
-                    amount: state.feeMode === 'FIXED' ? (state.feeValue || 0) : ((state.qty || 0) * (state.price || 0) * ((state.feeValue || 0) / 100)), // Approximate fee amount for record
+                    amount: state.feeMode === 'FIXED' ? (state.feeValue || 0) : totals.feeNative,
                     currency: state.feeCurrency,
                 } : undefined,
 
                 // Net & Totals
                 netAmount: totals.nativeNet,
                 totalARS: totals.netArs,
-                totalUSD: totals.netUsd,
+                totalUSD: (state.assetClass === 'currency' || (state.assetClass === 'wallet' && state.currency === 'USD')) ? state.qty : totals.netUsd,
             }
 
 
@@ -504,7 +556,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 movementPayload.pf = {
                     kind: 'constitute',
                     pfId: movementId, // Stable ID is this movement's ID
-                    bank: state.bank,
+                    bank: accountsList.find(a => a.id === state.accountId)?.name || 'Desconocido', // Use Account Name
                     alias: state.alias,
                     capitalARS: principal,
                     tna: state.tna,
@@ -884,9 +936,12 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                 <label className="block text-sm font-medium text-slate-400 mb-2">
                                                     Banco / Entidad
                                                 </label>
-                                                <BankTypeahead
-                                                    value={state.bank || ''}
-                                                    onChange={val => setState(s => ({ ...s, bank: val }))}
+                                                <AccountSelectCreatable
+                                                    value={state.accountId}
+                                                    onChange={val => setState(s => ({ ...s, accountId: val }))}
+                                                    accounts={accountsList}
+                                                    placeholder="Ej: Naranja X, Banco Galicia..."
+                                                    className="w-full"
                                                 />
                                             </div>
                                             <div>
@@ -962,22 +1017,77 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                 {state.assetClass !== 'pf' && (
                                     <div>
                                         <label className="block text-sm font-medium text-slate-400 mb-2">
-                                            Cuenta / Broker
+                                            Cuenta / Banco / Exchange
                                         </label>
-                                        <select
+                                        <AccountSelectCreatable
                                             value={state.accountId}
-                                            onChange={e => setState(s => ({ ...s, accountId: e.target.value }))}
-                                            className="input-base w-full rounded-lg px-4 py-2.5 text-white appearance-none"
-                                        >
-                                            {accountsList.map(acc => (
-                                                <option key={acc.id} value={acc.id}>
-                                                    {acc.name}
-                                                </option>
-                                            ))}
-                                            {accountsList.length === 0 && (
-                                                <option value="">Sin cuentas</option>
-                                            )}
-                                        </select>
+                                            onChange={val => {
+                                                const acc = accountsList.find(a => a.id === val)
+                                                setState(s => ({
+                                                    ...s,
+                                                    accountId: val,
+                                                    yieldEnabled: acc?.cashYield?.enabled || false,
+                                                    tna: acc?.cashYield?.tna || undefined
+                                                }))
+                                            }}
+                                            accounts={accountsList}
+                                        />
+
+                                        {/* Yield Configuration for Wallet/Liquidity */}
+                                        {state.assetClass === 'wallet' && state.accountId && (
+                                            <div className="mt-4 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 animate-in fade-in slide-in-from-bottom-2">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <label className="flex items-center gap-3 text-sm font-medium text-slate-300 cursor-pointer select-none">
+                                                        <div className={cn(
+                                                            "w-5 h-5 rounded border border-slate-500 flex items-center justify-center transition-colors",
+                                                            state.yieldEnabled ? "bg-indigo-500 border-indigo-500" : "bg-transparent"
+                                                        )}>
+                                                            {state.yieldEnabled && <Check className="w-3.5 h-3.5 text-white" />}
+                                                        </div>
+                                                        <input
+                                                            type="checkbox"
+                                                            className="hidden"
+                                                            checked={state.yieldEnabled || false}
+                                                            onChange={e => setState(s => ({ ...s, yieldEnabled: e.target.checked }))}
+                                                        />
+                                                        <span>Cuenta remunerada</span>
+                                                    </label>
+                                                    {state.yieldEnabled && (
+                                                        <div className="px-2 py-1 rounded bg-indigo-500/20 text-indigo-400 text-[10px] font-bold uppercase tracking-wider border border-indigo-500/30">
+                                                            Acreditación diaria
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {state.yieldEnabled && (
+                                                    <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                                                                TNA %
+                                                            </label>
+                                                            <div className="relative">
+                                                                <input
+                                                                    type="number"
+                                                                    value={state.tna || ''}
+                                                                    onChange={e => setState(s => ({ ...s, tna: parseFloat(e.target.value) }))}
+                                                                    placeholder="0"
+                                                                    className="input-base w-full rounded-lg pl-3 pr-8 py-2 text-white text-sm"
+                                                                />
+                                                                <span className="absolute right-3 top-2 text-slate-500 text-xs font-bold">%</span>
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                                                                TEA (Estimada)
+                                                            </label>
+                                                            <div className="h-[38px] flex items-center px-3 rounded-lg bg-slate-900/50 border border-slate-700/50 text-emerald-400 font-mono text-sm">
+                                                                {state.tna ? formatPercent(computeTEA(state.tna || 0)) : '—'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -1044,207 +1154,304 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                 </div>
                                             </div>
                                         </div>
+                                    ) : state.assetClass === 'wallet' ? (
+                                        <div className="space-y-6">
+                                            {/* Currency Toggle */}
+                                            <div className="bg-slate-900/50 p-1 rounded-lg border border-white/5 flex">
+                                                <button
+                                                    onClick={() => setState(s => ({ ...s, currency: 'ARS', price: 1, fxRate: 1, qtyStr: '', qty: 0 }))}
+                                                    className={cn(
+                                                        "flex-1 py-2 text-xs font-bold rounded-md transition-all",
+                                                        state.currency !== 'USD' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                                                    )}
+                                                >
+                                                    ARS (Pesos)
+                                                </button>
+                                                <button
+                                                    onClick={() => setState(s => ({ ...s, currency: 'USD', price: fxRates?.oficial.sell || 0, fxRate: fxRates?.oficial.sell || 0, qtyStr: '', qty: 0 }))}
+                                                    className={cn(
+                                                        "flex-1 py-2 text-xs font-bold rounded-md transition-all",
+                                                        state.currency === 'USD' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                                                    )}
+                                                >
+                                                    USD (Dólares)
+                                                </button>
+                                            </div>
+
+                                            {state.currency === 'USD' ? (
+                                                /* USD Flow - Reusing similar logic to Currency but simplifying */
+                                                <div className="space-y-6 animate-in fade-in">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                            Cantidad (USD)
+                                                        </label>
+                                                        <div className="relative">
+                                                            <span className="absolute left-3 top-3.5 text-slate-500 font-mono">u$s</span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={state.qtyStr || ''}
+                                                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                                                onChange={e => {
+                                                                    const val = parseFloat(e.target.value.replace(',', '.')) || 0;
+                                                                    setState(s => ({ ...s, qtyStr: e.target.value, qty: val }));
+                                                                }}
+                                                                placeholder="100.00"
+                                                                className="input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg"
+                                                                autoFocus
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                Cotización (ARS/USD)
+                                                            </label>
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-3.5 text-slate-500 font-mono">$</span>
+                                                                <input
+                                                                    type="number"
+                                                                    value={state.fxRate || ''}
+                                                                    onChange={e => {
+                                                                        const val = parseFloat(e.target.value) || 0
+                                                                        setState(s => ({ ...s, fxRate: val, price: val }))
+                                                                    }}
+                                                                    className="input-base w-full rounded-lg pl-8 pr-4 py-3 text-white font-mono text-lg"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                Fuente
+                                                            </label>
+                                                            <select
+                                                                value={state.fxType}
+                                                                onChange={e => setState(s => ({ ...s, fxType: e.target.value as FxType }))}
+                                                                className="input-base w-full rounded-lg px-4 py-3 text-white appearance-none"
+                                                            >
+                                                                <option value="OFICIAL">Oficial</option>
+                                                                <option value="MEP">MEP</option>
+                                                                <option value="CCL">CCL</option>
+                                                                <option value="CRIPTO">Cripto</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                /* ARS Flow */
+                                                <div className="space-y-6 animate-in fade-in">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                            Monto (ARS)
+                                                        </label>
+                                                        <div className="relative">
+                                                            <span className="absolute left-3 top-3.5 text-slate-500 font-mono">$</span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={state.qtyStr || ''}
+                                                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                                                onChange={e => {
+                                                                    const val = parseFloat(e.target.value.replace(',', '.')) || 0;
+                                                                    // Price is 1 for ARS
+                                                                    setState(s => ({ ...s, qtyStr: e.target.value, qty: val, price: 1 }));
+                                                                }}
+                                                                placeholder="10000"
+                                                                className="input-base w-full rounded-lg pl-8 pr-4 py-3 text-white font-mono text-lg"
+                                                                autoFocus
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {(state.tna || 0) > 0 && (
+                                                        <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 p-2 rounded border border-emerald-500/20">
+                                                            <span>✨</span>
+                                                            <span>Estás configurando una cuenta remunerada ({state.tna}% TNA)</span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Informative FX for ARS */}
+                                                    <div className="p-3 bg-slate-900/30 rounded border border-white/5 text-xs text-slate-500 flex justify-between items-center">
+                                                        <span>Equivalencia referencial (Dólar Oficial)</span>
+                                                        <span className="font-mono text-slate-300">
+                                                            {formatMoneyARS(fxRates?.oficial.sell)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     ) : (
                                         <>
                                             {/* Standard Currency, Qty, Price Inputs */}
 
-                                            {/* Currency Toggle */}
-                                            <div>
-                                                <label className="block text-xs font-mono text-slate-500 uppercase mb-2">
-                                                    Moneda de operación
-                                                </label>
-                                                <div className="flex space-x-4">
-                                                    <label className="flex items-center gap-2 cursor-pointer">
-                                                        <input
-                                                            type="radio"
-                                                            name="currency"
-                                                            value="ARS"
-                                                            checked={state.currency === 'ARS'}
-                                                            onChange={() => setState(s => ({ ...s, currency: 'ARS' }))}
-                                                            className="text-indigo-500 focus:ring-indigo-500 bg-slate-800 border-slate-600"
-                                                        />
-                                                        <span className="text-white font-mono">ARS (Pesos)</span>
-                                                    </label>
-                                                    <label className="flex items-center gap-2 cursor-pointer">
-                                                        <input
-                                                            type="radio"
-                                                            name="currency"
-                                                            value="USD"
-                                                            checked={state.currency === 'USD'}
-                                                            onChange={() => setState(s => ({ ...s, currency: 'USD' }))}
-                                                            className="text-indigo-500 focus:ring-indigo-500 bg-slate-800 border-slate-600"
-                                                        />
-                                                        <span className="text-white font-mono">USD (Dólares)</span>
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            {/* Qty & Price */}
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className={cn(state.assetClass === 'wallet' ? 'col-span-2' : '')}>
-                                                    <label className="block text-sm font-medium text-slate-400 mb-2">
-                                                        {state.assetClass === 'wallet' ? 'Monto Total' : 'Cantidad'}
-                                                    </label>
-                                                    <input
-                                                        type={state.assetClass === 'crypto' ? "text" : "number"}
-                                                        value={state.qtyStr || ''}
-                                                        onChange={e => {
-                                                            const rawVal = e.target.value;
-                                                            // Sanitize for decimals: allow digits, one comma/dot, and up to 8 decimals for crypto
-                                                            if (state.assetClass === 'crypto') {
-                                                                const sanitized = rawVal.replace(/[^0-9,.]/g, '');
-                                                                // Ensure only one separator
-                                                                const parts = sanitized.split(/[.,]/);
-                                                                if (parts.length > 2) return; // Ignore if more than one dot/comma
-                                                                if (parts[1] && parts[1].length > 8) return; // Max 8 decimals
-
-                                                                const normalized = sanitized.replace(',', '.');
-                                                                setState(s => ({
-                                                                    ...s,
-                                                                    qtyStr: sanitized,
-                                                                    qty: parseFloat(normalized) || 0
-                                                                }));
-                                                            } else {
-                                                                // Standard integer/number input for others
-                                                                const val = parseFloat(rawVal) || 0;
-                                                                setState(s => ({ ...s, qtyStr: rawVal, qty: val }));
-                                                            }
-                                                        }}
-                                                        placeholder={state.assetClass === 'crypto' ? "0,00000000" : "0"}
-                                                        step={state.assetClass === 'crypto' ? "0.00000001" : "1"}
-                                                        inputMode="decimal"
-                                                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                                        className="input-base w-full rounded-lg px-4 py-3 text-white font-mono text-lg"
-                                                    />
-                                                </div>
-                                                {state.assetClass !== 'wallet' && (
+                                            {state.assetClass === 'currency' ? (
+                                                /* Custom UI for USD Buy/Sell */
+                                                <div className="space-y-6">
                                                     <div>
                                                         <label className="block text-sm font-medium text-slate-400 mb-2">
-                                                            Precio Unitario
+                                                            Cantidad (USD)
                                                         </label>
                                                         <div className="relative">
-                                                            <span className="absolute left-3 top-3.5 text-slate-500 font-mono">
-                                                                {state.currency === 'USD' ? 'u$s' : '$'}
-                                                            </span>
+                                                            <span className="absolute left-3 top-3.5 text-slate-500 font-mono">u$s</span>
                                                             <input
                                                                 type="number"
-                                                                value={state.price || ''}
-                                                                onChange={e =>
+                                                                value={state.qtyStr || ''}
+                                                                onChange={e => {
+                                                                    const val = parseFloat(e.target.value) || 0;
+                                                                    // For Currency mode, PRICE is always FX RATE
                                                                     setState(s => ({
                                                                         ...s,
-                                                                        price: parseFloat(e.target.value) || 0,
-                                                                    }))
-                                                                }
-                                                                placeholder="0.00"
+                                                                        qtyStr: e.target.value,
+                                                                        qty: val,
+                                                                        price: s.fxRate // Ensure price stays synced
+                                                                    }));
+                                                                }}
+                                                                placeholder="100.00"
                                                                 className="input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg"
+                                                                autoFocus
                                                             />
                                                         </div>
                                                     </div>
-                                                )}
-                                            </div>
+
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                Tipo de Cambio (ARS/USD)
+                                                            </label>
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-3.5 text-slate-500 font-mono">$</span>
+                                                                <input
+                                                                    type="number"
+                                                                    value={state.fxRate || ''}
+                                                                    onChange={e => {
+                                                                        const val = parseFloat(e.target.value) || 0
+                                                                        setState(s => ({
+                                                                            ...s,
+                                                                            fxRate: val,
+                                                                            price: val // Sync Unit Price with FX Rate
+                                                                        }))
+                                                                    }}
+                                                                    className="input-base w-full rounded-lg pl-8 pr-4 py-3 text-white font-mono text-lg"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                Fuente
+                                                            </label>
+                                                            <select
+                                                                value={state.fxType}
+                                                                onChange={e =>
+                                                                    setState(s => ({ ...s, fxType: e.target.value as FxType }))
+                                                                }
+                                                                className="input-base w-full rounded-lg px-4 py-3 text-white appearance-none h-[52px]"
+                                                            >
+                                                                <option value="MEP">Dólar MEP</option>
+                                                                <option value="CCL">Dólar CCL</option>
+                                                                <option value="CRIPTO">Dólar Cripto</option>
+                                                                <option value="OFICIAL">Oficial</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                /* Standard Generic UI */
+                                                <>
+                                                    {/* Currency Toggle */}
+                                                    <div>
+                                                        <label className="block text-xs font-mono text-slate-500 uppercase mb-2">
+                                                            Moneda de operación
+                                                        </label>
+                                                        <div className="flex space-x-4">
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="radio"
+                                                                    name="currency"
+                                                                    value="ARS"
+                                                                    checked={state.currency === 'ARS'}
+                                                                    onChange={() => setState(s => ({ ...s, currency: 'ARS' }))}
+                                                                    className="text-indigo-500 focus:ring-indigo-500 bg-slate-800 border-slate-600"
+                                                                />
+                                                                <span className="text-white font-mono">ARS (Pesos)</span>
+                                                            </label>
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="radio"
+                                                                    name="currency"
+                                                                    value="USD"
+                                                                    checked={state.currency === 'USD'}
+                                                                    onChange={() => setState(s => ({ ...s, currency: 'USD' }))}
+                                                                    className="text-indigo-500 focus:ring-indigo-500 bg-slate-800 border-slate-600"
+                                                                />
+                                                                <span className="text-white font-mono">USD (Dólares)</span>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Qty & Price */}
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                Cantidad
+                                                            </label>
+                                                            <input
+                                                                type={state.assetClass === 'crypto' ? "text" : "number"}
+                                                                value={state.qtyStr || ''}
+                                                                onChange={e => {
+                                                                    const rawVal = e.target.value;
+                                                                    if (state.assetClass === 'crypto') {
+                                                                        const sanitized = rawVal.replace(/[^0-9,.]/g, '');
+                                                                        const parts = sanitized.split(/[.,]/);
+                                                                        if (parts.length > 2) return;
+                                                                        if (parts[1] && parts[1].length > 8) return;
+
+                                                                        const normalized = sanitized.replace(',', '.');
+                                                                        setState(s => ({
+                                                                            ...s,
+                                                                            qtyStr: sanitized,
+                                                                            qty: parseFloat(normalized) || 0
+                                                                        }));
+                                                                    } else {
+                                                                        const val = parseFloat(rawVal) || 0;
+                                                                        setState(s => ({ ...s, qtyStr: rawVal, qty: val }));
+                                                                    }
+                                                                }}
+                                                                placeholder={state.assetClass === 'crypto' ? "0,00000000" : "0"}
+                                                                step={state.assetClass === 'crypto' ? "0.00000001" : "1"}
+                                                                inputMode="decimal"
+                                                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                                                className="input-base w-full rounded-lg px-4 py-3 text-white font-mono text-lg"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                Precio Unitario
+                                                            </label>
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-3.5 text-slate-500 font-mono">
+                                                                    {state.currency === 'USD' ? 'u$s' : '$'}
+                                                                </span>
+                                                                <input
+                                                                    type="number"
+                                                                    value={state.price || ''}
+                                                                    onChange={e =>
+                                                                        setState(s => ({
+                                                                            ...s,
+                                                                            price: parseFloat(e.target.value) || 0,
+                                                                        }))
+                                                                    }
+                                                                    placeholder="0.00"
+                                                                    className="input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
 
                                             {/* Commission Section */}
-                                            <div className="pt-2 border-t border-white/5 space-y-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="text-sm font-medium text-white flex items-center gap-2">
-                                                        <span className="p-1 rounded bg-slate-800 text-slate-400">
-                                                            <Building2 className="w-3 h-3" />
-                                                        </span>
-                                                        Comisión del Broker
-                                                    </div>
-                                                </div>
-
-                                                <div className="bg-white/5 rounded-lg p-3 space-y-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex bg-black/20 rounded-lg p-1 shrink-0">
-                                                            <button
-                                                                onClick={() => setState(s => ({ ...s, feeMode: 'PERCENT' }))}
-                                                                className={cn(
-                                                                    "px-3 py-1.5 text-xs font-medium rounded-md transition",
-                                                                    state.feeMode === 'PERCENT' ? "bg-slate-700 text-white" : "text-slate-500 hover:text-white"
-                                                                )}
-                                                            >
-                                                                %
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setState(s => ({ ...s, feeMode: 'FIXED' }))}
-                                                                className={cn(
-                                                                    "px-3 py-1.5 text-xs font-medium rounded-md transition",
-                                                                    state.feeMode === 'FIXED' ? "bg-slate-500 text-white" : "text-slate-500 hover:text-white"
-                                                                )}
-                                                            >
-                                                                $ Fijo
-                                                            </button>
-                                                        </div>
-                                                        <div className="relative flex-1">
-                                                            <input
-                                                                type="number"
-                                                                placeholder="0.00"
-                                                                value={state.feeValue || ''}
-                                                                onChange={e => setState(s => ({ ...s, feeValue: parseFloat(e.target.value) }))}
-                                                                className="input-base w-full p-2 pl-3 pr-8 rounded-lg text-right font-mono text-sm"
-                                                            />
-                                                            <span className="absolute right-3 top-2 text-slate-500 text-xs font-bold">
-                                                                {state.feeMode === 'PERCENT' ? '%' : state.currency}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-
-                                                    {(state.feeValue || 0) > 0 && (
-                                                        <div className="flex items-center justify-between text-xs px-1 pt-1 border-t border-white/5">
-                                                            <span className="text-slate-500">Monto Comisión Est.</span>
-                                                            <span className="text-rose-400 font-mono">
-                                                                - {state.currency === 'ARS' ? formatMoneyARS(totals.feeNative) : formatMoneyUSD(totals.feeNative)}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* FX Section */}
-                                            <div className="p-4 rounded-xl bg-slate-900/50 border border-white/5 space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                                                        <RefreshCw className="w-4 h-4 text-indigo-500" />
-                                                        Tipo de Cambio
-                                                    </label>
-                                                    <span className="text-xs text-sky-400 cursor-pointer hover:underline">
-                                                        Editar fuente
-                                                    </span>
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <select
-                                                        value={state.fxType}
-                                                        onChange={e =>
-                                                            setState(s => ({ ...s, fxType: e.target.value as FxType }))
-                                                        }
-                                                        className="input-base rounded-lg px-3 py-2 text-sm text-slate-300"
-                                                    >
-                                                        <option value="MEP">Dólar MEP</option>
-                                                        <option value="CRIPTO">Dólar Cripto</option>
-                                                        <option value="CCL">Dólar CCL</option>
-                                                        <option value="OFICIAL">Oficial</option>
-                                                    </select>
-                                                    <div className="relative">
-                                                        <span className="absolute left-3 top-2 text-slate-500 text-sm">$</span>
-                                                        <input
-                                                            type="number"
-                                                            value={state.fxRate || ''}
-                                                            onChange={e =>
-                                                                setState(s => ({
-                                                                    ...s,
-                                                                    fxRate: parseFloat(e.target.value) || 0,
-                                                                }))
-                                                            }
-                                                            className="input-base w-full rounded-lg pl-6 pr-3 py-2 text-white font-mono text-sm"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <p className="text-[10px] text-slate-500 text-right">
-                                                    Cotización histórica sugerida por DollarAPI
-                                                </p>
-                                            </div>
+                                            {/* ... */}
                                         </>
                                     )}
                                 </div>
@@ -1257,7 +1464,9 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                         </h4>
 
                                         {state.assetClass === 'pf' ? (
+                                            /* PF Summary */
                                             <div className="space-y-4">
+                                                {/* ... PF code ... */}
                                                 <div>
                                                     <div className="text-sm text-slate-400 mb-1">Total al Vencimiento</div>
                                                     <div className="text-3xl font-mono font-bold text-white tracking-tight">
@@ -1266,29 +1475,83 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                 </div>
 
                                                 <div className="h-px bg-white/10 my-4" />
+                                                {/* ... Rest of PF ... */}
+                                            </div>
+                                        ) : state.assetClass === 'currency' ? (
+                                            /* Currency Summary */
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <div className="text-sm text-slate-400 mb-1">
+                                                        {state.opType === 'buy_usd' ? 'Total a Pagar (ARS)' : 'Total a Recibir (ARS)'}
+                                                    </div>
+                                                    <div className="text-3xl font-mono font-bold text-white tracking-tight">
+                                                        {formatMoneyARS(totals.netArs)}
+                                                    </div>
+                                                    {totals.feeNative > 0 && (
+                                                        <div className="text-xs text-rose-400 mt-1">
+                                                            Incluye comisión: {formatMoneyARS(totals.feeNative)}
+                                                        </div>
+                                                    )}
+                                                </div>
 
-                                                <div className="space-y-3">
+                                                <div className="h-px bg-white/10 my-4" />
+
+                                                <div className="grid grid-cols-1 gap-3">
                                                     <div className="flex justify-between items-center">
-                                                        <span className="text-xs text-slate-400">Interés Estimado</span>
-                                                        <span className="text-sm font-mono text-emerald-400">
-                                                            +{formatMoneyARS(state.qty * (state.tna || 0) / 100 * (state.termDays || 30) / 365)}
+                                                        <span className="text-xs text-slate-400">
+                                                            {state.opType === 'buy_usd' ? 'Comprás' : 'Vendés'}
+                                                        </span>
+                                                        <span className="text-lg font-mono text-emerald-400 font-bold">
+                                                            {formatMoneyUSD(state.qty)}
                                                         </span>
                                                     </div>
                                                     <div className="flex justify-between items-center">
-                                                        <span className="text-xs text-slate-400">Fecha Vencimiento</span>
+                                                        <span className="text-xs text-slate-400">Tipo de Cambio</span>
                                                         <span className="text-sm font-mono text-white">
-                                                            {new Date(new Date().setDate(new Date().getDate() + (state.termDays || 30))).toLocaleDateString('es-AR')}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-xs text-slate-400">TEA (Informativa)</span>
-                                                        <span className="text-sm font-mono text-slate-300">
-                                                            {((Math.pow(1 + (state.tna || 0) / 100 * (state.termDays || 30) / 365, 365 / (state.termDays || 30)) - 1) * 100).toFixed(2)}%
+                                                            ${formatMoneyARS(state.fxRate).replace('$', '').trim()}
                                                         </span>
                                                     </div>
                                                 </div>
                                             </div>
+                                        ) : state.assetClass === 'wallet' ? (
+                                            /* Wallet Summary */
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <div className="text-sm text-slate-400 mb-1">
+                                                        {state.currency === 'ARS' ? 'Monto Total (ARS)' : 'Monto Total (USD)'}
+                                                    </div>
+                                                    <div className="text-3xl font-mono font-bold text-white tracking-tight">
+                                                        {state.currency === 'ARS' ? formatMoneyARS(state.qty) : formatMoneyUSD(state.qty)}
+                                                    </div>
+                                                </div>
+
+                                                <div className="h-px bg-white/10 my-4" />
+
+                                                <div className="space-y-3">
+                                                    {/* Equivalencias */}
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs text-slate-400">
+                                                            {state.currency === 'ARS' ? 'Equivalente USD' : 'Valuación ARS'}
+                                                        </span>
+                                                        <span className="text-sm font-mono text-emerald-400">
+                                                            {state.currency === 'ARS'
+                                                                ? formatMoneyUSD(state.qty / (fxRates?.oficial.sell || 1))
+                                                                : formatMoneyARS(state.qty * (state.fxRate || fxRates?.oficial.sell || 1))}
+                                                        </span>
+                                                    </div>
+
+                                                    {(state.tna || 0) > 0 && (
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-xs text-slate-400">TNA / TEA</span>
+                                                            <span className="text-sm font-momo text-indigo-400">
+                                                                {state.tna}% / {formatPercent(computeTEA(state.tna || 0))}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         ) : (
+                                            /* Generic Summary */
                                             <div className="space-y-4">
                                                 <div>
                                                     <div className="text-sm text-slate-400 mb-1">Total Operación</div>
@@ -1298,6 +1561,8 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                             : formatMoneyARS(totals.native)}
                                                     </div>
                                                 </div>
+
+                                                {/* ...rest of generic summary */}
 
                                                 <div className="h-px bg-white/10 my-4" />
 

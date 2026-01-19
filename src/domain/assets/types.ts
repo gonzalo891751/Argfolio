@@ -8,7 +8,7 @@ import type { FxKey } from '@/domain/fx/types'
 /**
  * Asset class categories for valuation rules
  */
-export type AssetClass = 'CEDEAR' | 'CRYPTO' | 'CASH_ARS' | 'CASH_USD' | 'STABLE' | 'FCI' | 'OTHER'
+export type AssetClass = 'CEDEAR' | 'CRYPTO' | 'CASH_ARS' | 'CASH_USD' | 'STABLE' | 'FCI' | 'PF' | 'OTHER'
 
 /**
  * CEDEAR-specific structural information

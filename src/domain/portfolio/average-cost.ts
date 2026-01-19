@@ -55,9 +55,9 @@ export function computeAverageCost(
         switch (mov.type) {
             case 'BUY':
             case 'TRANSFER_IN':
-            case 'DIVIDEND':
-            case 'INTEREST':
             case 'DEBT_ADD':
+            case 'DEPOSIT':
+            case 'BUY_USD': // USD Purchase
                 const addedQty = qty
                 if (addedQty <= 0) break
 
@@ -65,74 +65,43 @@ export function computeAverageCost(
                 let tradeAmtArs = 0
                 let tradeAmtUsd = 0
 
-                if (tradeCcy === 'ARS') {
-                    // Bought with ARS
-                    tradeAmtArs = addedQty * price
-                    tradeAmtUsd = tradeAmtArs / fxRate // Implies fxRate is ARS/USD
-                    // Native depends on asset.
-                    // This function doesn't know asset metadata (CEDEAR vs CRYPTO).
-                    // We need to infer or it must be passed?
-                    // Standard assumption:
-                    // If tradeCcy == ARS, cost is ARS.
-                    // If tradeCcy == USD, cost is USD.
-                    // But we track basis in NATIVE.
-                    // If I buy AAPL (native USD?) with ARS.
-                    // Actually CEDEAR native is ARS in this system.
-                    // CRYPTO native is USD.
-
-                    // We will rely on accumulated columns:
-                    // costBasisNative will accumulate in TRADE CURRENCY? No.
-                    // We have to assume 'costBasisNative' aligns with the major currency of the asset.
-                    // Issue: We don't have 'Asset' passed here to know if it's CEDEAR or CRYPTO.
-                    // BUT: 'costBasisNative' usually means "The currency the price is quoted in".
-
-                    // HEURISTIC:
-                    // If most moves are USD, it's USD native.
-                    // If most moves are ARS, it's ARS native.
-                    // Or we just track what we can.
-                    // IMPROVEMENT: passing nativeCurrency or inferred from moves.
-
-                    // Let's look at `fifo.ts`: it derived unitCostNative from price.
-                    // It had the same ambiguity.
-                    // "If tradeCurrency != nativeCurrency ... unitCostNative = priceArs / fx"
-
-                    // For now, to be safe without changing signature excessively:
-                    // We will track costBasis as 'Sum of amounts in trade ccy converted to X'.
-                    // But we really need to know the target Native Ccy.
-
-                    // Let's assume:
-                    // If trade is in ARS, and we want USD basis => convert.
-                    // If trade is in USD, and we want ARS basis => convert.
-                    // But `costBasisNative` is ambiguous without context.
-                    // FORCE FIX: We will discard `costBasisNative` ambiguity and rely on `costBasisUsd` and `costBasisArs` as absolute truths.
-                    // The caller (`computeHoldings.ts`) has the `instrument`. It can decide which one is "Native".
-
+                // USD Cash (BUY_USD or DEPOSIT USD)
+                // If it's a USD Deposit, we assume it carries a Cost Basis in ARS (either Manual or Implied)
+                if (mov.type === 'BUY_USD' || (mov.tradeCurrency === 'USD' && mov.type === 'DEPOSIT')) {
+                    // Qty = USD Bought
+                    // Cost ARS = totalAmount (ARS Paid)
+                    // Cost USD = totalUSD (USD Value, usually equal to Qty)
+                    tradeAmtArs = mov.totalAmount || 0
+                    tradeAmtUsd = mov.totalUSD || addedQty
+                } else if (tradeCcy === 'ARS') {
+                    // Bought/Deposited with ARS
+                    // For Cash ARS, Quantity IS the Amount. price usually 1.
+                    // Prefer totalAmount if available, else calc
+                    tradeAmtArs = mov.totalAmount || (addedQty * price)
+                    if (tradeAmtArs === 0 && addedQty > 0) tradeAmtArs = addedQty // Fallback for Cash ARS if price missing
+                    tradeAmtUsd = tradeAmtArs / fxRate
                 } else {
-                    // Bought with USD
-                    tradeAmtUsd = addedQty * price
+                    // Other Foreign Currency Bought with USD? Or generic
+                    tradeAmtUsd = (mov.totalUSD || (addedQty * price))
                     tradeAmtArs = tradeAmtUsd * fxRate
                 }
-
-                // Logic: costBasisNative is tricky if we mix ARS/USD trades for same asset.
-                // We will defer "Native" selection to the end or caller?
-                // No, existing `Holding` expects `costBasisNative`.
-                // In Fifo it says: "If native is USD/Crypto, unitCostNative = unitCostUsd".
-                // Since `average-cost` is generic, we might produce mixed bags if we don't know native.
-                // However, usually we trade in one main currency.
-
-                // Refined Logic:
-                // We just accumulate totals.
-                // If the asset is predominantly USD (Crypto), `costBasisUsd` is the key one.
-                // If the asset is predominantly ARS (Cedear), `costBasisArs` is the key one.
 
                 quantity += addedQty
                 costBasisArs += tradeAmtArs
                 costBasisUsd += tradeAmtUsd
                 break
 
+            case 'DIVIDEND':
+            case 'INTEREST':
+                if (qty > 0) quantity += qty
+                // Zero cost basis addition implies pure profit (PnL increases)
+                break
+
             case 'SELL':
             case 'TRANSFER_OUT':
             case 'DEBT_PAY':
+            case 'WITHDRAW':
+            case 'SELL_USD': // USD Sale
                 const removedQty = qty
                 if (removedQty <= 0) break
                 if (quantity === 0) break

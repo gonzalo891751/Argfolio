@@ -71,9 +71,13 @@ function mapCategory(category: string): AssetClass {
         case 'ARS_CASH':
             return 'CASH_ARS'
         case 'USD_CASH':
+        case 'CURRENCY':
             return 'CASH_USD'
         case 'FCI':
             return 'FCI'
+        case 'PF':
+        case 'pf':
+            return 'PF'
         default:
             return 'OTHER'
     }
@@ -156,10 +160,8 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
             cat.items.forEach((aggregatedItem: HoldingAggregated) => {
                 const category = mapCategory(aggregatedItem.instrument.category)
 
-                // Skip CASH_ARS if trackCash is OFF
-                if (category === 'CASH_ARS' && !trackCash) {
-                    return
-                }
+                // Always include CASH assets
+
 
                 // Iterate over sub-holdings (per account)
                 aggregatedItem.byAccount.forEach((holding: Holding) => {
@@ -171,7 +173,7 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                         instrumentId: holding.instrumentId,
                         symbol: holding.instrument.symbol,
                         name: holding.instrument.name,
-                        category: holding.instrument.category as any, // Cast to match stricter AssetInput type if needed
+                        category: category, // Use mapped AssetClass (CASH_USD, etc.)
                         nativeCurrency: holding.instrument.nativeCurrency as any,
                         quantity: holding.quantity,
                         avgCostNative: holding.avgCostNative,

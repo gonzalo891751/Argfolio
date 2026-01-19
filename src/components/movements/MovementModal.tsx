@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SellPreviewPanel } from '@/components/assets/SellPreviewPanel'
+import { AccountSelectCreatable } from '@/pages/movements/components/AccountSelectCreatable'
 import { useInstruments, useAccounts } from '@/hooks/use-instruments'
 import { useCreateMovement, useUpdateMovement } from '@/hooks/use-movements'
 import { useFxRates } from '@/hooks/use-fx-rates'
@@ -31,7 +32,10 @@ const movementTypes: { value: MovementType; label: string }[] = [
     { value: 'INTEREST', label: 'Interés' },
     { value: 'FEE', label: 'Comisión' },
     { value: 'TRANSFER_IN', label: 'Transferencia Entrada' },
+    { value: 'TRANSFER_IN', label: 'Transferencia Entrada' },
     { value: 'TRANSFER_OUT', label: 'Transferencia Salida' },
+    { value: 'BUY_USD', label: 'Compra USD' },
+    { value: 'SELL_USD', label: 'Venta USD' },
 ]
 
 const currencies: { value: Currency; label: string }[] = [
@@ -158,10 +162,7 @@ export function MovementModal({
         label: `${i.symbol} - ${i.name}`,
     }))
 
-    const accountOptions = accounts.map((a) => ({
-        value: a.id,
-        label: a.name,
-    }))
+
 
     const onSubmit = async (data: FormData) => {
         // Prevent oversell
@@ -321,11 +322,11 @@ export function MovementModal({
                     {/* Account */}
                     <div className="space-y-2">
                         <Label htmlFor="accountId">Cuenta / Plataforma</Label>
-                        <Select
-                            id="accountId"
-                            options={accountOptions}
+                        <AccountSelectCreatable
+                            value={form.watch('accountId')}
+                            onChange={(val) => form.setValue('accountId', val)}
+                            accounts={accounts}
                             placeholder="Seleccionar cuenta..."
-                            {...form.register('accountId')}
                         />
                         {form.formState.errors.accountId && (
                             <p className="text-sm text-destructive">{form.formState.errors.accountId.message}</p>

@@ -60,11 +60,20 @@ export interface Instrument {
     coingeckoId?: string // for real price fetching
 }
 
+export interface CashYieldParams {
+    enabled: boolean
+    tna: number
+    compounding: 'DAILY'
+    currency: Currency
+    lastAccruedDate?: string // YYYY-MM-DD
+}
+
 export interface Account {
     id: string
     name: string
     kind: AccountKind
     defaultCurrency: Currency
+    cashYield?: CashYieldParams
 }
 
 export interface MovementFee {

@@ -12,6 +12,7 @@ export interface PFPosition {
     expectedTotalARS: number
     status: 'active' | 'matured'
     movementId: string // Link to the creation movement
+    accountId: string // Account where the PF is held
     initialFx?: number // Historical FX at constitution
 }
 

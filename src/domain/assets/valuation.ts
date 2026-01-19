@@ -27,7 +27,7 @@ export function getFxKeyForAsset(category: string): FxKey {
         case 'STABLE':
             return 'cripto'
         case 'CASH_ARS':
-        case 'ARS_CASH':
+        case 'CASH_USD':
             return 'oficial'
         default:
             return 'mep'
@@ -195,7 +195,12 @@ export function computeAssetMetrics(
 
     if (asset.nativeCurrency === 'USD') {
         // Use USD basis
-        roiPct = safePct(pnlUsdEq, costUsdEq)
+        // EXCEPTION: USD Cash (category 'CASH_USD') should use ARS basis
+        if (asset.category === 'CASH_USD') {
+            roiPct = safePct(pnlArs, costArs)
+        } else {
+            roiPct = safePct(pnlUsdEq, costUsdEq)
+        }
     } else {
         // Use ARS basis
         roiPct = safePct(pnlArs, costArs)

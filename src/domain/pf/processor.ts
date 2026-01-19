@@ -106,7 +106,12 @@ export function derivePFPositions(movements: Movement[] | undefined, fxRates: Fx
 
         const principal = m.principalARS || m.quantity || 0
         const tna = m.tna || 0
-        const tea = m.tea || Math.pow(1 + tna / 100 / 12, 12) - 1 // Approx if missing
+
+        // Precise TEA Calculation
+        // r_period = (tna/100) * (days/365)
+        // TEA = (1 + r_period)^(365/days) - 1
+        const ratePeriod = (tna / 100) * (termDays / 365)
+        const tea = Math.pow(1 + ratePeriod, 365 / termDays) - 1
 
         // Interest Calc: Principal * (TNA/100) * (Days/365)
         // Standard convention TNA is 365.
@@ -118,6 +123,7 @@ export function derivePFPositions(movements: Movement[] | undefined, fxRates: Fx
         const pos: PFPosition = {
             id: m.id, // Use Movement ID as Position ID
             movementId: m.id,
+            accountId: m.accountId || 'unknown',
             bank: m.bank || 'Desconocido',
             alias: m.alias,
             principalARS: principal,
