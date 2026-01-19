@@ -14,7 +14,7 @@ import { generateAccrualMovements } from '@/domain/yield/accrual'
 import { useAccounts } from '@/hooks/use-instruments'
 import { useFxRates } from '@/hooks/use-fx-rates'
 import type { Movement } from '@/domain/types'
-import { usePFMigration } from '@/hooks/use-pf-migration'
+import { useAccountMigration } from '@/hooks/use-account-dedupe'
 import { YieldSummaryCard } from '@/components/assets/YieldSummaryCard'
 import { db } from '@/db'
 import { useToast } from '@/components/ui/toast'
@@ -37,7 +37,7 @@ const categoryLabels: Record<AssetClass | 'all', string> = {
 
 export function AssetsPage() {
     // State
-    usePFMigration()
+    useAccountMigration()
     const [categoryFilter, setCategoryFilter] = useState<AssetClass | 'all'>('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedAsset, setSelectedAsset] = useState<AssetRowMetrics | null>(null)
@@ -183,9 +183,20 @@ export function AssetsPage() {
             {/* PF SECTION REMOVED - Migrated to per-account view */}
 
             {/* SECTIONS PER ACCOUNT */}
-            {!isLoading && Object.entries(groupedRows).map(([accountId, group]) => {
-                const { accountName, metrics, totals: groupTotals } = group
-                if (metrics.length === 0) return null
+            {!isLoading && accounts?.map((account) => {
+                const accountId = account.id
+                // Get pre-calculated group or fallback to empty
+                const group = groupedRows?.[accountId]
+                const metrics = group?.metrics || []
+                const groupTotals = group?.totals || { valArs: 0, valUsd: 0, pnlArs: 0, pnlUsd: 0, costArs: 0, costUsdEq: 0, totalCostUsdEq: 0, totalPnlArs: 0, totalPnlPct: 0 }
+                const accountName = account.name
+
+                // Check PFs
+                const accountPFs = activePFs.filter(pf => pf.accountId === accountId)
+                const hasPFs = accountPFs.length > 0
+
+                // Visibility Check: Has Rows OR Has PFs
+                if (metrics.length === 0 && !hasPFs) return null
 
                 // ROI Calculation for Group
                 const investedArs = groupTotals.valArs - groupTotals.pnlArs
@@ -198,6 +209,11 @@ export function AssetsPage() {
                     acc[catLabel] = (acc[catLabel] || 0) + 1
                     return acc
                 }, {} as Record<string, number>)
+
+                // Add PF count if exists
+                if (hasPFs) {
+                    typeCounts['Plazos Fijos'] = (typeCounts['Plazos Fijos'] || 0) + accountPFs.length
+                }
 
                 return (
                     <div key={accountId} className="space-y-4">

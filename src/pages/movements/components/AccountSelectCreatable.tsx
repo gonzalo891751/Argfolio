@@ -32,7 +32,7 @@ export function AccountSelectCreatable({
     // Sync search with selected value label ONLY if not open (so we don't overwrite user typing)
     // But actually, for a combobox, usually we want to see the name.
     // If we want "Creatable", we treat search as the main input.
-    
+
     // Better pattern: Input shows search text. 
     // If selected, input shows name.
     useEffect(() => {
@@ -43,14 +43,16 @@ export function AccountSelectCreatable({
         }
     }, [selectedAccount, value, open])
 
+    const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+
     // Filter accounts
     const filteredAccounts = accounts.filter((account) =>
-        account.name.toLowerCase().includes(search.toLowerCase())
+        normalize(account.name).includes(normalize(search))
     )
 
     // Check if exact match exists
     const exactMatch = accounts.find(
-        (a) => a.name.toLowerCase() === search.toLowerCase()
+        (a) => normalize(a.name) === normalize(search)
     )
 
     // Close on outside click
@@ -83,7 +85,7 @@ export function AccountSelectCreatable({
             // Heuristic for Kind based on name keywords
             const nameLower = search.toLowerCase()
             let kind: AccountKind = 'BANK' // Default per requirement
-            
+
             if (nameLower.includes('binance') || nameLower.includes('cocos') || nameLower.includes('iol') || nameLower.includes('balanz')) {
                 kind = 'BROKER'
             } else if (nameLower.includes('lemon') || nameLower.includes('buenbit') || nameLower.includes('fiwind') || nameLower.includes('belo')) {
@@ -99,14 +101,14 @@ export function AccountSelectCreatable({
                 defaultCurrency: 'ARS',
             }
 
-            await createAccount.mutateAsync(newAccount)
-            
+            const createdAccount = await createAccount.mutateAsync(newAccount)
+
             toast({
-                title: 'Cuenta creada',
-                description: `Se creó "${newAccount.name}" correctamente.`,
+                title: 'Cuenta seleccionada',
+                description: `Se seleccionó "${createdAccount.name}".`,
             })
 
-            onChange(newAccount.id)
+            onChange(createdAccount.id)
             setOpen(false)
         } catch (error) {
             console.error('Failed to create account', error)
@@ -136,7 +138,7 @@ export function AccountSelectCreatable({
                         setOpen(true)
                         // If user clears input, clear selection
                         if (e.target.value === '') {
-                            onChange('') 
+                            onChange('')
                         }
                     }}
                     onFocus={() => setOpen(true)}
@@ -165,7 +167,7 @@ export function AccountSelectCreatable({
                                 {value === account.id && <Check className="h-4 w-4" />}
                             </li>
                         ))}
-                        
+
                         {filteredAccounts.length === 0 && !exactMatch && search.trim().length > 0 && (
                             <li
                                 onClick={handleCreate}

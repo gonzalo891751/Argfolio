@@ -31,7 +31,18 @@ export function useCreateAccount() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: (account: Account) => accountsRepo.create(account),
+        mutationFn: async (account: Account) => {
+            // Idempotency check
+            const all = await accountsRepo.list()
+            const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+            const target = normalize(account.name)
+
+            const existing = all.find(a => normalize(a.name) === target)
+            if (existing) return existing
+
+            await accountsRepo.create(account)
+            return account
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['accounts'] })
         },
