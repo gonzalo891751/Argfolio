@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { X, Copy, Edit, Trash2 } from 'lucide-react'
 import type { Movement, Instrument, Account } from '@/domain/types'
 import { formatMoneyARS, formatMoneyUSD, formatQty } from '@/lib/format'
+import { getMovementAssetDisplay } from './utils'
 
 interface MovementDetailsDrawerProps {
     open: boolean
@@ -74,6 +75,9 @@ export function MovementDetailsDrawer({
     const totalARS = movement.tradeCurrency === 'ARS' ? totalNative : totalNative * fx
     const totalUSD = movement.tradeCurrency === 'USD' ? totalNative : totalNative / fx
 
+    // ... (in component)
+    const assetDisplay = getMovementAssetDisplay(movement, instrument, account)
+
     return createPortal(
         <>
             {/* Backdrop */}
@@ -103,21 +107,76 @@ export function MovementDetailsDrawer({
                     <div className="flex items-center gap-4 mb-6">
                         <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
                             <span className="font-display font-bold text-2xl text-white">
-                                {(instrument?.symbol || movement.ticker || '').substring(0, 2) || '$$'}
+                                {(assetDisplay.symbol).substring(0, 2) || '$$'}
                             </span>
                         </div>
                         <div>
                             <h3 className="font-display text-2xl font-bold text-white">
-                                {instrument?.symbol || movement.ticker || '—'}
+                                {assetDisplay.title}
                             </h3>
-                            <p className="text-slate-400 text-sm">{instrument?.name || movement.assetName || 'Efectivo'}</p>
+                            <p className="text-slate-400 text-sm">{assetDisplay.subtitle}</p>
                             <span className="inline-block mt-2 px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-300 border border-white/10">
-                                {instrument?.category || movement.assetClass || 'CASH'}
+                                {assetDisplay.category}
                             </span>
                         </div>
                     </div>
 
-                    {/* Details Card */}
+                    {/* SPECIAL PF BREAKDOWN */}
+                    {(movement.meta?.fixedDeposit || movement.pf) && (
+                        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-3">
+                            <h4 className="text-amber-400 font-bold text-sm uppercase tracking-wider flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                                Detalle Plazo Fijo
+                            </h4>
+
+                            {/* Key Figures */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="text-xs text-slate-400">Capital Orig.</div>
+                                    <div className="text-white font-mono font-medium">
+                                        {formatMoneyARS(movement.meta?.fixedDeposit?.principalARS ?? movement.pf?.capitalARS ?? 0)}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-slate-400">Interés Ganado</div>
+                                    <div className="text-emerald-400 font-mono font-medium">
+                                        +{formatMoneyARS(movement.meta?.fixedDeposit?.interestARS ?? movement.pf?.interestARS ?? 0)}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="h-px bg-amber-500/10" />
+
+                            <div className="grid grid-cols-2 gap-4 text-xs">
+                                <div>
+                                    <span className="text-slate-500">TNA</span>
+                                    <div className="text-white font-mono">
+                                        {movement.meta?.fixedDeposit?.tna ?? movement.pf?.tna ?? 0}%
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-slate-500">Plazo</span>
+                                    <div className="text-white font-mono">
+                                        {movement.meta?.fixedDeposit?.termDays ?? movement.pf?.termDays ?? 0} días
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-slate-500">Constitución</span>
+                                    <div className="text-white font-mono">
+                                        {movement.meta?.fixedDeposit?.startDate ? formatDate(movement.meta.fixedDeposit.startDate).split(',')[0] : '—'}
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-slate-500">Vencimiento</span>
+                                    <div className="text-white font-mono">
+                                        {movement.meta?.fixedDeposit?.maturityDate ? formatDate(movement.meta.fixedDeposit.maturityDate).split(',')[0] : '—'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Standard Details Card */}
                     <div className="p-4 rounded-xl bg-slate-900 border border-white/5 space-y-3">
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-500">Operación</span>

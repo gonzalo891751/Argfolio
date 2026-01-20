@@ -123,6 +123,18 @@ export function computeCashBalances(
                 accountBalances.set(feeCurrency, feeBalance - (mov.feeAmount ?? 0))
                 break
 
+            case 'TRANSFER_IN':
+            case 'DEBT_ADD':
+            case 'SELL_USD': // Selling USD adds ARS (if currency is ARS)
+                accountBalances.set(currency, current + mov.totalAmount)
+                break
+
+            case 'TRANSFER_OUT':
+            case 'DEBT_PAY':
+            case 'BUY_USD': // Buying USD removes ARS (if currency is ARS)
+                accountBalances.set(currency, current - mov.totalAmount)
+                break
+
             case 'DIVIDEND':
             case 'INTEREST':
                 accountBalances.set(currency, current + mov.totalAmount)

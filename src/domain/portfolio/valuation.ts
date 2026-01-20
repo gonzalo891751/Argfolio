@@ -112,6 +112,48 @@ export function calculateValuation(
     }
 
     // -------------------------------------------------------------------------
+    // 3b. FCI (Fondos Comunes de Inversión)
+    // Uses MEP for ARS↔USD conversion:
+    //   - FCI USD: valueARS = valueUSD * MEP_buy
+    //   - FCI ARS: valueUSD = valueARS / MEP_sell
+    // -------------------------------------------------------------------------
+    if (category === 'FCI') {
+        if (price === undefined || price === null || !Number.isFinite(price)) {
+            return nullResult
+        }
+
+        const valueNative = quantity * price
+
+        if (currency === 'USD') {
+            // FCI in USD → convert to ARS via MEP BUY
+            const valueUsd = valueNative
+            const mepBuy = fxRates.mep.buy || fxRates.mep.sell || 0
+            const valueArs = Number.isFinite(mepBuy) && mepBuy > 0 ? valueUsd * mepBuy : null
+
+            return {
+                valueUsd: Number.isFinite(valueUsd) ? valueUsd : null,
+                valueArs,
+                fxUsed: 'MEP',
+                exchangeRate: mepBuy,
+                ruleApplied: 'FCI_USD_TO_ARS'
+            }
+        } else {
+            // FCI in ARS → convert to USD via MEP SELL
+            const valueArs = valueNative
+            const mepSell = fxRates.mep.sell || fxRates.mep.buy || 0
+            const valueUsd = Number.isFinite(mepSell) && mepSell > 0 ? valueArs / mepSell : null
+
+            return {
+                valueArs: Number.isFinite(valueArs) ? valueArs : null,
+                valueUsd,
+                fxUsed: 'MEP',
+                exchangeRate: mepSell,
+                ruleApplied: 'FCI_ARS_TO_USD'
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // 4. CASH (USD)
     // -------------------------------------------------------------------------
     if (category === 'USD_CASH') {

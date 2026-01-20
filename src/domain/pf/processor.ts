@@ -144,7 +144,9 @@ export function derivePFPositions(movements: Movement[] | undefined, fxRates: Fx
             expectedInterestARS: interest,
             expectedTotalARS: total,
             status: 'active', // Default, updated below
-            initialFx
+            initialFx,
+            pfGroupId: m.meta?.pfGroupId || m.meta?.fixedDeposit?.pfGroupId,
+            pfCode: m.meta?.pfCode || m.alias // Fallback to alias if code not present
         }
 
         // Determine Status

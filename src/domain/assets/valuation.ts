@@ -284,6 +284,9 @@ export function computePortfolioTotals(rows: AssetMetrics[]): PortfolioAssetTota
     const totalPnlArs = totalArs - totalCostArs
     const totalPnlPct = totalCostArs > 0 ? totalPnlArs / totalCostArs : null
 
+    // Compute Unrealized USD PnL
+    const unrealizedPnlUsd = totalUsdEq - totalCostUsdEq
+
     return {
         totalArs,
         totalUsdEq,
@@ -291,5 +294,9 @@ export function computePortfolioTotals(rows: AssetMetrics[]): PortfolioAssetTota
         totalCostUsdEq,
         totalPnlArs,
         totalPnlPct,
+        unrealizedPnlArs: totalPnlArs,
+        unrealizedPnlUsd,
+        realizedPnlArs: 0, // Placeholder, injected by hook
+        realizedPnlUsd: 0, // Placeholder
     }
 }

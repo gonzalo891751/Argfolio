@@ -2,6 +2,7 @@ import { ChevronRight, ClipboardList } from 'lucide-react'
 import type { Movement, Instrument } from '@/domain/types'
 import { formatMoneyARS, formatMoneyUSD, formatQty } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { getMovementAssetDisplay } from './utils'
 
 interface MovementsTableProps {
     movements: Movement[]
@@ -112,6 +113,7 @@ export function MovementsTable({
                     {movements.map(m => {
                         const instrument = m.instrumentId ? instruments.get(m.instrumentId) : null
                         const account = accounts.get(m.accountId)
+                        const display = getMovementAssetDisplay(m, instrument, account)
                         const { date, time } = formatDate(m.datetimeISO)
 
                         return (
@@ -131,14 +133,14 @@ export function MovementsTable({
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-xs font-bold text-slate-300">
-                                            {(instrument?.symbol || m.ticker || '').substring(0, 2) || '$$'}
+                                            {display.symbol.substring(0, 2)}
                                         </div>
                                         <div>
                                             <div className="text-white font-bold text-sm font-mono">
-                                                {instrument?.symbol || m.ticker || '—'}
+                                                {display.title}
                                             </div>
                                             <div className="text-slate-500 text-xs truncate max-w-[100px]">
-                                                {instrument?.name || m.assetName || (m.assetClass === 'wallet' ? 'Efectivo' : '—')}
+                                                {display.subtitle}
                                             </div>
                                         </div>
                                     </div>
@@ -171,6 +173,6 @@ export function MovementsTable({
                     })}
                 </tbody>
             </table>
-        </div>
+        </div >
     )
 }

@@ -38,9 +38,10 @@ export interface UseAssetsRowsResult {
             pnlUsd: number
             totalCostArs: number
             totalCostUsdEq: number
-            // New breakdown
             pnlUsdReal: number // For CRYPTO
             pnlUsdFx: number   // For STABLE
+            realizedPnlArs: number
+            realizedPnlUsd: number
         }
     }>
     filteredRows: AssetRowMetrics[] // Kept for compatibility
@@ -153,15 +154,14 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                 totalCostUsdEq: number
                 pnlUsdReal: number
                 pnlUsdFx: number
+                realizedPnlArs: number
+                realizedPnlUsd: number
             }
         }> = {}
 
         portfolio.categories.forEach(cat => {
             cat.items.forEach((aggregatedItem: HoldingAggregated) => {
                 const category = mapCategory(aggregatedItem.instrument.category)
-
-                // Always include CASH assets
-
 
                 // Iterate over sub-holdings (per account)
                 aggregatedItem.byAccount.forEach((holding: Holding) => {
@@ -173,7 +173,7 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                         instrumentId: holding.instrumentId,
                         symbol: holding.instrument.symbol,
                         name: holding.instrument.name,
-                        category: category, // Use mapped AssetClass (CASH_USD, etc.)
+                        category: category,
                         nativeCurrency: holding.instrument.nativeCurrency as any,
                         quantity: holding.quantity,
                         avgCostNative: holding.avgCostNative,
@@ -244,7 +244,9 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                                     totalCostArs: 0,
                                     totalCostUsdEq: 0,
                                     pnlUsdReal: 0,
-                                    pnlUsdFx: 0
+                                    pnlUsdFx: 0,
+                                    realizedPnlArs: 0,
+                                    realizedPnlUsd: 0,
                                 }
                             }
                         }
@@ -270,14 +272,32 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
             })
         })
 
+        // Inject Realized PnL into Groups
+        if (portfolio.realizedPnLByAccount) {
+            Object.keys(groups).forEach(accountId => {
+                const rPnl = portfolio.realizedPnLByAccount[accountId]
+                if (rPnl) {
+                    groups[accountId].totals.realizedPnlArs = rPnl.ars
+                    groups[accountId].totals.realizedPnlUsd = rPnl.usd
+                }
+            })
+        }
+
         return groups
     }, [portfolio, fxQuotes, trackCash, manualPrices, cedearPrices, cryptoPrices, categoryFilter, searchQuery])
 
     // Compute Global Totals from Grouped Rows
     const totals = useMemo(() => {
         const flatMetrics = Object.values(groupedRows).flatMap(g => g.metrics)
-        return computePortfolioTotals(flatMetrics)
-    }, [groupedRows])
+        const t = computePortfolioTotals(flatMetrics)
+
+        // Inject Global Realized PnL from Portfolio Engine
+        if (portfolio) {
+            t.realizedPnlArs = portfolio.realizedPnLArs
+            t.realizedPnlUsd = portfolio.realizedPnLUsd
+        }
+        return t
+    }, [groupedRows, portfolio])
 
     const isLoading = portfolioLoading || fxLoading || isCedearLoading || isCryptoLoading
     const error = portfolioError as Error | null

@@ -1,5 +1,5 @@
 
-import { Account, Movement, MovementType } from '@/domain/types'
+import { Account, Movement } from '@/domain/types'
 
 /**
  * Calculate TEA from TNA

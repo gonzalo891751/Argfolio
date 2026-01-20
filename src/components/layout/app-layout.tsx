@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { Sidebar, SidebarProvider, useSidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
 import { usePFSettlement } from '@/hooks/use-pf-settlement'
-import { useSettlementRepair } from '@/hooks/use-settlement-repair'
+import { usePFModelMigration } from '@/hooks/use-pf-model-migration'
 
 function LayoutContent() {
     const { isCollapsed } = useSidebar()
@@ -27,7 +27,7 @@ function LayoutContent() {
 
 export function AppLayout() {
     usePFSettlement()
-    useSettlementRepair()
+    usePFModelMigration()
     return (
         <SidebarProvider>
             <LayoutContent />

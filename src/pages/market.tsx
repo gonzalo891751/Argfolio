@@ -15,6 +15,7 @@ import { useMarketCrypto, type CryptoMarketItem } from '@/hooks/useMarketCrypto'
 import { useMarketIndicators } from '@/hooks/useMarketIndicators'
 import { useFxRates } from '@/hooks/use-fx-rates'
 import { getFavorites, toggleFavorite as toggleFav } from '@/lib/favoritesStorage'
+import { FciMarketTab } from '@/components/market/fci/FciMarketTab'
 
 // ============================================================================
 // Types
@@ -26,7 +27,7 @@ type FavFilter = 'all' | 'favorites'
 const TABS: { id: TabId; label: string; enabled: boolean }[] = [
     { id: 'cedears', label: 'CEDEARs', enabled: true },
     { id: 'crypto', label: 'Cripto', enabled: true },
-    { id: 'fci', label: 'FCI', enabled: false },
+    { id: 'fci', label: 'FCI', enabled: true },
     { id: 'plazos', label: 'Plazos Fijos', enabled: false },
 ]
 
@@ -763,8 +764,14 @@ export function MarketPage() {
 
             {/* Content Area */}
             <div className="flex-1 overflow-auto">
-                {/* FCI / Plazos Fijos Placeholders */}
-                {currentTab === 'fci' && <ComingSoonPanel title="FCI" />}
+                {/* FCI Tab */}
+                {currentTab === 'fci' && (
+                    <div className="px-4 py-6 sm:px-6 lg:px-8">
+                        <FciMarketTab />
+                    </div>
+                )}
+
+                {/* Plazos Fijos Placeholder */}
                 {currentTab === 'plazos' && <ComingSoonPanel title="Plazos Fijos" />}
 
                 {/* CEDEARs Table */}

@@ -141,9 +141,50 @@ export interface Movement {
     expectedTotal?: number
     // Auto-balance fields
     isAuto?: boolean
-    linkedMovementId?: string
+    linkedMovementId?: string // @deprecated use relatedMovementId
     reason?: 'auto_usdt_balance' | string
-    metadata?: Record<string, any>
+    metadata?: Record<string, any> // @deprecated use meta
+
+    // Phase 2 Polish: New Standard Fields
+    source?: 'user' | 'system'
+    groupId?: string
+    relatedMovementId?: string
+    meta?: {
+        pfGroupId?: string
+        pfCode?: string // User readable ID e.g. PF-20240101-ABCD
+        fixedDeposit?: FixedDepositMeta
+        fci?: FciMetaSnapshot
+    }
+}
+
+export interface FixedDepositMeta {
+    principalARS: number
+    interestARS: number
+    totalARS: number
+    tna: number
+    tea?: number
+    termDays: number
+    startDate: string // ISO
+    maturityDate: string // ISO
+    productName?: string
+    providerName?: string // Bank Name
+
+    // Linking & Status
+    sourcePfMovementId?: string
+    pfGroupId?: string
+    pfCode?: string
+    settlementMode?: 'auto' | 'manual'
+    redeemedAt?: string // ISO date of redemption
+
+    expectedInterestARS?: number // Legacy alias
+    expectedTotalARS?: number // Legacy alias
+}
+
+export interface FciMetaSnapshot {
+    nameSnapshot: string
+    managerSnapshot: string
+    categorySnapshot: string
+    vcpAsOf: string
 }
 
 export interface MovementPFMetadata {
@@ -263,6 +304,17 @@ export interface CategorySummary {
     items: HoldingAggregated[]
 }
 
+export interface Exposure {
+    arsReal: number
+    usdReal: number
+    fxMepBuy: number
+    arsEq: number
+    usdEqArs: number
+    totalEq: number
+    pctArs: number
+    pctUsd: number
+}
+
 export interface PortfolioTotals {
     totalARS: number
     totalUSD: number
@@ -272,8 +324,14 @@ export interface PortfolioTotals {
     changeTodayPercent?: number
     pnlToday?: number
     pnlTotal?: number
-    realizedPnL: number
-    unrealizedPnL: number
+    realizedPnLArs: number
+    realizedPnLUsd: number
+    realizedPnLByAccount: Record<string, { ars: number; usd: number }> // New
+    unrealizedPnLArs: number
+    unrealizedPnLUsd: number
+    // Currency Exposure (Native Amounts)
+    // Currency Exposure (Native Amounts)
+    exposure: Exposure
     categories: CategorySummary[]
     topPositions: HoldingAggregated[]
 }

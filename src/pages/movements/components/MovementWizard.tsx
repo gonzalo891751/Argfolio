@@ -14,15 +14,60 @@ import {
 import { cn } from '@/lib/utils'
 import { AssetTypeahead, type AssetOption, MOCK_ASSETS } from './AssetTypeahead'
 import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
+
+// Helper Component for PF Selection
+function ExistingPFSelector({
+    accountId,
+    movements,
+    onSelect
+}: {
+    accountId: string,
+    movements: Movement[],
+    onSelect: (m: Movement) => void
+}) {
+    // Filter active PFs (Constitutions) for this account
+    const activePFs = useMemo(() => {
+        return movements
+            .filter(m => m.assetClass === 'pf' && m.type === 'BUY' && m.accountId === accountId)
+            .sort((a, b) => new Date(b.datetimeISO).getTime() - new Date(a.datetimeISO).getTime())
+    }, [movements, accountId])
+
+    if (activePFs.length === 0) {
+        return <div className="text-sm text-slate-500 italic p-3 border border-white/10 rounded-lg">No hay Plazos Fijos registrados en esta cuenta.</div>
+    }
+
+    return (
+        <div>
+            <label className="block text-sm font-medium text-slate-400 mb-2">Seleccionar PF Vigente</label>
+            <select
+                onChange={(e) => {
+                    const m = activePFs.find(p => p.id === e.target.value)
+                    if (m) onSelect(m)
+                }}
+                className="input-base w-full rounded-lg px-4 py-3 text-white appearance-none bg-slate-800"
+                defaultValue=""
+            >
+                <option value="" disabled>Seleccioná un PF...</option>
+                {activePFs.map(pf => (
+                    <option key={pf.id} value={pf.id}>
+                        {pf.meta?.pfCode || pf.alias || 'Sin Código'} — {formatMoneyARS(pf.meta?.fixedDeposit?.totalARS ?? pf.pf?.totalToCollectARS ?? 0)} ({new Date(pf.meta?.fixedDeposit?.maturityDate ?? pf.pf?.maturityISO ?? '').toLocaleDateString()})
+                    </option>
+                ))}
+            </select>
+        </div>
+    )
+}
+
 import type { Movement, Currency, FxType, MovementType, AssetCategory, Instrument } from '@/domain/types'
 import { AccountSelectCreatable } from './AccountSelectCreatable'
 import { useFxRates } from '@/hooks/use-fx-rates'
 import { useInstruments, useAccounts, useCreateInstrument } from '@/hooks/use-instruments'
-import { useCreateMovement, useUpdateMovement } from '@/hooks/use-movements'
+import { useCreateMovement, useUpdateMovement, useMovements } from '@/hooks/use-movements'
 import { useToast } from '@/components/ui/toast'
 import { listCedears } from '@/domain/cedears/master'
 // pfStore removed
 import { CryptoTypeahead, type CryptoOption } from './CryptoTypeahead'
+import { FciTypeahead, generateFciSlug } from './FciTypeahead'
 import { db } from '@/db'
 
 import { computeTEA } from '@/domain/yield/accrual'
@@ -49,13 +94,26 @@ interface WizardState {
     feeValue?: number // can be %
     feeCurrency: Currency
     // PF State & Cash Yield
+    // PF State & Cash Yield
     bank?: string
+    // Removed duplicates
     alias?: string
+    pfCode?: string // New mandatory code
+    selectedPfMovementId?: string // For manual redemption
     tna?: number
     termDays?: number
     yieldEnabled?: boolean
     // Crypto specific
     coingeckoId?: string
+    // FCI specific
+    fciData?: {
+        name: string
+        manager: string
+        category: string
+        currency: 'ARS' | 'USD'
+        vcp: number
+        date: string
+    }
 }
 
 interface MovementWizardProps {
@@ -119,6 +177,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
     const { data: fxRates } = useFxRates()
     const { data: instrumentsList = [] } = useInstruments()
     const { data: accountsList = [] } = useAccounts()
+    const { data: allMovements = [] } = useMovements() // Fetch all for PF lookup
     const updateMovement = useUpdateMovement()
     const createMovement = useCreateMovement()
     const createInstrument = useCreateInstrument()
@@ -174,6 +233,12 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 feeMode: pm.fee?.mode || 'PERCENT',
                 feeValue: pm.fee?.percent || pm.fee?.amount || 0,
                 feeCurrency: pm.fee?.currency || pm.tradeCurrency,
+                // PF Restore
+                alias: pm.alias || pm.meta?.fixedDeposit?.pfCode || '', // Legacy alias as fallback
+                pfCode: pm.meta?.pfCode || pm.alias || '',
+                tna: pm.tna || pm.meta?.fixedDeposit?.tna,
+                termDays: pm.termDays || pm.meta?.fixedDeposit?.termDays,
+
                 coingeckoId: (pm.assetClass === 'crypto' && asset) ? (asset as CryptoOption).coingeckoId : undefined,
             }
         }
@@ -196,13 +261,48 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
             feeCurrency: 'ARS',
             // PF Defaults
             bank: '',
+            // New PF State
             alias: '',
-            tna: 35, // Market avg
+            pfCode: `PF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            tna: 35,
             termDays: 30,
         }
     }
 
-    const [state, setState] = useState<WizardState>(getInitialState)
+    const [state, setState] = useState<WizardState>(getInitialState())
+
+    // Compute owned FCI IDs for Typeahead restriction (SELL mode)
+    const ownedFciIds = useMemo(() => {
+        if (state.opType !== 'sell' && state.opType !== 'sell_usd' && state.opType !== 'redeem') return undefined
+        if (state.assetClass !== 'fci') return undefined
+
+        const quantities = new Map<string, number>()
+        allMovements.forEach(m => {
+            if (m.assetClass !== 'fci') return
+            const current = quantities.get(m.instrumentId) || 0
+            if (m.type === 'BUY' || m.type === 'DEPOSIT') quantities.set(m.instrumentId, current + m.quantity)
+            if (m.type === 'SELL' || m.type === 'WITHDRAW') quantities.set(m.instrumentId, current - m.quantity)
+        })
+
+        return Array.from(quantities.entries())
+            .filter(([_, qty]) => qty > 0.0001)
+            .map(([id]) => id)
+    }, [allMovements, state.opType, state.assetClass])
+
+    // Available Quantity for Validation
+    const availableQty = useMemo(() => {
+        if (!state.asset?.id || !['sell', 'sell_usd', 'redeem'].includes(state.opType) || !state.accountId) return Infinity
+
+        const id = state.asset.id
+        let qty = 0
+        allMovements.forEach(m => {
+            if (m.instrumentId === id && m.accountId === state.accountId) { // Check Account specific balance
+                if (m.type === 'BUY' || m.type === 'DEPOSIT') qty += m.quantity
+                if (m.type === 'SELL' || m.type === 'WITHDRAW') qty -= m.quantity
+            }
+        })
+        return Math.max(0, qty)
+    }, [state.asset, state.opType, state.accountId, allMovements])
 
     // Update FX rate when fxType or fxRates change
     useEffect(() => {
@@ -248,9 +348,13 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
         } else if (cls === 'wallet') {
             opType = 'deposit'
             asset = { id: 'CASH', ticker: 'CASH', name: 'Saldo', category: 'WALLET' }
+        } else if (cls === 'fci') {
+            opType = 'buy' // Default to buy
+            fxType = 'MEP' // FCI uses MEP for conversion
+            asset = null
         }
 
-        setState(s => ({ ...s, assetClass: cls, currency, fxType, opType, asset, coingeckoId }))
+        setState(s => ({ ...s, assetClass: cls, currency, fxType, opType, asset, coingeckoId, fciData: undefined }))
     }
 
     // ESC to close
@@ -339,6 +443,10 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         toast({ title: 'Error de validación', description: 'El monto cobrado debe ser mayor a 0.', variant: 'error' })
                         return
                     }
+                    if (state.qty > availableQty) {
+                        toast({ title: 'Error de validación', description: `No puedes rescatar más de lo disponible (${formatQty(availableQty)}).`, variant: 'error' })
+                        return
+                    }
                 } else {
                     // Constitute defaults
                     if (!state.qty || state.qty <= 0) {
@@ -360,6 +468,12 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                             : 'La cantidad debe ser mayor a 0 y entera.',
                         variant: 'error',
                     })
+                    return
+                }
+
+                // Validate available quantity for sell/redeem operations
+                if (['sell', 'redeem'].includes(state.opType) && state.qty > availableQty) {
+                    toast({ title: 'Error de validación', description: `No puedes vender más de lo disponible (${formatQty(availableQty)}).`, variant: 'error' })
                     return
                 }
 
@@ -418,6 +532,25 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     }
                     await (createInstrument as any).mutateAsync(newInst)
                     instrumentId = newId
+                }
+            } else if (state.assetClass === 'fci' && state.fciData) {
+                // FCI: Use deterministic ID based on fund metadata
+                const fciId = generateFciSlug(state.fciData)
+                const existing = instrumentsList.find(i => i.id === fciId)
+
+                if (existing) {
+                    instrumentId = existing.id
+                } else {
+                    const newInstrument: Instrument = {
+                        id: fciId,
+                        symbol: fciId,
+                        name: state.fciData.name,
+                        category: 'FCI' as AssetCategory,
+                        nativeCurrency: state.fciData.currency,
+                        priceKey: fciId,
+                    }
+                    await (createInstrument as any).mutateAsync(newInstrument)
+                    instrumentId = fciId
                 }
             } else if (state.assetClass !== 'pf' && state.asset) {
                 const existing = instrumentsList.find(i => i.symbol === state.asset!.ticker)
@@ -510,25 +643,46 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 unitPrice: state.price,
                 tradeCurrency: state.currency,
 
+                // Meta with FCI/PF snapshot
+                meta: {
+                    ...(state.assetClass === 'pf' ? {
+                        pfGroupId: state.opType === 'constitute' ? (state.pfGroupId || `PFG-${crypto.randomUUID()}`) : undefined,
+                        pfCode: state.pfCode,
+                        fixedDeposit: undefined // Will be populated by PF logic below if needed
+                    } : {}),
+                    ...(state.assetClass === 'fci' && state.fciData ? {
+                        fci: {
+                            nameSnapshot: state.fciData.name,
+                            managerSnapshot: state.fciData.manager,
+                            categorySnapshot: state.fciData.category,
+                            vcpAsOf: state.fciData.date
+                        }
+                    } : {})
+                },
+
                 fxAtTrade: state.fxRate,
-                // Construct FX Snapshot
-                fx: {
+
+                // FX Snapshot
+                fx: state.assetClass === 'fci' ? {
+                    kind: 'MEP',
+                    rate: state.currency === 'ARS' ? (fxRates?.mep?.sell || 0) : (fxRates?.mep?.buy || 0),
+                    side: state.currency === 'ARS' ? 'sell' : 'buy',
+                    asOf: new Date().toISOString()
+                } : {
                     kind: state.fxType,
                     rate: state.fxRate,
-                    side: 'mid', // simplified
+                    side: 'mid',
                     asOf: new Date().toISOString(),
                     source: 'manual'
                 },
 
                 notes: state.notes,
 
-                // For 'currency' (USD Buy/Sell), 'qty' is USD amount, 'price' is ARS rate.
+                // For 'currency' (USD Buy/Sell), 'qty' is USD amount, 'price' is ARS total.
                 // 'totalAmount' is Qty * Price = ARS Total.
-                // So tradeCurrency must be ARS for the math to hold (Amount = Qty * Price).
-
                 totalAmount: totals.native, // Gross
 
-                // New Fee Object
+                // Fee Object
                 fee: (state.feeValue || 0) > 0 ? {
                     mode: state.feeMode || 'PERCENT',
                     percent: state.feeMode === 'PERCENT' ? (state.feeValue || 0) : undefined,
@@ -543,7 +697,25 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
             }
 
 
-            if (state.assetClass === 'pf' && state.opType === 'constitute') {
+            if (state.assetClass === 'pf') {
+                // Determine PF Group ID
+                let pfGroupId = state.opType === 'constitute' ? crypto.randomUUID() : undefined
+                let pfCode = state.pfCode || state.alias // Fallback
+
+                // If Redeem, try to get existing Group ID from selected PF
+                if (state.opType === 'redeem' && state.selectedPfMovementId) {
+                    const originalPF = allMovements.find(m => m.id === state.selectedPfMovementId)
+                    if (originalPF) {
+                        pfGroupId = originalPF.meta?.pfGroupId || originalPF.meta?.fixedDeposit?.pfGroupId || undefined
+                        // If still undefined, generate one (migration case) but we should probably try to patch the original too?
+                        // For now, let's keep it undefined or new?
+                        // User wants strict linking. If missing on original, let's generate one and we will patch original later.
+                        if (!pfGroupId) pfGroupId = crypto.randomUUID()
+
+                        pfCode = originalPF.meta?.pfCode || originalPF.alias || pfCode
+                    }
+                }
+
                 const principal = state.qty || 0
                 const rate = (state.tna || 0) / 100
                 const days = state.termDays || 30
@@ -553,17 +725,44 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 const maturityDate = new Date(state.datetime)
                 maturityDate.setDate(maturityDate.getDate() + days)
 
+                // Meta Population
+                movementPayload.meta = {
+                    ...movementPayload.meta,
+                    pfCode: pfCode,
+                    pfGroupId: pfGroupId,
+
+                    fixedDeposit: {
+                        pfGroupId: pfGroupId,
+                        pfCode: pfCode,
+                        bank: accountsList.find(a => a.id === state.accountId)?.name || 'Desconocido',
+                        principalARS: principal || 0,
+                        interestARS: interest || 0,
+                        totalARS: total || 0,
+                        tna: state.tna || 0,
+                        termDays: days || 30,
+                        startDate: new Date(state.datetime).toISOString(),
+                        maturityDate: maturityDate.toISOString(),
+                        expectedInterestARS: interest || 0,
+                        expectedTotalARS: total || 0,
+
+                        // Redemption metadata
+                        settlementMode: 'manual',
+                        ...(state.opType === 'redeem' ? { redeemedAt: new Date(state.datetime).toISOString() } : {})
+                    }
+                }
+
+                // Legacy PF field population (for compatibility if needed, or remove)
                 movementPayload.pf = {
-                    kind: 'constitute',
-                    pfId: movementId, // Stable ID is this movement's ID
-                    bank: accountsList.find(a => a.id === state.accountId)?.name || 'Desconocido', // Use Account Name
-                    alias: state.alias,
+                    kind: state.opType === 'constitute' ? 'constitute' : 'redeem', // Legacy kind
+                    pfId: pfGroupId, // Use GroupID as PF Link ID
+                    bank: accountsList.find(a => a.id === state.accountId)?.name || 'Desconocido',
+                    alias: pfCode,
                     capitalARS: principal,
                     tna: state.tna,
                     termDays: days,
                     startAtISO: new Date(state.datetime).toISOString(),
                     maturityISO: maturityDate.toISOString(),
-                    fxOficialVentaHist: state.fxRate, // Snapshot
+                    fxOficialVentaHist: state.fxRate,
                     interestARS: interest,
                     totalToCollectARS: total
                 }
@@ -584,6 +783,64 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     ...movementPayload,
                     id: movementId
                 } as Movement)
+
+                // PF Manual Redemption: Create Companion Deposit (Acreditación) & Update Original
+                if (state.assetClass === 'pf' && state.opType === 'redeem' && state.selectedPfMovementId && movementPayload.meta?.pfGroupId) {
+                    // 1. Create Credit Movement (Deposit)
+                    // Logic: The "Redemption" movement (SELL) captures the exit from PF asset.
+                    // The "Credit" movement (DEPOSIT) captures the money entering the account.
+                    // Auto-settlement does: SELL (pfId) -> DEPOSIT (pfId).
+
+                    const creditId = crypto.randomUUID()
+                    const creditMovement: Movement = {
+                        id: creditId,
+                        datetimeISO: movementPayload.datetimeISO,
+                        type: 'DEPOSIT', // Money IN
+                        assetClass: 'pf', // Linked to PF
+                        instrumentId: movementPayload.instrumentId,
+                        accountId: state.accountId,
+
+                        // Titles
+                        ticker: 'ARS', // It's cash
+                        assetName: 'Acreditación Plazo Fijo',
+
+                        quantity: movementPayload.totalARS || state.qty, // ARS Amount
+                        unitPrice: 1,
+                        tradeCurrency: 'ARS',
+
+                        totalAmount: movementPayload.totalARS || state.qty,
+                        netAmount: movementPayload.totalARS || state.qty,
+
+                        meta: {
+                            pfGroupId: movementPayload.meta.pfGroupId,
+                            pfCode: movementPayload.meta.pfCode,
+                            fixedDeposit: { ...movementPayload.meta.fixedDeposit }, // Copy details
+                        },
+
+                        isAuto: false, // Manual trigger
+                        notes: `Acreditación manual PF: ${movementPayload.meta.pfCode}`
+                    }
+
+                    await createMovement.mutateAsync(creditMovement)
+
+                    // 2. Mark Original PF as Redeemed
+                    // We need to fetch the original (we found it in state logic, but cleaner to just update by ID)
+                    const original = allMovements.find(m => m.id === state.selectedPfMovementId)
+                    if (original) {
+                        const updatedMeta = {
+                            ...original.meta,
+                            fixedDeposit: {
+                                ...original.meta?.fixedDeposit,
+                                redeemedAt: movementPayload.datetimeISO,
+                                settlementMode: 'manual' as const
+                            }
+                        }
+                        await updateMovement.mutateAsync({
+                            id: original.id,
+                            updates: { meta: updatedMeta }
+                        })
+                    }
+                }
 
                 // AUTO-BALANCE LOGIC (USDT)
                 // If creating a Crypto Trade in an Exchange (and not USDT itself), 
@@ -945,16 +1202,64 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-slate-400 mb-2">
-                                                    Alias (Opcional)
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={state.alias || ''}
-                                                    onChange={e => setState(s => ({ ...s, alias: e.target.value }))}
-                                                    placeholder="Ej: PF Aguinaldo"
-                                                    className="input-base w-full rounded-lg px-4 py-3 text-white"
-                                                />
+                                                {state.opType === 'constitute' ? (
+                                                    <>
+                                                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                            Código PF <span className="text-indigo-400 text-xs ml-1">(Identificador)</span>
+                                                        </label>
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={state.pfCode || ''}
+                                                                onChange={e => setState(s => ({ ...s, pfCode: e.target.value }))}
+                                                                placeholder="PF-2024..."
+                                                                className="input-base w-full rounded-lg px-4 py-3 text-white font-mono uppercase"
+                                                            />
+                                                            <button
+                                                                onClick={() => setState(s => ({
+                                                                    ...s,
+                                                                    pfCode: `PF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
+                                                                }))}
+                                                                className="p-3 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 text-slate-400 hover:text-white transition"
+                                                                title="Generar nuevo código"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    // REDEEM: Select existing PF
+                                                    // Note: We need to define PFSelector or inline it. 
+                                                    // Ideally we lift state up, but here we can just use a simple select for now or a custom component.
+                                                    // Since we can't easily access 'movements' here without fetching, I'll assume we fetched them.
+                                                    // Wait, I need to add the hook call in the component body first! 
+                                                    // This tool call is just replacing JSX. I have NOT added the hook call line yet.
+                                                    // I should fallback to a placeholder text if I haven't added the hook yet.
+                                                    // I will add the hook call in the NEXT step or PREVIOUS?
+                                                    // I imported the hook, but didn't call it. 
+                                                    // I'll rewrite this block to use a placeholder "Select" for now, 
+                                                    // but I really should have added the hook logic first.
+                                                    // I'll add the hook logic in this same step if possible with multi_replace?
+                                                    // No, I can't easily target the top of body. 
+                                                    // I will stick to adding the JSX assuming I will add the hook immediately after.
+                                                    <ExistingPFSelector
+                                                        accountId={state.accountId}
+                                                        movements={allMovements}
+                                                        onSelect={(pf) => {
+                                                            setState(s => ({
+                                                                ...s,
+                                                                pfCode: pf.meta?.pfCode || pf.alias || 'PF-UNK',
+                                                                selectedPfMovementId: pf.id,
+                                                                // Prefill redemption details from Constitution
+                                                                qty: pf.meta?.fixedDeposit?.totalARS || pf.pf?.totalToCollectARS || 0,
+                                                                qtyStr: (pf.meta?.fixedDeposit?.totalARS || pf.pf?.totalToCollectARS || 0).toString(),
+                                                                tna: pf.meta?.fixedDeposit?.tna || pf.pf?.tna || 0,
+                                                                termDays: pf.meta?.fixedDeposit?.termDays || pf.pf?.termDays || 0,
+                                                                datetime: new Date().toISOString().slice(0, 16) // Default to now (Redemption date)
+                                                            }))
+                                                        }}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                     ) : state.assetClass === 'crypto' ? (
@@ -984,6 +1289,65 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                     }
                                                 }}
                                             />
+                                        </div>
+                                    ) : state.assetClass === 'fci' ? (
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                Fondo FCI
+                                            </label>
+                                            <FciTypeahead
+                                                value={state.fciData ? {
+                                                    id: generateFciSlug(state.fciData),
+                                                    name: state.fciData.name,
+                                                    manager: state.fciData.manager,
+                                                    category: state.fciData.category,
+                                                    currency: state.fciData.currency,
+                                                    vcp: state.fciData.vcp,
+                                                    date: state.fciData.date
+                                                } : null}
+                                                onChange={fund => {
+                                                    if (!fund) {
+                                                        setState(s => ({ ...s, fciData: undefined, asset: null, price: 0 }))
+                                                    } else {
+                                                        const assetOpt: AssetOption = {
+                                                            id: generateFciSlug(fund),
+                                                            ticker: fund.name.slice(0, 20),
+                                                            name: fund.name,
+                                                            category: 'FCI'
+                                                        }
+                                                        setState(s => ({
+                                                            ...s,
+                                                            asset: assetOpt,
+                                                            fciData: {
+                                                                name: fund.name,
+                                                                manager: fund.manager,
+                                                                category: fund.category,
+                                                                currency: fund.currency,
+                                                                vcp: fund.vcp,
+                                                                date: fund.date
+                                                            },
+                                                            currency: fund.currency,
+                                                            price: fund.vcp
+                                                        }))
+                                                    }
+                                                }}
+                                                restrictToIds={ownedFciIds}
+                                            />
+                                            {state.fciData && (
+                                                <div className="mt-3 grid grid-cols-2 gap-3 p-3 bg-muted/50 rounded-lg text-sm">
+                                                    <div>
+                                                        <span className="text-muted-foreground">VCP Actual:</span>
+                                                        <span className="ml-2 font-mono">
+                                                            {state.fciData.currency === 'USD' ? 'US$ ' : '$ '}
+                                                            {state.fciData.vcp.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-muted-foreground">Fecha VCP:</span>
+                                                        <span className="ml-2">{state.fciData.date}</span>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     ) : (
                                         <div>
@@ -1119,6 +1483,15 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                         placeholder="0.00"
                                                         className="input-base w-full rounded-lg pl-8 pr-4 py-3 text-white font-mono text-lg"
                                                     />
+                                                    {(['sell', 'sell_usd', 'redeem'].includes(state.opType) && availableQty < Infinity) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setState(s => ({ ...s, qtyStr: availableQty.toString().replace('.', ','), qty: availableQty }))}
+                                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-white/10 hover:bg-white/20 text-indigo-300 px-2 py-1 rounded transition-colors"
+                                                        >
+                                                            Max: {formatQty(availableQty)}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -1200,6 +1573,15 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                 className="input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg"
                                                                 autoFocus
                                                             />
+                                                            {(['sell', 'sell_usd', 'redeem'].includes(state.opType) && (availableQty || 0) < Infinity) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setState(s => ({ ...s, qtyStr: (availableQty || 0).toString().replace('.', ','), qty: availableQty || 0 }))}
+                                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-white/10 hover:bg-white/20 text-indigo-300 px-2 py-1 rounded transition-colors"
+                                                                >
+                                                                    Max: {formatQty(availableQty || 0)}
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -1261,6 +1643,15 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                 className="input-base w-full rounded-lg pl-8 pr-4 py-3 text-white font-mono text-lg"
                                                                 autoFocus
                                                             />
+                                                            {(['sell', 'sell_usd', 'redeem'].includes(state.opType) && (availableQty || 0) < Infinity) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setState(s => ({ ...s, qtyStr: (availableQty || 0).toString().replace('.', ','), qty: availableQty || 0 }))}
+                                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-white/10 hover:bg-white/20 text-indigo-300 px-2 py-1 rounded transition-colors"
+                                                                >
+                                                                    Max: {formatQty(availableQty || 0)}
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -1311,6 +1702,15 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                 className="input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg"
                                                                 autoFocus
                                                             />
+                                                            {(['sell', 'sell_usd', 'redeem'].includes(state.opType) && (availableQty || 0) < Infinity) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setState(s => ({ ...s, qtyStr: (availableQty || 0).toString().replace('.', ','), qty: availableQty || 0 }))}
+                                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-white/10 hover:bg-white/20 text-indigo-300 px-2 py-1 rounded transition-colors"
+                                                                >
+                                                                    Max: {formatQty(availableQty || 0)}
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
 

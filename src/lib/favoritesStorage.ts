@@ -3,11 +3,12 @@
  * Persists market favorites to localStorage with typed keys.
  */
 
-export type AssetKind = 'cedears' | 'crypto'
+export type AssetKind = 'cedears' | 'crypto' | 'fci'
 
 const STORAGE_KEYS: Record<AssetKind, string> = {
     cedears: 'argfolio:favs:cedears',
     crypto: 'argfolio:favs:crypto',
+    fci: 'argfolio:fci:favorites',
 }
 
 /**

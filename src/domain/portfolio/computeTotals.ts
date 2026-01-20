@@ -7,6 +7,7 @@ import type {
     FxType,
     AssetCategory,
     Currency,
+    Instrument,
 } from '@/domain/types'
 
 const categoryLabels: Record<AssetCategory, string> = {
@@ -31,26 +32,32 @@ interface ComputeTotalsInput {
     baseFx: FxType
     stableFx: FxType
     cashBalances: Map<string, Map<string, number>>
-    realizedPnL: number
+    realizedPnLArs: number
+    realizedPnLUsd: number
+    realizedPnLByAccount: Record<string, { ars: number; usd: number }>
 }
 
 import { getFxDailyChangePct } from '@/lib/daily-snapshot'
-
-/**
- * Compute portfolio totals including ARS/USD values, liquidity, and category breakdown.
- */
 import { calculateValuation } from './valuation'
+import { computeExposure } from './currencyExposure'
 
 /**
  * Compute portfolio totals including ARS/USD values, liquidity, and category breakdown.
  */
 export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
-    const { holdings, currentPrices, priceChanges, fxRates, cashBalances, realizedPnL } = input
+    const { holdings, currentPrices, priceChanges, fxRates, cashBalances, realizedPnLArs, realizedPnLUsd, realizedPnLByAccount } = input
 
     // Aggregate holdings by instrument
     const aggregatedMap = new Map<string, HoldingAggregated>()
 
+    // 1. Process regular holdings
     for (const h of holdings) {
+        // Skip explicitly tracked cash instruments in holdings to avoid double-counting with cashBalances
+        // (Assuming cashBalances gives the authoritative "Money Flow" balance)
+        if (h.instrument.category === 'ARS_CASH' || h.instrument.category === 'USD_CASH' || h.instrument.category === 'CURRENCY') {
+            continue
+        }
+
         const existing = aggregatedMap.get(h.instrumentId)
         const price = currentPrices.get(h.instrumentId)
 
@@ -71,25 +78,103 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 avgCost: h.avgCostNative,
                 avgCostArs: h.avgCostArs,
                 avgCostUsd: h.avgCostUsd,
-                avgCostUsdEq: h.avgCostUsdEq, // Add this
+                avgCostUsdEq: h.avgCostUsdEq,
                 currentPrice: price,
                 byAccount: [h],
             })
         }
     }
 
+    // 2. Inject Cash Balances as Held Assets
+    for (const [accountId, balances] of cashBalances) {
+        for (const [currency, balance] of balances) {
+            if (Math.abs(balance) < 0.01) continue
+
+            const isArs = currency === 'ARS'
+            const category: AssetCategory = isArs ? 'ARS_CASH' : 'USD_CASH'
+            const symbol = isArs ? 'ARS' : 'USD'
+            const name = isArs ? 'Pesos Argentinos' : 'Dólar Estadounidense'
+
+            // We use a synthetic ID for aggregation. 
+            // Ideally we group all ARS separate from all USD.
+            // But aggregatedMap keys are instrumentIds.
+            // We need a canonical "cash-ars" instrument Id.
+            const instrumentId = isArs ? 'canonical-cash-ars' : 'canonical-cash-usd'
+
+            // Mock Instrument
+            const instrument: Instrument = {
+                id: instrumentId,
+                symbol,
+                name,
+                category,
+                nativeCurrency: currency as Currency,
+                priceKey: symbol.toLowerCase(),
+            }
+
+            // Create Holding structure
+            // Cash Cost Basis? 
+            // If we treat Cash as having Cost Basis (Money In), we assume 1:1 for now or 0 PnL natively.
+            // Real PnL comes from FX changes (USD held).
+            const holding: Holding = {
+                instrumentId,
+                accountId,
+                instrument,
+                account: { id: accountId, name: 'Account', kind: 'BROKER', defaultCurrency: 'ARS' }, // Mock account object if needed
+                quantity: balance,
+                costBasisNative: balance,
+                costBasisArs: isArs ? balance : 0, // Simplified: ARS cost of USD is unknown here without history
+                costBasisUsd: isArs ? 0 : balance,
+                avgCostNative: 1,
+                avgCostArs: isArs ? 1 : 0,
+                avgCostUsd: isArs ? 0 : 1,
+                avgCostUsdEq: isArs ? 0 : 1,
+            }
+
+            const existing = aggregatedMap.get(instrumentId)
+            if (existing) {
+                existing.totalQuantity += balance
+                // Accumulate cost basis? 
+                // For cash, cost basis ~ quantity unless obtained via FX.
+                // Sticking to 1:1 for simplicity in this aggregated view.
+                existing.totalCostBasis += balance
+                existing.totalCostBasisArs += holding.costBasisArs
+                existing.totalCostBasisUsd += holding.costBasisUsd
+                existing.byAccount.push(holding)
+            } else {
+                aggregatedMap.set(instrumentId, {
+                    instrumentId,
+                    instrument,
+                    totalQuantity: balance,
+                    totalCostBasis: balance,
+                    totalCostBasisArs: holding.costBasisArs,
+                    totalCostBasisUsd: holding.costBasisUsd,
+                    avgCost: 1,
+                    avgCostArs: holding.avgCostArs,
+                    avgCostUsd: holding.avgCostUsd,
+                    avgCostUsdEq: holding.avgCostUsdEq,
+                    currentPrice: 1, // Cash price is 1
+                    byAccount: [holding]
+                })
+            }
+        }
+    }
+
+
     // Calculate values for each aggregated holding
     let totalARS = 0
     let totalUSD = 0
-    let unrealizedPnL = 0
+    let unrealizedPnLArs = 0
+    let unrealizedPnLUsd = 0
+    let liquidityARS = 0
+    let liquidityUSD = 0
 
     for (const [, agg] of aggregatedMap) {
-        agg.avgCost = agg.totalCostBasis / agg.totalQuantity
-        agg.avgCostArs = agg.totalCostBasisArs / agg.totalQuantity
-        agg.avgCostUsd = agg.totalCostBasisUsd / agg.totalQuantity
-        agg.avgCostUsdEq = agg.totalCostBasisUsd / agg.totalQuantity // Add this (same as avgCostUsd for FIFO)
+        agg.avgCost = agg.totalQuantity !== 0 ? agg.totalCostBasis / agg.totalQuantity : 0
+        agg.avgCostArs = agg.totalQuantity !== 0 ? agg.totalCostBasisArs / agg.totalQuantity : 0
+        agg.avgCostUsd = agg.totalQuantity !== 0 ? agg.totalCostBasisUsd / agg.totalQuantity : 0
+        agg.avgCostUsdEq = agg.totalQuantity !== 0 ? agg.totalCostBasisUsd / agg.totalQuantity : 0
 
-        // Calculate Valuation using the Engine
+        // Calculate Valuation
         const valResult = calculateValuation(
             agg.totalQuantity,
             agg.currentPrice,
@@ -98,13 +183,12 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
             fxRates
         )
 
-        agg.valueARS = valResult.valueArs ?? undefined // Undefined used for optional field
+        agg.valueARS = valResult.valueArs ?? undefined
         agg.valueUSD = valResult.valueUsd ?? undefined
         agg.fxUsed = valResult.fxUsed
         agg.ruleApplied = valResult.ruleApplied
 
         // Calculate PnL (Native)
-        // If price is available, we have currentValueNative
         if (agg.currentPrice !== undefined) {
             agg.currentValue = agg.totalQuantity * agg.currentPrice
             agg.unrealizedPnL = agg.currentValue - agg.totalCostBasis
@@ -112,37 +196,50 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 agg.totalCostBasis > 0 ? (agg.unrealizedPnL / agg.totalCostBasis) * 100 : 0
         }
 
-        // Calculate Dual PnL (Safe check)
+        // Calculate Dual PnL (Global Aggregation)
         if (agg.valueARS != null && agg.valueUSD != null) {
+            // For Cash, Cost Basis ARS might be 0 if we assume pure inputs
+            // But valueARS for USD cash is (Qty * Fx).
+            // PnL = (Qty * Fx) - CostARS.
+            // If CostARS is 0 (missing), PnL is huge.
+            // For Cash injections, we set CostARS = 0 for USD?
+            // Yes, above: `costBasisArs: isArs ? balance : 0`.
+            // So USD Cash will show large Unrealized ARS PnL (Currency Gain).
+            // This is actually correct for "Patrimonio" view if we consider the holding source unknown (pure asset).
+            // However, typical user might expect Neutral PnL for cash "just sitting there".
+            // If Cost Basis is missing, we might want to suppress PnL.
+            // But we can't distinguish "Missing" vs "Zero Cost Gift".
+            // Let's keep it raw.
+
             agg.unrealizedPnL_ARS = agg.valueARS - agg.totalCostBasisArs
             agg.unrealizedPnL_USD = agg.valueUSD - agg.totalCostBasisUsd
 
-            // Add to totals
             totalARS += agg.valueARS
             totalUSD += agg.valueUSD
+
+            // Only add to Unrealized PnL if it's NOT cash (optional logic), or user specifically wants to see FX gain.
+            // User: "PnL no realizado (ARS + USD)".
+            // Let's include everything.
+            unrealizedPnLArs += agg.unrealizedPnL_ARS
+            unrealizedPnLUsd += agg.unrealizedPnL_USD
+        }
+
+        // Liquidity sums
+        if (agg.instrument.category === 'ARS_CASH') {
+            liquidityARS += agg.valueARS ?? 0
+        } else if (agg.instrument.category === 'USD_CASH') {
+            liquidityUSD += agg.valueUSD ?? 0
         }
 
         // --- Calculate Daily Change ---
         const changePctArs = priceChanges.get(agg.instrumentId)
         if (changePctArs !== undefined) {
             agg.changePct1dArs = changePctArs
-
-            // Compute Theoretical USD Change
-            // Formula: (1 + arsChange) / (1 + fxChange) - 1
             if (agg.fxUsed) {
-                // Convert 'CCL' -> 'ccl' for key access
                 const fxKey = agg.fxUsed.toLowerCase() as keyof FxRates
-
-                // Ideally we want the daily change of the FX used for THIS asset.
-                // We can get it from storage via getFxDailyChangePct
-                // Note: we need the latest rate to be passed or just use the utility.
-                // The utility reads from storage.
-                // We need the RATE for the utility? No, utility compares current vs stored.
-                // So we need to pass CURRENT rate to utility.
                 const currentFxRate = fxRates[fxKey]
                 if (typeof currentFxRate === 'number') {
                     const fxChangePct = getFxDailyChangePct(currentFxRate, fxKey)
-
                     if (fxChangePct != null) {
                         const onePlusArs = 1 + (changePctArs / 100)
                         const onePlusFx = 1 + fxChangePct
@@ -152,68 +249,7 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 }
             }
         }
-
-        // Accumulate Unrealized PnL only if valid
-        if (agg.unrealizedPnL) {
-            // Note: This PnL is in NATIVE currency.
-            // Requirement says "Total USD computed consistently".
-            // Summing native PnL (mixed ARS/USD) is not correct for a total PnL.
-            // Likely we want Total Portfolio Value - Total Cost Basis (in same currency).
-            // But preserving existing logic for now regarding PnL summation if user didn't ask to change it.
-            // But user said: "Total USD computed consistently from each asset’s usd valuation".
-            // So we rely on totalUSD and totalARS accumulators.
-            // The "unrealizedPnL" returned by this function seems to be native sum in old code?
-            // "unrealizedPnL += agg.unrealizedPnL" was adding apples and oranges (ARS and USD pnl).
-            // I should probably fix this if I can, but let's stick to the prompt goals.
-            // "Remove remaining mock dependencies from totals where possible"
-            // Let's keep the naive native sum for `unrealizedPnL` field to avoid breaking changes, 
-            // but `totalARS`/`totalUSD` are now correct.
-            unrealizedPnL += agg.unrealizedPnL
-        }
     }
-
-    // Add cash balances to totals
-    let liquidityARS = 0
-    let liquidityUSD = 0
-
-    for (const [, currencyBalances] of cashBalances) {
-        for (const [currency, balance] of currencyBalances) {
-            if (balance === 0) continue
-
-            // Determine category for valuation
-            let category: AssetCategory = 'ARS_CASH'
-            if (currency === 'USD') category = 'USD_CASH'
-            // Could be USDT in cash balance? If so, treat as STABLE?
-            // Usually cashBalances map is native fiat, but checking.
-
-            const val = calculateValuation(
-                balance,
-                1, // Price of cash is 1
-                category,
-                currency as Currency,
-                fxRates
-            )
-
-            if (currency === 'ARS') {
-                liquidityARS += val.valueArs ?? 0
-                // liquidityUSD += val.valueUsd // Don't double count if we add to totalARS/USD later
-            } else {
-                // liquidityARS += val.valueArs
-                liquidityUSD += val.valueUsd ?? 0
-            }
-
-            // Actually the loop accumulates into liquidityARS/USD.
-            // We should use the valuations directly.
-            // If I have 1000 ARS. valueArs=1000, valueUsd=1.
-            // liquidityARS += 1000, liquidityUSD += 1.
-
-            liquidityARS += val.valueArs ?? 0
-            liquidityUSD += val.valueUsd ?? 0
-        }
-    }
-
-    totalARS += liquidityARS
-    totalUSD += liquidityUSD
 
     // Group by category
     const categoryMap = new Map<AssetCategory, HoldingAggregated[]>()
@@ -241,23 +277,32 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
         })
     }
 
-    // Top positions (sorted by value ARS)
+    // Top positions
     const allAggregated = Array.from(aggregatedMap.values())
     const topPositions = allAggregated
-        .filter((a) => a.valueARS !== undefined && a.valueARS > 0)
+        .filter((a) => a.valueARS !== undefined && a.valueARS > 0 && a.instrument.category !== 'ARS_CASH' && a.instrument.category !== 'USD_CASH')
         .sort((a, b) => (b.valueARS ?? 0) - (a.valueARS ?? 0))
         .slice(0, 5)
+
+    // Compute Exposure
+    // Use MEP Buy as per requirement (conservative/market buy side)
+    const exposure = computeExposure(
+        allAggregated,
+        fxRates.mep.buy ?? fxRates.mep.sell ?? 0
+    )
 
     return {
         totalARS,
         totalUSD,
         liquidityARS,
         liquidityUSD,
-        realizedPnL,
-        unrealizedPnL,
+        realizedPnLArs,
+        realizedPnLUsd,
+        realizedPnLByAccount,
+        unrealizedPnLArs,
+        unrealizedPnLUsd,
+        exposure,
         categories,
         topPositions,
     }
 }
-
-

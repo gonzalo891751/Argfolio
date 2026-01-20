@@ -19,6 +19,8 @@ export const demoInstruments: Instrument[] = [
     // Cash instruments (virtual)
     { id: 'ars-cash', symbol: 'ARS', name: 'Pesos Argentinos', category: 'ARS_CASH', nativeCurrency: 'ARS', priceKey: 'ars' },
     { id: 'usd-cash', symbol: 'USD', name: 'Dólares', category: 'USD_CASH', nativeCurrency: 'USD', priceKey: 'usd' },
+    // Virtual Asset for PF
+    { id: 'pf-instrument', symbol: 'PF', name: 'Plazo Fijo', category: 'PF', nativeCurrency: 'ARS', priceKey: 'ars' },
 ]
 
 export const demoAccounts: Account[] = [

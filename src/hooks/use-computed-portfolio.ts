@@ -5,6 +5,7 @@ import { useFxRates } from './use-fx-rates'
 import { useCryptoPrices } from './use-crypto-prices'
 import { useManualPrices } from './use-manual-prices'
 import { useCedearPrices } from './use-cedear-prices'
+import { useFciPrices } from './useFciPrices'
 import {
     computeHoldings,
     computeCashBalances,
@@ -64,8 +65,11 @@ export function useComputedPortfolio() {
     const { data: cryptoPrices = {} } = useCryptoPrices(cryptoSymbols)
     const { data: cedearPrices = {} } = useCedearPrices(cedearAuto)
 
+    // Fetch FCI Prices
+    const { priceMap: fciPrices } = useFciPrices()
+
     return useQuery({
-        queryKey: ['portfolio', 'computed', movements.length, instrumentsList.length, fxRates?.updatedAtISO, cryptoPrices, cedearPrices, manualPrices, cedearAuto, trackCash],
+        queryKey: ['portfolio', 'computed', movements.length, instrumentsList.length, fxRates?.updatedAtISO, cryptoPrices, cedearPrices, manualPrices, fciPrices, cedearAuto, trackCash],
         queryFn: (): PortfolioTotals | null => {
             if (!fxRates || instrumentsList.length === 0 || accountsList.length === 0) {
                 return null
@@ -119,6 +123,15 @@ export function useComputedPortfolio() {
                 }
             })
 
+            // Add FCI Prices
+            if (fciPrices) {
+                fciPrices.forEach((price, id) => {
+                    if (price.vcp) {
+                        pricesMap.set(id, price.vcp)
+                    }
+                })
+            }
+
             // Build price changes map (Phase 2.1)
             // Gather changePct from providers
             const priceChangesMap = new Map<string, number>()
@@ -132,12 +145,16 @@ export function useComputedPortfolio() {
                         priceChangesMap.set(instr.id, change)
                     }
                 }
-
-                // CRYPTO is tricky, cryptoPrices returns just price numbers right now?
-                // check useCryptoPrices -> hooks/useMarketCrypto returns changePct but useCryptoPrices (simple) might not.
-                // If the user wants crypto change too, I need to check useCryptoPrices.
-                // Assuming currently only CEDEARs requested specifically for USD equivalent logic.
             })
+
+            // Add FCI Changes
+            if (fciPrices) {
+                fciPrices.forEach((price, id) => {
+                    if (price.changePct) {
+                        priceChangesMap.set(id, price.changePct)
+                    }
+                })
+            }
 
             const { baseFx, stableFx } = getUserPreferences()
 
@@ -160,7 +177,9 @@ export function useComputedPortfolio() {
                 baseFx,
                 stableFx,
                 cashBalances,
-                realizedPnL: realizedPnLResult.totalNative,
+                realizedPnLArs: realizedPnLResult.realizedArs,
+                realizedPnLUsd: realizedPnLResult.realizedUsd,
+                realizedPnLByAccount: realizedPnLResult.byAccount,
             })
 
             return totals

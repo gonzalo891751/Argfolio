@@ -14,6 +14,8 @@ export interface PFPosition {
     movementId: string // Link to the creation movement
     accountId: string // Account where the PF is held
     initialFx?: number // Historical FX at constitution
+    pfGroupId?: string
+    pfCode?: string
 }
 
 export type BankSuggestion = {

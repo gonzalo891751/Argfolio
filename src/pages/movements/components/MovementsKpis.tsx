@@ -17,8 +17,8 @@ export function MovementsKpis({ movements, fxMep = 1180 }: MovementsKpisProps) {
             m => new Date(m.datetimeISO) >= startOfMonth
         )
 
-        const buys = thisMonthMovements.filter(m => m.type === 'BUY')
-        const sells = thisMonthMovements.filter(m => m.type === 'SELL')
+        const buys = thisMonthMovements.filter(m => m.type === 'BUY' && m.assetClass !== 'pf')
+        const sells = thisMonthMovements.filter(m => m.type === 'SELL' && m.assetClass !== 'pf')
 
         const buyTotalARS = buys.reduce((acc, m) => {
             if (m.tradeCurrency === 'ARS') return acc + m.totalAmount

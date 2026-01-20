@@ -128,4 +128,8 @@ export interface PortfolioAssetTotals {
     totalCostUsdEq: number
     totalPnlArs: number
     totalPnlPct: number | null
+    realizedPnlArs: number
+    realizedPnlUsd: number
+    unrealizedPnlArs: number
+    unrealizedPnlUsd: number
 }

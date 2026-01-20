@@ -50,7 +50,16 @@ export function MovementsPage() {
     const filteredMovements = useMemo(() => {
         return movements.filter((mov) => {
             // Type filter
-            if (typeFilter && mov.type !== typeFilter) return false
+            if (typeFilter) {
+                if (typeFilter === 'pf') {
+                    // Check logic for PF
+                    if (mov.assetClass !== 'pf' && (!mov.instrumentId || instruments.get(mov.instrumentId)?.category !== 'PF')) {
+                        return false
+                    }
+                } else if (mov.type !== typeFilter) {
+                    return false
+                }
+            }
 
             // Account filter
             if (accountFilter && mov.accountId !== accountFilter) return false

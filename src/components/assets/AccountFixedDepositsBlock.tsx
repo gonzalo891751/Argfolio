@@ -1,6 +1,7 @@
 
 import { useState } from 'react'
 import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { PFPosition } from '@/domain/pf/types'
 import { Hourglass, ArrowDownToLine, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +17,21 @@ interface AccountFixedDepositsBlockProps {
     accountId: string
     positions: PFPosition[]
     fxOfficial: number
+}
+
+// Helper for Plazo column
+function getDaysRemaining(maturityIso: string) {
+    const today = new Date()
+    const maturity = new Date(maturityIso)
+
+    // Normalize to start of day for calendar day difference
+    today.setHours(0, 0, 0, 0)
+    maturity.setHours(0, 0, 0, 0)
+
+    const diffTime = maturity.getTime() - today.getTime()
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
+
+    return diffDays
 }
 
 export function AccountFixedDepositsBlock({ accountId: _accountId, positions, fxOfficial }: AccountFixedDepositsBlockProps) {
@@ -123,6 +139,13 @@ export function AccountFixedDepositsBlock({ accountId: _accountId, positions, fx
                             {positions.map((pf) => {
                                 const maturityDate = new Date(pf.maturityTs)
                                 const isMaturityNear = (maturityDate.getTime() - Date.now()) < (3 * 24 * 60 * 60 * 1000)
+                                const daysRemaining = getDaysRemaining(pf.maturityTs)
+
+                                let plazoLabel = ''
+                                if (daysRemaining === 0) plazoLabel = 'Vence hoy'
+                                else if (daysRemaining === 1) plazoLabel = 'Falta 1 día'
+                                else if (daysRemaining > 0) plazoLabel = `Faltan ${daysRemaining} días`
+                                else plazoLabel = 'Vencido'
 
                                 return (
                                     <tr
@@ -174,12 +197,19 @@ export function AccountFixedDepositsBlock({ accountId: _accountId, positions, fx
                                             </span>
                                         </td>
 
-                                        {/* Plazo */}
+                                        {/* Plazo (Updated: Days Remaining) */}
                                         <td className="p-4 text-right align-top">
                                             <div className="flex flex-col items-end">
-                                                <span className="font-numeric text-white">{pf.termDays}d</span>
+                                                <span className={cn("font-medium", daysRemaining < 0 ? "text-amber-500" : "text-white")}>
+                                                    {plazoLabel}
+                                                    {daysRemaining < 0 && (
+                                                        <span className="text-slate-500 font-normal text-xs ml-1">
+                                                            (+{Math.abs(daysRemaining)}d)
+                                                        </span>
+                                                    )}
+                                                </span>
                                                 <span className="text-xs text-slate-500">
-                                                    {new Date(pf.startTs).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}
+                                                    {pf.termDays}d
                                                 </span>
                                             </div>
                                         </td>

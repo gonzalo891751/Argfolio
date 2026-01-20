@@ -1,10 +1,13 @@
 import type { Movement, Holding, FxRates, FxType } from '@/domain/types'
 
-interface RealizedPnLResult {
+export interface RealizedPnLResult {
     totalNative: number
     totalARS: number
     totalUSD: number
-    byInstrument: Map<string, number>
+    realizedArs: number
+    realizedUsd: number
+    byInstrument: Map<string, { ars: number, usd: number }>
+    byAccount: Record<string, { ars: number, usd: number }>
 }
 
 /**
@@ -12,8 +15,8 @@ interface RealizedPnLResult {
  */
 export function computeRealizedPnL(
     movements: Movement[],
-    fxRates: FxRates,
-    baseFx: FxType = 'MEP'
+    _fxRates: FxRates,
+    _baseFx: FxType = 'MEP'
 ): RealizedPnLResult {
     const sorted = [...movements].sort(
         (a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime()
@@ -21,8 +24,11 @@ export function computeRealizedPnL(
 
     // Track cost basis per instrument+account
     const costBasisMap = new Map<string, { quantity: number; costBasis: number }>()
-    const pnlByInstrument = new Map<string, number>()
-    let totalPnL = 0
+    const pnlByInstrument = new Map<string, { ars: number, usd: number }>()
+    const pnlByAccount = new Map<string, { ars: number, usd: number }>()
+
+    let totalArs = 0
+    let totalUsd = 0
 
     for (const mov of sorted) {
         if (!mov.instrumentId) continue
@@ -37,10 +43,19 @@ export function computeRealizedPnL(
 
         const position = costBasisMap.get(key)!
 
-        if (mov.type === 'BUY' || mov.type === 'TRANSFER_IN') {
+        // Movements that increase position (add to cost basis)
+        if (
+            mov.type === 'BUY' ||
+            mov.type === 'BUY_USD' ||
+            mov.type === 'TRANSFER_IN' ||
+            mov.type === 'DEPOSIT' ||
+            mov.type === 'INTEREST' || // Reinvested interest adds to cost basis
+            mov.type === 'DIVIDEND' // Reinvested dividend adds to cost basis
+        ) {
             position.quantity += qty
             position.costBasis += qty * price
-        } else if (mov.type === 'SELL') {
+        } else if (mov.type === 'SELL' || mov.type === 'SELL_USD' || mov.type === 'WITHDRAW') {
+            // SELL logic
             if (position.quantity > 0) {
                 const avgCost = position.costBasis / position.quantity
                 const soldQty = Math.min(qty, position.quantity)
@@ -48,10 +63,34 @@ export function computeRealizedPnL(
                 const cost = soldQty * avgCost
                 const pnl = proceeds - cost
 
-                totalPnL += pnl
+                if (mov.type === 'SELL' || mov.type === 'SELL_USD') {
+                    // Only count PnL for explicit SELLs.
+                    // Assuming tradeCurrency dictates PnL currency.
+                    const isArs = mov.tradeCurrency === 'ARS'
 
-                const currentPnl = pnlByInstrument.get(mov.instrumentId) ?? 0
-                pnlByInstrument.set(mov.instrumentId, currentPnl + pnl)
+                    if (isArs) {
+                        totalArs += pnl
+
+                        const iPnl = pnlByInstrument.get(mov.instrumentId) || { ars: 0, usd: 0 }
+                        iPnl.ars += pnl
+                        pnlByInstrument.set(mov.instrumentId, iPnl)
+
+                        const aPnl = pnlByAccount.get(mov.accountId) || { ars: 0, usd: 0 }
+                        aPnl.ars += pnl
+                        pnlByAccount.set(mov.accountId, aPnl)
+
+                    } else {
+                        totalUsd += pnl
+
+                        const iPnl = pnlByInstrument.get(mov.instrumentId) || { ars: 0, usd: 0 }
+                        iPnl.usd += pnl
+                        pnlByInstrument.set(mov.instrumentId, iPnl)
+
+                        const aPnl = pnlByAccount.get(mov.accountId) || { ars: 0, usd: 0 }
+                        aPnl.usd += pnl
+                        pnlByAccount.set(mov.accountId, aPnl)
+                    }
+                }
 
                 position.quantity -= soldQty
                 position.costBasis -= soldQty * avgCost
@@ -64,16 +103,14 @@ export function computeRealizedPnL(
         }
     }
 
-    // Convert to ARS/USD
-    const fxRate = getFxRate(fxRates, baseFx)
-    const totalARS = totalPnL * fxRate
-    const totalUSD = totalPnL
-
     return {
-        totalNative: totalPnL,
-        totalARS,
-        totalUSD,
+        totalNative: 0, // Ignored
+        totalARS: totalArs,
+        totalUSD: totalUsd,
+        realizedArs: totalArs,
+        realizedUsd: totalUsd, // Raw USD PnL
         byInstrument: pnlByInstrument,
+        byAccount: Object.fromEntries(pnlByAccount)
     }
 }
 

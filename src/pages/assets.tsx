@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortfolioSummaryCard } from '@/components/assets/PortfolioSummaryCard'
 import { AssetDrawer } from '@/components/assets/AssetDrawer'
+import { CurrencyRatioCard } from '@/components/assets/CurrencyRatioCard'
+import { AuditModal } from '@/components/assets/AuditModal'
+import { useComputedPortfolio } from '@/hooks/use-computed-portfolio'
 import type { AssetClass, AssetRowMetrics } from '@/domain/assets/types'
 import { AccountFixedDepositsBlock } from '@/components/assets/AccountFixedDepositsBlock'
 import { usePF } from '@/hooks/use-pf'
@@ -18,6 +21,8 @@ import { useAccountMigration } from '@/hooks/use-account-dedupe'
 import { YieldSummaryCard } from '@/components/assets/YieldSummaryCard'
 import { db } from '@/db'
 import { useToast } from '@/components/ui/toast'
+import { FciHoldingsTable } from '@/components/assets/FciHoldingsTable'
+import { useFciPrices } from '@/hooks/useFciPrices'
 
 const categoryLabels: Record<AssetClass | 'all', string> = {
     all: 'Todos',
@@ -41,11 +46,11 @@ export function AssetsPage() {
     const [categoryFilter, setCategoryFilter] = useState<AssetClass | 'all'>('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedAsset, setSelectedAsset] = useState<AssetRowMetrics | null>(null)
+    const [showAudit, setShowAudit] = useState(false)
+    const { data: rawPortfolio } = useComputedPortfolio()
 
     // PF Hook (Handles logic, toast, and valuation)
     const { active: activePFs, totals: pfTotals } = usePF()
-
-
 
     // Data Hooks
     const {
@@ -60,6 +65,9 @@ export function AssetsPage() {
     const { data: accounts } = useAccounts()
     const { data: fxRates } = useFxRates()
 
+    // FCI Prices Fetching
+    const { priceMap: fciPrices } = useFciPrices()
+
     // Get unique categories from data
     const categories: (AssetClass | 'all')[] = useMemo(() => {
         if (!groupedRows) return ['all']
@@ -69,6 +77,13 @@ export function AssetsPage() {
     }, [groupedRows])
 
     const { toast } = useToast()
+
+    // ------------------------------------------------------------------------
+    // COMPOSITION BUCKETS (ARS vs USD)
+    // ------------------------------------------------------------------------
+    const exposureArs = (rawPortfolio?.exposure?.arsReal || 0) + pfTotals.totalActiveARS + pfTotals.totalMaturedARS
+    const exposureUsd = (rawPortfolio?.exposure?.usdReal || 0)
+    const fxRate = fxRates?.mep?.buy ?? fxRates?.mep?.sell ?? 0
 
     // ------------------------------------------------------------------------
     // YIELD ACCRUAL ENGINE TRIGGER
@@ -123,23 +138,51 @@ export function AssetsPage() {
         runAccrual()
     }, [accounts, groupedRows, toast])
 
-
+    // Derive USD Interest for PF
+    const pfActiveInterestUSD = useMemo(() => {
+        const fx = fxRates?.oficial.sell || 1
+        return pfTotals.totalActiveInterestARS / fx
+    }, [pfTotals, fxRates])
 
     return (
         <div className="space-y-6">
             {/* Header Row: Title + Controls */}
             <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
-                {/* Portfolio Summary */}
-                <PortfolioSummaryCard
-                    totalArs={totals.totalArs + pfTotals.totalActiveARS + pfTotals.totalMaturedARS}
-                    totalUsdEq={totals.totalUsdEq + pfTotals.totalActiveUSD + pfTotals.totalMaturedUSD}
-                    pnlArs={totals.totalPnlArs + pfTotals.totalActiveInterestARS} // Adding PF Interest as PnL
-                    pnlPct={totals.totalPnlPct} // TODO: Recompute global ROI with PF included?
-                    className="lg:max-w-md"
-                />
+
+                <div className="flex flex-col md:flex-row gap-4 flex-1">
+                    {/* Portfolio Summary */}
+                    <PortfolioSummaryCard
+                        totalArs={totals.totalArs + pfTotals.totalActiveARS + pfTotals.totalMaturedARS}
+                        totalUsdEq={totals.totalUsdEq + pfTotals.totalActiveUSD + pfTotals.totalMaturedUSD}
+                        unrealizedPnlArs={totals.unrealizedPnlArs + pfTotals.totalActiveInterestARS}
+                        unrealizedPnlUsd={totals.unrealizedPnlUsd + pfActiveInterestUSD}
+                        realizedPnlArs={totals.realizedPnlArs}
+                        realizedPnlUsd={totals.realizedPnlUsd}
+                        className="flex-1 lg:max-w-md"
+                    />
+
+                    {/* Currency Ratio */}
+                    {(exposureArs > 0 || exposureUsd > 0) && (
+                        <CurrencyRatioCard
+                            exposureArs={exposureArs}
+                            exposureUsd={exposureUsd}
+                            fxRate={fxRate}
+                            className="flex-1 lg:max-w-xs"
+                        />
+                    )}
+                </div>
 
                 {/* Controls */}
                 <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                    {/* Dev Audit Link */}
+                    {import.meta.env.DEV && (
+                        <button
+                            onClick={() => setShowAudit(true)}
+                            className="text-xs text-muted-foreground hover:text-primary underline"
+                        >
+                            Ver desglose
+                        </button>
+                    )}
 
                     {/* Search */}
                     <div className="relative">
@@ -362,9 +405,27 @@ export function AssetsPage() {
                             )
                         })()}
 
+                        {/* FCI Table Block */}
+                        {(() => {
+                            const fciMetrics = metrics.filter(m => m.category === 'FCI')
+                            if (fciMetrics.length === 0) return null
+
+                            return (
+                                <div className="space-y-2">
+                                    <h3 className="text-sm font-medium text-muted-foreground px-1">Fondos Comunes de Inversión</h3>
+                                    <FciHoldingsTable
+                                        assets={fciMetrics}
+                                        prices={fciPrices}
+                                        mepRate={fxRates?.mep}
+                                        onRowClick={setSelectedAsset}
+                                    />
+                                </div>
+                            )
+                        })()}
+
                         {/* Account Table */}
                         {(() => {
-                            const excludeCats = ['CASH_ARS', 'CASH_USD', 'PF']
+                            const excludeCats = ['CASH_ARS', 'CASH_USD', 'PF', 'FCI']
                             const hasNonCashAssets = metrics.some(m => !excludeCats.includes(m.category))
 
                             if (!hasNonCashAssets) return null
@@ -618,6 +679,12 @@ export function AssetsPage() {
                 asset={selectedAsset}
                 isOpen={selectedAsset !== null}
                 onClose={() => setSelectedAsset(null)}
+            />
+
+            <AuditModal
+                isOpen={showAudit}
+                onClose={() => setShowAudit(false)}
+                portfolio={rawPortfolio || null}
             />
         </div>
     )

@@ -56,50 +56,92 @@ export function usePFSettlement() {
 
                     // 1. SETTLE Movement (Close PF)
                     // We link to the original PF ID via metadata.
+                    // 1. SETTLE Movement (Close PF)
+                    // We link to the original PF ID via metadata.
+                    const pfGroupId = pf.pfGroupId // Propagated from processor
+                    const pfCode = pf.pfCode || 'PF-AUTO'
+
                     const settleMov: Movement = {
                         id: uuidv4(),
                         assetClass: 'pf',
+                        instrumentId: 'pf-instrument', // Canonical PF
                         assetName: 'Plazo Fijo',
-                        type: 'SELL', // Or 'WITHDRAW' ? Conventional is SELL/REDEEM for closing position
+                        type: 'SELL',
                         accountId: pf.accountId,
                         bank: pf.bank,
                         datetimeISO: settlementDate,
-                        quantity: 1, // Nominal
-                        unitPrice: settlementAmount, // Value realized
+                        quantity: 1,
+                        unitPrice: settlementAmount,
                         tradeCurrency: 'ARS',
                         totalAmount: settlementAmount,
-                        notes: 'Vencimiento PF (Auto-Liquidación)',
+                        notes: `Vencimiento PF (Auto-Liquidación) ${pfCode}`,
                         isAuto: true,
+
+                        // Strict Metadata
+                        meta: {
+                            pfGroupId: pfGroupId,
+                            pfCode: pfCode,
+                            fixedDeposit: {
+                                pfGroupId: pfGroupId,
+                                pfCode: pfCode,
+                                period: 'settlement', // Custom marker? Or just reuse structure
+                                settlementMode: 'auto',
+                                redeemedAt: settlementDate,
+                                // Snapshotting final values
+                                principalARS: pf.principalARS,
+                                interestARS: pf.expectedInterestARS,
+                                totalARS: settlementAmount,
+                                tna: pf.tna,
+                                termDays: pf.termDays,
+                                startDate: pf.startTs,
+                                maturityDate: pf.maturityTs
+                            } as any, // Cast if strictness varies
+                            isAutoSettlement: true,
+                            idempotencyKey: `PF_SETTLE:${pf.id}`
+                        },
+
+                        // Legacy
                         pf: {
                             kind: 'redeem',
-                            pfId: pf.id, // VITAL: Link to original creation ID
+                            pfId: pf.id, // Original Movement ID
                             action: 'SETTLE',
                         },
-                        metadata: {
-                            isAutoSettlement: true
-                        }
                     }
 
                     // 2. DEPOSIT Movement (Cash)
                     const depositMov: Movement = {
                         id: uuidv4(),
-                        // assetClass: undefined for pure cash, or 'currency'
                         type: 'DEPOSIT',
-                        assetName: 'Pesos', // Ensure UI shows "Pesos" not "—"
+                        instrumentId: 'ars-cash', // Canonical Cash
+                        assetName: 'Pesos Argentinos',
                         accountId: pf.accountId,
-                        tradeCurrency: 'ARS', // Fixed: was missing tradeCurrency
+                        tradeCurrency: 'ARS',
                         bank: pf.bank,
                         datetimeISO: settlementDate,
                         quantity: settlementAmount,
-                        unitPrice: 1, // Explicit price 1
-                        // currency: 'ARS', // removed, not in type
-                        totalAmount: settlementAmount, // required
-                        notes: 'Acreditación PF vencido (Auto)',
+                        unitPrice: 1,
+                        totalAmount: settlementAmount,
+                        ticker: 'ARS',
+
+                        notes: `Acreditación PF vencido (Auto): ${pfCode}`,
                         isAuto: true,
-                        metadata: {
+
+                        meta: {
+                            pfGroupId: pfGroupId,
+                            pfCode: pfCode,
+                            // Copy fixed deposit info? Or just reference? 
+                            // Usually cash movement doesn't needed full metadata, but good for trace.
+                            fixedDeposit: {
+                                pfGroupId: pfGroupId,
+                                pfCode: pfCode,
+                                settlementMode: 'auto',
+                                totalARS: settlementAmount
+                            } as any,
+
                             source: 'PF_SETTLEMENT',
                             sourceFixedDepositId: pf.id,
-                            isAutoSettlement: true
+                            isAutoSettlement: true,
+                            idempotencyKey: `PF_SETTLE:${pf.id}:CREDIT`
                         }
                     }
 

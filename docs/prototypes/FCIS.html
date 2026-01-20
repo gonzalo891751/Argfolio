@@ -1,0 +1,826 @@
+<!-- market-fci-prototype.html -->
+<!DOCTYPE html>
+<html lang="es" class="antialiased dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Mercado FCI</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons (Phosphor Icons for sleek look) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Config -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0B1121', // Deep Navy (App Bg)
+                            800: '#151E32', // Surface 1
+                            700: '#1E293B', // Surface 2
+                            primary: '#6366f1', // Indigo
+                            accent: '#0ea5e9', // Sky
+                        },
+                        semantic: {
+                            up: '#10b981', // Emerald
+                            down: '#f43f5e', // Rose
+                            warn: '#f59e0b', // Amber
+                            info: '#3b82f6', // Blue
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-sm': '0 0 10px -2px rgba(99, 102, 241, 0.2)',
+                    },
+                    backgroundImage: {
+                        'grid-pattern': "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Utilities matching Brand Book */
+        body {
+            background-color: #0B1121;
+            color: #F8FAFC;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .glass-header {
+            background: rgba(11, 17, 33, 0.8);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        /* Sparkline Bars Animation */
+        @keyframes grow {
+            from { height: 0; }
+        }
+        .spark-bar {
+            animation: grow 0.6s ease-out forwards;
+            transform-origin: bottom;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0B1121; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 2px solid rgba(255,255,255,0.1);
+            border-left-color: #6366f1;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Hide number input arrows */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans selection:bg-brand-primary/30 selection:text-white">
+
+    <!-- Navbar (Simplified Mock) -->
+    <nav class="glass-header fixed top-0 w-full z-40 h-16 flex items-center justify-between px-4 md:px-8">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-primary to-indigo-700 flex items-center justify-center shadow-glow-sm">
+                <i class="ph-bold ph-chart-polar text-white"></i>
+            </div>
+            <span class="font-display font-bold text-xl tracking-tight text-white">Argfolio <span class="text-slate-500 font-mono text-xs font-normal ml-1">MARKET</span></span>
+        </div>
+        <div class="hidden md:flex items-center gap-6 text-sm font-medium text-slate-400">
+            <a href="#" class="hover:text-white transition">Dashboard</a>
+            <a href="#" class="text-white">Mercado</a>
+            <a href="#" class="hover:text-white transition">Cartera</a>
+            <a href="#" class="hover:text-white transition">Análisis</a>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="hidden md:flex flex-col items-end leading-none">
+                <span class="text-xs font-mono text-slate-400">Dólar MEP</span>
+                <span class="text-sm font-mono font-medium text-white">$1.185,50</span>
+            </div>
+            <button class="w-8 h-8 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center hover:bg-slate-700 transition">
+                <i class="ph ph-bell text-slate-300"></i>
+            </button>
+            <div class="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300">
+                JM
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-1 pt-24 pb-12 px-4 md:px-8 max-w-7xl mx-auto w-full">
+        
+        <!-- Header Section -->
+        <header class="mb-8 relative">
+            <!-- Background Decoration -->
+            <div class="absolute -top-20 -right-20 w-96 h-96 bg-brand-primary/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 relative z-10">
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-slate-800 text-slate-400 border border-white/5">Mercado Local</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-slate-800 text-slate-400 border border-white/5">CAFCI</span>
+                    </div>
+                    <h1 class="font-display text-4xl md:text-5xl font-bold text-white mb-2">Fondos Comunes</h1>
+                    <p class="text-slate-400 text-lg max-w-2xl">Explorá y compará el rendimiento de los principales FCI de Argentina. Valores de cuotaparte al cierre anterior.</p>
+                </div>
+                
+                <!-- Market Stats Cards -->
+                <div class="flex gap-3 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+                    <div class="glass-panel p-3 rounded-xl min-w-[140px]">
+                        <div class="text-xs text-slate-500 font-medium mb-1">Money Market</div>
+                        <div class="font-mono text-lg text-white font-medium">45.2%</div>
+                        <div class="text-[10px] text-slate-400">del volumen operado</div>
+                    </div>
+                    <div class="glass-panel p-3 rounded-xl min-w-[140px]">
+                        <div class="text-xs text-slate-500 font-medium mb-1">Tasa Badlar</div>
+                        <div class="font-mono text-lg text-white font-medium">32.5%</div>
+                        <div class="text-[10px] text-slate-400">TNA Ref.</div>
+                    </div>
+                    <div class="glass-panel p-3 rounded-xl min-w-[140px]">
+                        <div class="text-xs text-slate-500 font-medium mb-1">Total Fondos</div>
+                        <div class="font-mono text-lg text-white font-medium" id="total-funds-count">--</div>
+                        <div class="text-[10px] text-semantic-up">+12 nuevos este mes</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="border-b border-white/10 mb-8 flex gap-8 overflow-x-auto">
+            <button class="pb-3 text-sm font-medium text-slate-400 hover:text-white transition whitespace-nowrap">CEDEARs</button>
+            <button class="pb-3 text-sm font-medium text-slate-400 hover:text-white transition whitespace-nowrap">Acciones Líderes</button>
+            <button class="pb-3 text-sm font-bold text-brand-primary border-b-2 border-brand-primary transition whitespace-nowrap">Fondos (FCI)</button>
+            <button class="pb-3 text-sm font-medium text-slate-400 hover:text-white transition whitespace-nowrap">Cripto</button>
+            <button class="pb-3 text-sm font-medium text-slate-400 hover:text-white transition whitespace-nowrap opacity-50 cursor-not-allowed">Plazo Fijo <span class="text-[10px] bg-slate-800 px-1 rounded ml-1">Pronto</span></button>
+        </div>
+
+        <!-- Controls Toolbar -->
+        <div class="flex flex-col xl:flex-row gap-4 mb-6 justify-between items-start xl:items-center">
+            
+            <!-- Filters -->
+            <div class="flex flex-col md:flex-row gap-3 w-full xl:w-auto">
+                <!-- Search -->
+                <div class="relative w-full md:w-64 group">
+                    <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-brand-primary transition"></i>
+                    <input type="text" id="search-input" placeholder="Buscar fondo o gestora... (/)" 
+                           class="w-full bg-brand-800 border border-white/10 rounded-lg py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition placeholder:text-slate-600">
+                </div>
+
+                <!-- Dropdowns -->
+                <div class="flex gap-2 overflow-x-auto pb-1 md:pb-0 w-full md:w-auto">
+                    <select id="category-filter" class="bg-brand-800 border border-white/10 rounded-lg py-2 px-3 text-sm text-slate-300 focus:outline-none focus:border-brand-primary hover:bg-brand-700 transition cursor-pointer appearance-none">
+                        <option value="all">Todas las Categorías</option>
+                        <option value="Money Market">Mercado de Dinero (T+0)</option>
+                        <option value="Renta Fija">Renta Fija (Bonos)</option>
+                        <option value="Renta Mixta">Renta Mixta</option>
+                        <option value="Renta Variable">Renta Variable (Acciones)</option>
+                        <option value="Infraestructura">Infraestructura</option>
+                    </select>
+
+                    <select id="currency-filter" class="bg-brand-800 border border-white/10 rounded-lg py-2 px-3 text-sm text-slate-300 focus:outline-none focus:border-brand-primary hover:bg-brand-700 transition cursor-pointer appearance-none">
+                        <option value="all">Todas las monedas</option>
+                        <option value="ARS">Pesos (ARS)</option>
+                        <option value="USD">Dólares (USD)</option>
+                    </select>
+                    
+                    <button id="fav-toggle" class="bg-brand-800 border border-white/10 rounded-lg py-2 px-3 text-slate-400 hover:text-yellow-400 hover:border-yellow-500/30 transition flex items-center gap-2 whitespace-nowrap" onclick="toggleFavFilter()">
+                        <i class="ph-fill ph-star"></i> <span class="hidden sm:inline">Mis Favoritos</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-4 w-full xl:w-auto justify-between xl:justify-end">
+                <div class="text-right hidden sm:block">
+                    <div class="text-[10px] text-slate-500 uppercase tracking-wide">Última actualización</div>
+                    <div class="text-xs font-mono text-slate-300" id="last-update-time">--:--</div>
+                </div>
+                <button id="btn-update" onclick="fetchData()" class="flex items-center gap-2 px-4 py-2 bg-brand-primary hover:bg-indigo-500 text-white rounded-lg font-medium text-sm transition shadow-glow-sm active:scale-95 disabled:opacity-50 disabled:pointer-events-none">
+                    <i class="ph-bold ph-arrows-clockwise" id="update-icon"></i>
+                    <span id="update-text">Actualizar</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Data Container -->
+        <div class="relative min-h-[400px]">
+            
+            <!-- Loading Overlay (Hidden by default) -->
+            <div id="loading-state" class="absolute inset-0 z-20 bg-brand-900/50 backdrop-blur-sm flex items-center justify-center hidden rounded-xl">
+                <div class="flex flex-col items-center gap-3">
+                    <div class="spinner border-brand-primary"></div>
+                    <span class="text-sm font-medium text-brand-primary animate-pulse">Consultando mercado...</span>
+                </div>
+            </div>
+
+            <!-- Error State (Hidden by default) -->
+            <div id="error-state" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center text-center p-8 bg-brand-800/50 rounded-xl border border-semantic-down/20">
+                <div class="w-12 h-12 bg-semantic-down/10 rounded-full flex items-center justify-center mb-4 text-semantic-down">
+                    <i class="ph-bold ph-warning text-xl"></i>
+                </div>
+                <h3 class="text-white font-medium mb-1">No pudimos cargar los datos</h3>
+                <p class="text-slate-400 text-sm mb-4 max-w-xs">Hubo un error al conectar con el servidor de la CAFCI. Por favor intentá de nuevo.</p>
+                <button onclick="fetchData()" class="text-brand-primary text-sm font-medium hover:text-indigo-400 hover:underline">Reintentar</button>
+            </div>
+
+            <!-- Desktop Table -->
+            <div class="hidden md:block glass-panel rounded-xl overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-white/10 bg-brand-800/50 text-xs text-slate-400 uppercase tracking-wider font-mono">
+                            <th class="py-3 px-6 font-medium cursor-pointer hover:text-white transition group" onclick="setSort('name')">
+                                Fondo / Gestora <i class="ph-bold ph-caret-up-down inline ml-1 opacity-0 group-hover:opacity-100"></i>
+                            </th>
+                            <th class="py-3 px-4 font-medium">Categoría</th>
+                            <th class="py-3 px-4 font-medium text-right cursor-pointer hover:text-white transition group" onclick="setSort('vcp')">
+                                VCP <i class="ph-bold ph-caret-up-down inline ml-1 opacity-0 group-hover:opacity-100"></i>
+                            </th>
+                            <th class="py-3 px-4 font-medium text-right cursor-pointer hover:text-white transition group" onclick="setSort('variation')">
+                                Var. Día <i class="ph-bold ph-caret-up-down inline ml-1 opacity-0 group-hover:opacity-100"></i>
+                            </th>
+                            <th class="py-3 px-4 font-medium text-right">Rescate</th>
+                            <th class="py-3 px-6 text-center w-16"><i class="ph-fill ph-star text-slate-600"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-white/5 text-sm">
+                        <!-- Rows inserted by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Mobile Grid (Cards) -->
+            <div id="mobile-grid" class="md:hidden grid grid-cols-1 gap-4">
+                <!-- Cards inserted by JS -->
+            </div>
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="hidden py-16 text-center">
+                <div class="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-500">
+                    <i class="ph ph-magnifying-glass text-xl"></i>
+                </div>
+                <h3 class="text-white font-medium mb-1">No encontramos resultados</h3>
+                <p class="text-slate-400 text-sm mb-4">Probá cambiando los filtros o la búsqueda.</p>
+                <button onclick="resetFilters()" class="text-brand-primary text-sm font-medium hover:text-indigo-400">Limpiar filtros</button>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="flex items-center justify-between mt-6 pt-4 border-t border-white/10">
+            <div class="text-xs text-slate-400 font-mono">
+                Mostrando <span id="pagination-start" class="text-white">1</span>-<span id="pagination-end" class="text-white">25</span> de <span id="pagination-total" class="text-white">--</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="btn-prev" onclick="changePage(-1)" class="w-8 h-8 flex items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition">
+                    <i class="ph-bold ph-caret-left"></i>
+                </button>
+                <div class="flex gap-1" id="page-numbers">
+                    <!-- Page numbers injected by JS -->
+                </div>
+                <button id="btn-next" onclick="changePage(1)" class="w-8 h-8 flex items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition">
+                    <i class="ph-bold ph-caret-right"></i>
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal Detail -->
+    <div id="modal-detail" class="fixed inset-0 z-50 hidden">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
+        
+        <!-- Content -->
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg p-4">
+            <div class="glass-panel bg-[#151E32] rounded-2xl shadow-2xl overflow-hidden border border-white/10 relative transform transition-all scale-100">
+                
+                <!-- Modal Header -->
+                <div class="p-6 border-b border-white/5 relative">
+                    <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-2 rounded-full hover:bg-white/5 transition">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                    
+                    <div class="flex items-start gap-4 mb-1">
+                         <div class="w-12 h-12 rounded-lg bg-brand-800 border border-white/10 flex items-center justify-center text-xl font-display font-bold text-slate-400" id="modal-logo">
+                            F
+                         </div>
+                         <div>
+                             <div class="flex items-center gap-2 mb-1">
+                                 <span class="text-xs font-mono text-brand-accent uppercase tracking-wider" id="modal-manager">Gestora</span>
+                                 <span class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/5" id="modal-currency">ARS</span>
+                             </div>
+                             <h2 class="font-display text-xl font-bold text-white leading-tight pr-8" id="modal-name">Nombre del Fondo</h2>
+                         </div>
+                    </div>
+                </div>
+
+                <!-- Modal Body -->
+                <div class="p-6 space-y-6">
+                    
+                    <!-- Main KPI -->
+                    <div class="flex items-end justify-between">
+                        <div>
+                            <div class="text-xs text-slate-400 font-medium mb-1 uppercase tracking-wide">Valor Cuotaparte</div>
+                            <div class="font-mono text-3xl font-medium text-white tracking-tight" id="modal-vcp">$0,00</div>
+                            <div class="text-xs text-slate-500 mt-1" id="modal-date">al DD/MM/YYYY</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-bold border" id="modal-variation-badge">
+                                <i class="ph-bold ph-trend-up"></i> <span id="modal-variation">0.00%</span>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-1">Variación diaria</div>
+                        </div>
+                    </div>
+
+                    <!-- Sparkline Viz -->
+                    <div class="bg-brand-900/50 rounded-lg p-4 border border-white/5">
+                        <div class="flex justify-between items-end h-24 gap-1" id="modal-sparkline">
+                            <!-- Bars injected via JS -->
+                        </div>
+                        <div class="flex justify-between mt-2 text-[10px] font-mono text-slate-500 uppercase">
+                            <span>Hace 12 meses</span>
+                            <span>Hoy</span>
+                        </div>
+                    </div>
+
+                    <!-- Meta Grid -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="p-3 bg-white/5 rounded-lg border border-white/5">
+                            <div class="text-xs text-slate-400 mb-1">Plazo de Rescate</div>
+                            <div class="text-white font-medium flex items-center gap-2">
+                                <i class="ph ph-clock text-brand-primary"></i> <span id="modal-term">T+0</span>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-white/5 rounded-lg border border-white/5">
+                            <div class="text-xs text-slate-400 mb-1">Categoría</div>
+                            <div class="text-white font-medium truncate" id="modal-category">Renta Fija</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="p-4 border-t border-white/5 bg-brand-900/30 flex gap-3">
+                    <button class="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-lg font-medium text-sm transition">
+                        Ficha Técnica (PDF)
+                    </button>
+                    <button class="flex-1 py-3 bg-brand-primary hover:bg-indigo-500 text-white rounded-lg font-medium text-sm transition shadow-glow-sm flex items-center justify-center gap-2">
+                        <i class="ph-bold ph-plus"></i> Agregar a Mis Activos
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- CONSTANTS & CONFIG ---
+        const ITEMS_PER_PAGE = 25;
+        const MANAGERS = ['Galicia', 'Santander', 'BBVA', 'Balanz', 'Consultatio', 'Schroder', 'Fima', 'Supervielle', 'Industrial', 'Delta', 'Macro', 'Adcap', 'Bull Market', 'Compass'];
+        const CATEGORIES = ['Money Market', 'Renta Fija', 'Renta Mixta', 'Renta Variable', 'Infraestructura'];
+        const TERMS = {'Money Market': 'T+0', 'Renta Fija': 'T+1', 'Renta Mixta': 'T+2', 'Renta Variable': 'T+2', 'Infraestructura': 'T+3'};
+        
+        // --- STATE ---
+        let allFunds = [];
+        let filteredFunds = [];
+        let currentPage = 1;
+        let filters = { search: '', category: 'all', currency: 'all', favOnly: false };
+        let sortState = { key: 'name', dir: 'asc' };
+        let isLoading = false;
+
+        // --- FORMATTERS (ARGENTINA) ---
+        const fmtCurrency = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 });
+        const fmtCurrencyUSD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+        const fmtPercent = new Intl.NumberFormat('es-AR', { style: 'percent', minimumFractionDigits: 2, signDisplay: "exceptZero" });
+        const fmtDate = (date) => date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+        // --- MOCK DATA GENERATOR ---
+        function generateFunds(count) {
+            const funds = [];
+            const now = new Date();
+            
+            for (let i = 0; i < count; i++) {
+                const manager = MANAGERS[Math.floor(Math.random() * MANAGERS.length)];
+                const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+                const currency = Math.random() > 0.8 ? 'USD' : 'ARS';
+                const isMoneyMarket = category === 'Money Market';
+                
+                // Base value logic
+                let baseVcp = currency === 'ARS' ? (Math.random() * 5000 + 100) : (Math.random() * 100 + 1);
+                
+                // Variation logic (MM always positive, others volatile)
+                let variation = isMoneyMarket 
+                    ? (Math.random() * 0.2 + 0.1) / 100  // 0.1% to 0.3% daily
+                    : (Math.random() * 6 - 3) / 100;     // -3% to +3%
+
+                // Name generation
+                const types = ['Ahorro', 'Plus', 'Retorno Total', 'Balanceado', 'Crecimiento', 'Estratégico', 'Liquidez', 'Capital'];
+                const suffix = ['Clase A', 'Clase B', 'Institucional'];
+                const name = `${manager} ${types[Math.floor(Math.random() * types.length)]} ${currency === 'USD' ? 'Dólar' : 'Pesos'} ${suffix[Math.floor(Math.random() * suffix.length)]}`;
+
+                // History for sparkline (12 points)
+                const history = Array.from({length: 12}, () => Math.random());
+
+                funds.push({
+                    id: i,
+                    name,
+                    manager,
+                    category,
+                    currency,
+                    vcp: baseVcp,
+                    variation,
+                    term: TERMS[category],
+                    date: now,
+                    isFav: Math.random() < 0.1, // 10% favorites
+                    history
+                });
+            }
+            return funds;
+        }
+
+        // --- CORE FUNCTIONS ---
+
+        function init() {
+            // Initial Mock Data
+            allFunds = generateFunds(250);
+            document.getElementById('total-funds-count').textContent = allFunds.length;
+            updateLastUpdateTime();
+            applyFilters(); // Triggers render
+            
+            // Event Listeners
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                filters.search = e.target.value.toLowerCase();
+                currentPage = 1;
+                applyFilters();
+            });
+            
+            document.getElementById('category-filter').addEventListener('change', (e) => {
+                filters.category = e.target.value;
+                currentPage = 1;
+                applyFilters();
+            });
+
+            document.getElementById('currency-filter').addEventListener('change', (e) => {
+                filters.currency = e.target.value;
+                currentPage = 1;
+                applyFilters();
+            });
+
+            // Keyboard shortcut for search
+            document.addEventListener('keydown', (e) => {
+                if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    document.getElementById('search-input').focus();
+                }
+                if (e.key === 'Escape') closeModal();
+            });
+        }
+
+        function updateLastUpdateTime() {
+            const now = new Date();
+            document.getElementById('last-update-time').textContent = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + 'hs';
+        }
+
+        function toggleFavFilter() {
+            filters.favOnly = !filters.favOnly;
+            const btn = document.getElementById('fav-toggle');
+            
+            if (filters.favOnly) {
+                btn.classList.add('text-yellow-400', 'border-yellow-500/30', 'bg-yellow-500/10');
+                btn.classList.remove('text-slate-400', 'bg-brand-800');
+                btn.querySelector('i').classList.add('text-yellow-400');
+            } else {
+                btn.classList.remove('text-yellow-400', 'border-yellow-500/30', 'bg-yellow-500/10');
+                btn.classList.add('text-slate-400', 'bg-brand-800');
+            }
+            currentPage = 1;
+            applyFilters();
+        }
+
+        function toggleFavItem(id, event) {
+            if(event) event.stopPropagation();
+            const fund = allFunds.find(f => f.id === id);
+            if(fund) {
+                fund.isFav = !fund.isFav;
+                applyFilters(); // Re-render to show updated star state
+            }
+        }
+
+        function setSort(key) {
+            if (sortState.key === key) {
+                sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortState.key = key;
+                sortState.dir = 'desc'; // Default to desc for numbers usually
+            }
+            applyFilters();
+        }
+
+        function applyFilters() {
+            filteredFunds = allFunds.filter(f => {
+                const matchesSearch = f.name.toLowerCase().includes(filters.search) || f.manager.toLowerCase().includes(filters.search);
+                const matchesCategory = filters.category === 'all' || f.category === filters.category;
+                const matchesCurrency = filters.currency === 'all' || f.currency === filters.currency;
+                const matchesFav = !filters.favOnly || f.isFav;
+                return matchesSearch && matchesCategory && matchesCurrency && matchesFav;
+            });
+
+            // Sorting
+            filteredFunds.sort((a, b) => {
+                let valA = a[sortState.key];
+                let valB = b[sortState.key];
+                
+                // String comparison for text
+                if (typeof valA === 'string') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+
+                if (valA < valB) return sortState.dir === 'asc' ? -1 : 1;
+                if (valA > valB) return sortState.dir === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            render();
+        }
+
+        function changePage(delta) {
+            const maxPage = Math.ceil(filteredFunds.length / ITEMS_PER_PAGE);
+            const newPage = currentPage + delta;
+            if (newPage >= 1 && newPage <= maxPage) {
+                currentPage = newPage;
+                render();
+            }
+        }
+
+        function render() {
+            const tbody = document.getElementById('table-body');
+            const mobileGrid = document.getElementById('mobile-grid');
+            const emptyState = document.getElementById('empty-state');
+            const paginationEl = document.querySelector('.ph-caret-left').parentElement.parentElement.parentElement; // Pagination container
+
+            tbody.innerHTML = '';
+            mobileGrid.innerHTML = '';
+
+            if (filteredFunds.length === 0) {
+                emptyState.classList.remove('hidden');
+                paginationEl.classList.add('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+                paginationEl.classList.remove('hidden');
+            }
+
+            // Pagination Slicing
+            const start = (currentPage - 1) * ITEMS_PER_PAGE;
+            const end = Math.min(start + ITEMS_PER_PAGE, filteredFunds.length);
+            const pageData = filteredFunds.slice(start, end);
+
+            // Update Pagination Text
+            document.getElementById('pagination-start').textContent = start + 1;
+            document.getElementById('pagination-end').textContent = end;
+            document.getElementById('pagination-total').textContent = filteredFunds.length;
+            document.getElementById('btn-prev').disabled = currentPage === 1;
+            document.getElementById('btn-next').disabled = end >= filteredFunds.length;
+
+            // Render Page Numbers (Simple version)
+            const totalPages = Math.ceil(filteredFunds.length / ITEMS_PER_PAGE);
+            let pagesHtml = '';
+            // Show current, prev and next only logic could go here, keeping simple for prototype
+            pagesHtml += `<div class="w-8 h-8 flex items-center justify-center rounded-lg bg-brand-primary text-white font-medium text-xs">${currentPage}</div>`;
+            document.getElementById('page-numbers').innerHTML = pagesHtml;
+
+
+            // Render Rows
+            pageData.forEach(fund => {
+                // Color logic
+                const varColor = fund.variation >= 0 ? 'text-semantic-up' : 'text-semantic-down';
+                const varIcon = fund.variation >= 0 ? 'ph-trend-up' : 'ph-trend-down';
+                const varSign = fund.variation > 0 ? '+' : ''; // Intl handles formatting, but we might want explicit + sometimes
+                const starClass = fund.isFav ? 'text-yellow-400 ph-fill' : 'text-slate-600 ph';
+                const currencyFmt = fund.currency === 'ARS' ? fmtCurrency : fmtCurrencyUSD;
+
+                // --- Desktop Row ---
+                const row = document.createElement('tr');
+                row.className = 'group hover:bg-white/[0.02] transition cursor-pointer border-b border-white/5';
+                row.onclick = () => openModal(fund);
+                row.innerHTML = `
+                    <td class="py-4 px-6">
+                        <div class="flex flex-col">
+                            <span class="font-medium text-white group-hover:text-brand-accent transition truncate max-w-[280px]">${fund.name}</span>
+                            <span class="text-xs text-slate-500">${fund.manager} • ${fund.currency}</span>
+                        </div>
+                    </td>
+                    <td class="py-4 px-4">
+                        <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-white/10 whitespace-nowrap">
+                            ${fund.category}
+                        </span>
+                    </td>
+                    <td class="py-4 px-4 text-right">
+                        <div class="font-mono text-white">${currencyFmt.format(fund.vcp)}</div>
+                        <div class="text-[10px] text-slate-500">${fmtDate(fund.date)}</div>
+                    </td>
+                    <td class="py-4 px-4 text-right">
+                         <div class="font-mono text-xs ${varColor} font-medium bg-${fund.variation >= 0 ? 'emerald' : 'rose'}-500/10 px-2 py-1 rounded inline-block">
+                            ${varSign}${fmtPercent.format(fund.variation)}
+                        </div>
+                    </td>
+                    <td class="py-4 px-4 text-right text-xs text-slate-400 font-mono">
+                        ${fund.term}
+                    </td>
+                    <td class="py-4 px-6 text-center" onclick="toggleFavItem(${fund.id}, event)">
+                        <i class="${starClass} ph-star text-lg hover:text-yellow-400 transition transform hover:scale-110"></i>
+                    </td>
+                `;
+                tbody.appendChild(row);
+
+                // --- Mobile Card ---
+                const card = document.createElement('div');
+                card.className = 'glass-panel p-4 rounded-xl active:bg-white/5 transition';
+                card.onclick = () => openModal(fund);
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">${fund.manager}</span>
+                            <h3 class="text-white font-medium text-sm leading-tight mt-1">${fund.name}</h3>
+                        </div>
+                        <button class="p-2 -mr-2 -mt-2" onclick="toggleFavItem(${fund.id}, event)">
+                            <i class="${starClass} ph-star text-lg"></i>
+                        </button>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <div class="flex gap-2 mb-2">
+                                <span class="px-1.5 py-0.5 rounded bg-white/5 text-[10px] text-slate-300 border border-white/5">${fund.category}</span>
+                                <span class="px-1.5 py-0.5 rounded bg-white/5 text-[10px] text-slate-300 border border-white/5">${fund.currency}</span>
+                            </div>
+                            <div class="font-mono text-lg text-white">${currencyFmt.format(fund.vcp)}</div>
+                        </div>
+                        <div class="text-right">
+                             <div class="font-mono text-xs ${varColor} font-medium mb-1">
+                                ${varSign}${fmtPercent.format(fund.variation)}
+                            </div>
+                            <div class="text-[10px] text-slate-500">${fund.term}</div>
+                        </div>
+                    </div>
+                `;
+                mobileGrid.appendChild(card);
+            });
+        }
+
+        // --- FETCH SIMULATION ---
+        function fetchData() {
+            if (isLoading) return;
+            isLoading = true;
+            
+            // UI States
+            const btn = document.getElementById('btn-update');
+            const icon = document.getElementById('update-icon');
+            const loadingOverlay = document.getElementById('loading-state');
+            const errorState = document.getElementById('error-state');
+            
+            btn.disabled = true;
+            btn.classList.add('opacity-80');
+            icon.classList.add('animate-spin');
+            loadingOverlay.classList.remove('hidden');
+            errorState.classList.add('hidden'); // Hide previous error
+
+            // Random delay 800ms - 2000ms
+            setTimeout(() => {
+                // Random failure (10% chance)
+                if (Math.random() < 0.1) {
+                    isLoading = false;
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-80');
+                    icon.classList.remove('animate-spin');
+                    loadingOverlay.classList.add('hidden');
+                    errorState.classList.remove('hidden');
+                    return;
+                }
+
+                // Success: Update values slightly
+                allFunds.forEach(f => {
+                    const change = (Math.random() * 0.02) - 0.01; // +/- 1%
+                    f.vcp = f.vcp * (1 + change);
+                    f.variation = (Math.random() * 0.05) - 0.02; // New random daily variation
+                    f.date = new Date(); // Update date
+                });
+
+                updateLastUpdateTime();
+                applyFilters(); // Re-render
+
+                // Reset UI
+                isLoading = false;
+                btn.disabled = false;
+                btn.classList.remove('opacity-80');
+                icon.classList.remove('animate-spin');
+                loadingOverlay.classList.add('hidden');
+                
+            }, 1200);
+        }
+
+        function resetFilters() {
+            filters.search = '';
+            filters.category = 'all';
+            filters.currency = 'all';
+            document.getElementById('search-input').value = '';
+            document.getElementById('category-filter').value = 'all';
+            document.getElementById('currency-filter').value = 'all';
+            applyFilters();
+        }
+
+        // --- MODAL LOGIC ---
+        function openModal(fund) {
+            const modal = document.getElementById('modal-detail');
+            const currencyFmt = fund.currency === 'ARS' ? fmtCurrency : fmtCurrencyUSD;
+            const varColor = fund.variation >= 0 ? 'text-semantic-up' : 'text-semantic-down';
+            const varBg = fund.variation >= 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20';
+            const varIcon = fund.variation >= 0 ? 'ph-trend-up' : 'ph-trend-down';
+            
+            // Populate Data
+            document.getElementById('modal-name').textContent = fund.name;
+            document.getElementById('modal-manager').textContent = fund.manager;
+            document.getElementById('modal-currency').textContent = fund.currency;
+            document.getElementById('modal-category').textContent = fund.category;
+            document.getElementById('modal-term').textContent = fund.term;
+            document.getElementById('modal-vcp').textContent = currencyFmt.format(fund.vcp);
+            document.getElementById('modal-date').textContent = 'al ' + fmtDate(fund.date);
+            
+            const badge = document.getElementById('modal-variation-badge');
+            badge.className = `inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-bold border ${varColor} ${varBg}`;
+            badge.innerHTML = `<i class="ph-bold ${varIcon}"></i> <span>${fmtPercent.format(fund.variation)}</span>`;
+
+            document.getElementById('modal-logo').textContent = fund.manager.charAt(0);
+
+            // Generate Sparkline Bars (CSS Height)
+            const sparkContainer = document.getElementById('modal-sparkline');
+            sparkContainer.innerHTML = '';
+            const minHist = Math.min(...fund.history);
+            const maxHist = Math.max(...fund.history);
+            
+            fund.history.forEach((val, i) => {
+                // Normalize height between 20% and 100%
+                const heightPct = 20 + ((val - minHist) / (maxHist - minHist)) * 80;
+                const bar = document.createElement('div');
+                bar.className = `w-full rounded-t-sm bg-brand-primary/40 hover:bg-brand-primary transition-all spark-bar`;
+                bar.style.height = `${heightPct}%`;
+                bar.style.animationDelay = `${i * 50}ms`;
+                sparkContainer.appendChild(bar);
+            });
+
+            // Show
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal-detail').classList.add('hidden');
+        }
+
+        // Start
+        init();
+
+    </script>
+</body>
+</html>

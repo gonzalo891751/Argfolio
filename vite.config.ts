@@ -142,9 +142,36 @@ function devApiMiddleware(): Plugin {
                         return
                     }
 
+                    // /api/fci/latest
+                    if (req.url && req.url.startsWith('/api/fci/latest')) {
+                        console.log('[DEV] FCI API request received')
+                        try {
+                            const { fetchFci } = await import('./src/server/market/fciProvider')
+                            const data = await fetchFci()
+
+                            console.log(`[DEV] FCI data fetched: ${data.items.length} items`)
+
+                            res.setHeader('Content-Type', 'application/json')
+                            res.setHeader('Access-Control-Allow-Origin', '*')
+                            res.setHeader('Cache-Control', 'public, max-age=60')
+                            res.end(JSON.stringify(data))
+                            return
+                        } catch (fciError: any) {
+                            console.error('[DEV] FCI fetch error:', fciError.message)
+                            res.statusCode = 502
+                            res.setHeader('Content-Type', 'application/json')
+                            res.end(JSON.stringify({
+                                error: 'Failed to fetch FCI data',
+                                details: fciError.message,
+                                hint: 'Check if ArgentinaDatos API is reachable'
+                            }))
+                            return
+                        }
+                    }
+
                     // Not found
                     res.statusCode = 404
-                    res.end(JSON.stringify({ error: 'API endpoint not found' }))
+                    res.end(JSON.stringify({ error: 'API endpoint not found', url: req.url }))
 
                 } catch (error: any) {
                     console.error('API Error:', error)
