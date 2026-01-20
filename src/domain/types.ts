@@ -143,10 +143,12 @@ export interface Movement {
     isAuto?: boolean
     linkedMovementId?: string
     reason?: 'auto_usdt_balance' | string
+    metadata?: Record<string, any>
 }
 
 export interface MovementPFMetadata {
     kind: 'constitute' | 'redeem'
+    action?: 'CONSTITUTE' | 'SETTLE' // New field for clearer intent
     pfId: string // The ID of the constitution movement
     // For constitution
     bank?: string
@@ -162,6 +164,9 @@ export interface MovementPFMetadata {
     // For redeem
     redeemedARS?: number
     redeemedAtISO?: string
+
+    // Auto Settlement
+    isAuto?: boolean
 }
 
 export interface MovementFxSnapshot {

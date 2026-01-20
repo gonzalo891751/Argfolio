@@ -2,6 +2,8 @@ import { Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Sidebar, SidebarProvider, useSidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
+import { usePFSettlement } from '@/hooks/use-pf-settlement'
+import { useSettlementRepair } from '@/hooks/use-settlement-repair'
 
 function LayoutContent() {
     const { isCollapsed } = useSidebar()
@@ -24,6 +26,8 @@ function LayoutContent() {
 }
 
 export function AppLayout() {
+    usePFSettlement()
+    useSettlementRepair()
     return (
         <SidebarProvider>
             <LayoutContent />

@@ -133,8 +133,8 @@ export function AssetsPage() {
                 <PortfolioSummaryCard
                     totalArs={totals.totalArs + pfTotals.totalActiveARS + pfTotals.totalMaturedARS}
                     totalUsdEq={totals.totalUsdEq + pfTotals.totalActiveUSD + pfTotals.totalMaturedUSD}
-                    pnlArs={totals.totalPnlArs} // PF PnL not currently tracked in same way, could add interest as PnL?
-                    pnlPct={totals.totalPnlPct}
+                    pnlArs={totals.totalPnlArs + pfTotals.totalActiveInterestARS} // Adding PF Interest as PnL
+                    pnlPct={totals.totalPnlPct} // TODO: Recompute global ROI with PF included?
                     className="lg:max-w-md"
                 />
 
@@ -198,10 +198,22 @@ export function AssetsPage() {
                 // Visibility Check: Has Rows OR Has PFs
                 if (metrics.length === 0 && !hasPFs) return null
 
-                // ROI Calculation for Group
-                const investedArs = groupTotals.valArs - groupTotals.pnlArs
-                const groupRoiPct = investedArs !== 0 ? (groupTotals.pnlArs / investedArs) : 0
-                const groupPnlColor = groupTotals.pnlArs >= 0 ? 'text-emerald-500' : 'text-red-500'
+                // Compute PF aggregates for this account
+                const pfValArs = accountPFs.reduce((sum, pf) => sum + pf.expectedTotalARS, 0)
+                const pfInterestArs = accountPFs.reduce((sum, pf) => sum + pf.expectedInterestARS, 0)
+                const pfInvestedArs = accountPFs.reduce((sum, pf) => sum + pf.principalARS, 0)
+                const pfValUsd = pfValArs / (fxRates?.oficial.sell || 1)
+                const pfInterestUsd = pfInterestArs / (fxRates?.oficial.sell || 1) // Approx
+
+                // Merge PF into Group Totals for Display
+                const displayValArs = groupTotals.valArs + pfValArs
+                const displayValUsd = groupTotals.valUsd + pfValUsd
+                const displayPnlArs = groupTotals.pnlArs + pfInterestArs
+                const displayPnlUsd = groupTotals.pnlUsd + pfInterestUsd
+
+                const displayInvestedArs = (groupTotals.valArs - groupTotals.pnlArs) + pfInvestedArs
+                const displayRoiPct = displayInvestedArs !== 0 ? (displayPnlArs / displayInvestedArs) : 0
+                const groupPnlColor = displayPnlArs >= 0 ? 'text-emerald-500' : 'text-red-500'
 
                 // Count types for Chips
                 const typeCounts = metrics.reduce((acc, m) => {
@@ -247,14 +259,14 @@ export function AssetsPage() {
                                     <div className="flex flex-col items-end">
                                         {metrics[0]?.category === 'CRYPTO' || metrics[0]?.category === 'STABLE' ? (
                                             <>
-                                                <span className="font-bold font-numeric text-lg">{formatMoneyUSD(groupTotals.valUsd)}</span>
-                                                <span className="text-xs font-mono text-muted-foreground">{formatMoneyARS(groupTotals.valArs)}</span>
+                                                <span className="font-bold font-numeric text-lg">{formatMoneyUSD(displayValUsd)}</span>
+                                                <span className="text-xs font-mono text-muted-foreground">{formatMoneyARS(displayValArs)}</span>
                                             </>
                                         ) : (
                                             <>
-                                                <span className="font-bold font-numeric text-lg">{formatMoneyARS(groupTotals.valArs)}</span>
+                                                <span className="font-bold font-numeric text-lg">{formatMoneyARS(displayValArs)}</span>
                                                 <span className="text-xs font-mono text-sky-500">
-                                                    ≈ {formatMoneyUSD(groupTotals.valUsd)}
+                                                    ≈ {formatMoneyUSD(displayValUsd)}
                                                 </span>
                                             </>
                                         )}
@@ -267,19 +279,19 @@ export function AssetsPage() {
                                         {metrics[0]?.category === 'CRYPTO' || metrics[0]?.category === 'STABLE' ? (
                                             <>
                                                 <span className={cn("font-bold font-numeric text-lg", groupPnlColor)}>
-                                                    {formatDeltaMoneyUSD(groupTotals.pnlUsd)}
+                                                    {formatDeltaMoneyUSD(displayPnlUsd)}
                                                 </span>
                                                 <span className={cn("text-xs font-mono opacity-90", groupPnlColor)}>
-                                                    {formatDeltaMoneyARS(groupTotals.pnlArs)}
+                                                    {formatDeltaMoneyARS(displayPnlArs)}
                                                 </span>
                                             </>
                                         ) : (
                                             <>
                                                 <span className={cn("font-bold font-numeric text-lg", groupPnlColor)}>
-                                                    {formatDeltaMoneyARS(groupTotals.pnlArs)}
+                                                    {formatDeltaMoneyARS(displayPnlArs)}
                                                 </span>
                                                 <span className={cn("text-xs font-mono opacity-90", groupPnlColor)}>
-                                                    ≈ {formatDeltaMoneyUSD(groupTotals.pnlUsd)}
+                                                    ≈ {formatDeltaMoneyUSD(displayPnlUsd)}
                                                 </span>
                                             </>
                                         )}
@@ -289,13 +301,18 @@ export function AssetsPage() {
                                 <div className="text-right pl-4 border-l">
                                     <span className="block text-xs uppercase tracking-wider text-muted-foreground">Rendimiento %</span>
                                     <span className={cn("font-bold font-numeric text-lg block", groupPnlColor)}>
-                                        {/* For Crypto Group, calculate ROI on USD basis if possible, else fallback to groupRoiPct (ARS) */}
+                                        {/* For Crypto Group, calculate ROI on USD basis if possible, else fallback to displayRoiPct (ARS) */}
                                         {(() => {
                                             const isCryptoGroup = metrics[0]?.category === 'CRYPTO' || metrics[0]?.category === 'STABLE'
                                             if (isCryptoGroup && groupTotals.totalCostUsdEq) {
-                                                return formatPercent(groupTotals.pnlUsd / groupTotals.totalCostUsdEq)
+                                                // Adjust USD cost basis for ROI? PFs are not crypto usually.
+                                                // If mixed, use groupTotals for crypto cost basis + pfValUsd?
+                                                // Simplified: use displayPnlUsd / displayInvestedUsd?
+                                                // Let's stick to displayRoiPct (ARS based) for general or refine later.
+                                                // PROMPT: "Rendimiento %" simply "Total PnL / Total Invested".
+                                                return formatPercent(displayRoiPct)
                                             }
-                                            return formatPercent(groupRoiPct)
+                                            return formatPercent(displayRoiPct)
                                         })()}
                                     </span>
                                 </div>

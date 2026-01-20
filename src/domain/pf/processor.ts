@@ -7,6 +7,8 @@ export interface PFTotals {
     totalActiveUSD: number
     totalMaturedARS: number
     totalMaturedUSD: number
+    totalActivePrincipalARS: number
+    totalActiveInterestARS: number
 }
 
 export interface PFDerivedState {
@@ -31,7 +33,14 @@ export function derivePFPositions(movements: Movement[] | undefined, fxRates: Fx
         active: [],
         matured: [],
         closed: [],
-        totals: { totalActiveARS: 0, totalActiveUSD: 0, totalMaturedARS: 0, totalMaturedUSD: 0 }
+        totals: {
+            totalActiveARS: 0,
+            totalActiveUSD: 0,
+            totalMaturedARS: 0,
+            totalMaturedUSD: 0,
+            totalActivePrincipalARS: 0,
+            totalActiveInterestARS: 0
+        }
     }
 
     if (!movements) return defaultState
@@ -163,6 +172,8 @@ export function derivePFPositions(movements: Movement[] | undefined, fxRates: Fx
             defaultState.active.push({ ...pos, status: 'active' })
             defaultState.totals.totalActiveARS += total
             defaultState.totals.totalActiveUSD += (total / currentOfficialSell)
+            defaultState.totals.totalActivePrincipalARS += principal
+            defaultState.totals.totalActiveInterestARS += interest
         }
     })
 
