@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, ExternalLink, FileUp, Pencil, Plus, X } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, FileUp, Pencil, Plus, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { CardStatementData } from '@/features/personal-finances/hooks/usePersonalFinancesV3'
 import type { PFCardConsumption } from '@/db/schema'
@@ -21,6 +21,7 @@ interface CreditCardPanelProps {
     onEditConsumption: (consumption: PFCardConsumption) => void
     onMarkUnpaid: () => void
     onRegisterPayment: () => void
+    mepSell?: number | null
 }
 
 const arsFormatter = new Intl.NumberFormat('es-AR', {
@@ -66,12 +67,15 @@ export function CreditCardPanel({
     onEditConsumption,
     onMarkUnpaid,
     onRegisterPayment,
+    mepSell,
 }: CreditCardPanelProps) {
     const {
         card,
         closingStatement,
         closingConsumptions,
         closingTotal,
+        closingTotalArs,
+        closingTotalUsd,
         dueStatement,
         dueStatementRecord,
         dueTotal,
@@ -118,8 +122,9 @@ export function CreditCardPanel({
                         />
 
                         <CreditCardSummary
-                            arsAmount={closingTotal}
-                            usdAmount={undefined}
+                            arsAmount={closingTotalArs}
+                            usdAmount={closingTotalUsd}
+                            mepSell={mepSell}
                             closingInDays={closingInDays}
                             limitTotal={limitTotal}
                             limitUsedPercent={limitUsedPercent}
@@ -147,9 +152,9 @@ export function CreditCardPanel({
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h4 className="font-display text-lg text-white">Consumos del per??odo</h4>
+                                <h4 className="font-display text-lg text-white">Consumos del período</h4>
                                 <span className="text-xs text-slate-500">
-                                    Cierra {formatDayMonth(closingStatement.closeDate)}
+                                    Cierra {formatDayMonth(closingStatement.closeDate)} • Vence {formatDayMonth(closingStatement.dueDate)}
                                 </span>
                             </div>
                             <div className="flex items-center gap-2">
@@ -165,9 +170,8 @@ export function CreditCardPanel({
 
                         {closingConsumptions.length > 0 ? (
                             <div
-                                className={`space-y-3 overflow-hidden transition-all duration-500 ${
-                                    isExpanded ? 'max-h-[900px] opacity-100' : 'max-h-[420px] opacity-95'
-                                }`}
+                                className={`space-y-3 overflow-hidden transition-all duration-500 ${isExpanded ? 'max-h-[900px] opacity-100' : 'max-h-[420px] opacity-95'
+                                    }`}
                             >
                                 {visibleConsumptions.map((c) => (
                                     <div
@@ -175,8 +179,15 @@ export function CreditCardPanel({
                                         className="relative flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition border border-transparent hover:border-white/5 group"
                                     >
                                         <div>
-                                            <div className="text-sm font-medium text-white truncate max-w-[240px]">
-                                                {c.description}
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-sm font-medium text-white truncate max-w-[240px]">
+                                                    {c.description}
+                                                </div>
+                                                {c.isRecurring && (
+                                                    <span title="Consumo recurrente" className="text-indigo-400">
+                                                        <RefreshCw size={12} />
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="text-xs text-slate-500">
                                                 {formatDayMonth(c.purchaseDateISO)}
@@ -194,26 +205,31 @@ export function CreditCardPanel({
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                                <button
-                                                    onClick={(event) => {
-                                                        event.stopPropagation()
-                                                        onEditConsumption(c)
-                                                    }}
-                                                    className="p-1.5 text-slate-500 hover:text-slate-200 hover:bg-white/5 rounded transition"
-                                                    aria-label="Editar consumo"
-                                                >
-                                                    <Pencil className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={(event) => {
-                                                        event.stopPropagation()
-                                                        setConsumptionToDelete(c)
-                                                    }}
-                                                    className="p-1.5 text-rose-400/70 hover:text-rose-300 hover:bg-rose-500/10 rounded transition"
-                                                    aria-label="Eliminar consumo"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </button>
+
+                                                {!c.id.includes('::') && (
+                                                    <>
+                                                        <button
+                                                            onClick={(event) => {
+                                                                event.stopPropagation()
+                                                                onEditConsumption(c)
+                                                            }}
+                                                            className="p-1.5 text-slate-500 hover:text-slate-200 hover:bg-white/5 rounded transition"
+                                                            aria-label="Editar consumo"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={(event) => {
+                                                                event.stopPropagation()
+                                                                setConsumptionToDelete(c)
+                                                            }}
+                                                            className="p-1.5 text-rose-400/70 hover:text-rose-300 hover:bg-rose-500/10 rounded transition"
+                                                            aria-label="Eliminar consumo"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -221,7 +237,7 @@ export function CreditCardPanel({
                             </div>
                         ) : (
                             <div className="text-sm text-slate-500 text-center py-6 border border-white/5 rounded-lg bg-slate-900/40">
-                                Sin consumos este per??odo
+                                Sin consumos este período
                             </div>
                         )}
 
@@ -249,9 +265,9 @@ export function CreditCardPanel({
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h4 className="font-display text-lg text-white">Resumen a pagar</h4>
+                                <h4 className="font-display text-lg text-white">A pagar este mes</h4>
                                 <span className="text-xs text-slate-500">
-                                    Vence {formatDayMonth(dueStatement.dueDate)}
+                                    Cierre anterior • Vence {formatDayMonth(dueStatement.dueDate)}
                                 </span>
                             </div>
                         </div>

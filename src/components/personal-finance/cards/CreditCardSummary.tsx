@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 interface CreditCardSummaryProps {
     arsAmount: number
     usdAmount?: number
+    mepSell?: number | null
     closingInDays?: number
     limitUsedPercent?: number
     limitTotal?: number
@@ -36,6 +37,7 @@ function formatClosingLabel(days?: number) {
 export function CreditCardSummary({
     arsAmount,
     usdAmount,
+    mepSell,
     closingInDays,
     limitUsedPercent,
     limitTotal,
@@ -62,12 +64,26 @@ export function CreditCardSummary({
                         {arsFormatter.format(arsAmount)}
                     </span>
                 </div>
-                <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-xs text-slate-500 font-medium">USD</span>
-                    <span className="text-lg font-mono text-slate-300">
-                        {typeof usdAmount === 'number' ? usdFormatter.format(usdAmount) : '—'}
-                    </span>
-                </div>
+                {(typeof usdAmount === 'number' && usdAmount > 0) ? (
+                    <div className="flex flex-col mt-1">
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-sm text-slate-500 font-medium">USD</span>
+                            <span className="text-2xl font-mono font-bold text-emerald-400 tracking-tighter">
+                                {usdFormatter.format(usdAmount)}
+                            </span>
+                        </div>
+                        {mepSell && (
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                ≈ ARS {arsFormatter.format(usdAmount * mepSell)} @ MEP {arsFormatter.format(mepSell)}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex items-baseline gap-2 mt-1 opacity-50">
+                        <span className="text-sm text-slate-500 font-medium">USD</span>
+                        <span className="text-lg font-mono text-slate-300">—</span>
+                    </div>
+                )}
             </div>
 
             {showLimit && (

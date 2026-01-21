@@ -319,7 +319,20 @@ export function formatARS(amount: number): string {
 /**
  * Format percentage with sign
  */
+// ... existing code ...
 export function formatPercent(value: number): string {
     const sign = value > 0 ? '+' : ''
     return `${sign}${value.toFixed(1)}%`
+}
+
+/**
+ * Format currency USD style
+ */
+export function formatUSD(amount: number): string {
+    return new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(amount)
 }

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 import type { PFCreditCard, PFCardConsumption } from '@/db/schema'
 import type { CreateConsumptionInput, UpdateConsumptionInput } from '../services/pfStore'
 
@@ -34,6 +35,7 @@ export function CardConsumptionModal({
     const [hasInstallments, setHasInstallments] = useState(false)
     const [installmentTotal, setInstallmentTotal] = useState('1')
     const [createAllInstallments, setCreateAllInstallments] = useState(true)
+    const [isRecurring, setIsRecurring] = useState(false)
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
@@ -91,6 +93,7 @@ export function CardConsumptionModal({
                     category: category.trim() || undefined,
                     installmentTotal: hasInstallments ? Number(installmentTotal) : undefined,
                     createAllInstallments: hasInstallments ? createAllInstallments : undefined,
+                    isRecurring: !hasInstallments && isRecurring,
                 })
             }
             // Reset form
@@ -102,6 +105,7 @@ export function CardConsumptionModal({
             setHasInstallments(false)
             setInstallmentTotal('1')
             setCreateAllInstallments(true)
+            setIsRecurring(false)
             onClose()
         } finally {
             setLoading(false)
@@ -182,13 +186,36 @@ export function CardConsumptionModal({
                         />
                     </div>
 
+                    {/* Recurring Toggle */}
+                    <div className={cn("flex items-center justify-between p-3 rounded-lg border border-white/10 bg-[#0B1121]", hasInstallments && "opacity-50 pointer-events-none")}>
+                        <div>
+                            <span className="text-sm font-medium text-white">Repetir todos los meses</span>
+                            <p className="text-xs text-slate-400">Suscripción mensual automática</p>
+                        </div>
+                        <Switch
+                            checked={isRecurring}
+                            onCheckedChange={(val) => {
+                                setIsRecurring(val)
+                                if (val) setHasInstallments(false)
+                            }}
+                            disabled={hasInstallments}
+                        />
+                    </div>
+
                     {/* Installments Toggle */}
-                    <div className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-[#0B1121]">
+                    <div className={cn("flex items-center justify-between p-3 rounded-lg border border-white/10 bg-[#0B1121]", isRecurring && "opacity-50 pointer-events-none")}>
                         <div>
                             <span className="text-sm font-medium text-white">En Cuotas</span>
                             <p className="text-xs text-slate-400">Dividir en pagos mensuales</p>
                         </div>
-                        <Switch checked={hasInstallments} onCheckedChange={setHasInstallments} />
+                        <Switch
+                            checked={hasInstallments}
+                            onCheckedChange={(val) => {
+                                setHasInstallments(val)
+                                if (val) setIsRecurring(false)
+                            }}
+                            disabled={isRecurring}
+                        />
                     </div>
 
                     {hasInstallments && (

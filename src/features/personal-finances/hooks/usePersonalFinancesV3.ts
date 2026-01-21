@@ -21,22 +21,27 @@ import {
     type StatementPeriod
 } from '../utils/dateHelpers'
 import { computeMonthlyKpis, type MonthlyKpis } from '../models/kpis'
+import { expandRecurringConsumptions } from '../utils/recurrence'
 
 export interface CardStatementData {
     card: PFCreditCard
     // Statement closing this month (devengado)
     closingStatement: StatementPeriod
     closingConsumptions: PFCardConsumption[]
-    closingTotal: number
+    closingTotal: number // Keeps sum of all amounts (mixed)
+    closingTotalArs: number // Sum of ARS only
+    closingTotalUsd: number // Sum of USD only
     // Statement due this month (a pagar)
     dueStatement: StatementPeriod
     dueStatementRecord: PFStatement | null
     dueConsumptions: PFCardConsumption[]
     dueTotal: number
+    dueTotalArs: number
+    dueTotalUsd: number // Sum of USD only
     isPaid: boolean
 }
 
-export function usePersonalFinancesV3() {
+export function usePersonalFinancesV3(mepSell?: number | null) {
     const [loading, setLoading] = useState(true)
     const [yearMonth, setYearMonth] = useState(getCurrentYearMonth())
 
@@ -44,8 +49,10 @@ export function usePersonalFinancesV3() {
     const [creditCards, setCreditCards] = useState<PFCreditCard[]>([])
     const [consumptions, setConsumptions] = useState<PFCardConsumption[]>([])
     const [consumptionsClosing, setConsumptionsClosing] = useState<PFCardConsumption[]>([])
+    const [recurringConsumptions, setRecurringConsumptions] = useState<PFCardConsumption[]>([])
     const [statements, setStatements] = useState<PFStatement[]>([])
     const [statementsDueNextMonth, setStatementsDueNextMonth] = useState<PFStatement[]>([])
+    const [statementsDueThisMonth, setStatementsDueThisMonth] = useState<PFStatement[]>([])
     const [debts, setDebts] = useState<PFDebt[]>([])
     const [fixedExpenses, setFixedExpenses] = useState<PFFixedExpense[]>([])
     const [incomes, setIncomes] = useState<PFIncome[]>([])
@@ -92,14 +99,22 @@ export function usePersonalFinancesV3() {
         // Load consumptions for current month (both closing and due views)
         await refreshConsumptionsAndStatements(cards)
         const nextMonth = addMonthsToYearMonth(yearMonth, 1)
-        const nextStatements = await store.getStatementsDueInMonth(nextMonth)
+        const [nextStatements, thisMonthStatements] = await Promise.all([
+            store.getStatementsDueInMonth(nextMonth),
+            store.getStatementsDueInMonth(yearMonth),
+        ])
         setStatementsDueNextMonth(nextStatements)
+        setStatementsDueThisMonth(thisMonthStatements)
     }, [yearMonth])
 
     const refreshConsumptionsAndStatements = useCallback(async (cards: PFCreditCard[]) => {
         // Get consumptions that CLOSE this month (devengado)
         const closingCons = await store.getAllConsumptionsByClosingMonth(yearMonth)
         setConsumptionsClosing(closingCons)
+
+        // Get ALL recurring consumptions (global)
+        const recurring = await store.getAllRecurringConsumptions()
+        setRecurringConsumptions(recurring)
 
         // Get consumptions that are DUE this month (close was last month)
         const dueCons = await store.getConsumptionsByYearMonth(yearMonth)
@@ -144,17 +159,48 @@ export function usePersonalFinancesV3() {
         // Refresh consumptions and statements
         await refreshConsumptionsAndStatements(creditCards)
         const nextMonth = addMonthsToYearMonth(yearMonth, 1)
-        const nextStatements = await store.getStatementsDueInMonth(nextMonth)
+        const [nextStatements, thisMonthStatements] = await Promise.all([
+            store.getStatementsDueInMonth(nextMonth),
+            store.getStatementsDueInMonth(yearMonth),
+        ])
         setStatementsDueNextMonth(nextStatements)
+        setStatementsDueThisMonth(thisMonthStatements)
     }, [yearMonth, creditCards, refreshConsumptionsAndStatements])
 
     // Build card data with both closing and due periods
     const cardStatementData = useMemo<CardStatementData[]>(() => {
+        // Expand recurring consumptions for this month
+        const expandedRecurring = expandRecurringConsumptions(
+            recurringConsumptions,
+            creditCards,
+            yearMonth
+        )
+
+        // Merge with real closing consumptions
+        // Deduplicate: if a real record exists for this series in this month (checked by recurringId), prefer real.
+        const materializedRecurrenceIds = new Set(
+            consumptionsClosing
+                .map(c => c.recurringId)
+                .filter(id => !!id)
+        )
+
+        const effectiveExpanded = expandedRecurring.filter(e =>
+            !e.recurringId || !materializedRecurrenceIds.has(e.recurringId)
+        )
+
+        const mergedClosingConsumptions = [...consumptionsClosing, ...effectiveExpanded]
+
         return creditCards.map(card => {
             // Statement closing this month
             const closingStatement = getStatementClosingInMonth(card.closingDay, card.dueDay, yearMonth)
-            const closingConsumptions = consumptionsClosing.filter(c => c.cardId === card.id)
-            const closingTotal = closingConsumptions.reduce((sum, c) => sum + c.amount, 0)
+            const closingConsumptions = mergedClosingConsumptions.filter(c => c.cardId === card.id)
+            const closingTotalArs = closingConsumptions
+                .filter(c => c.currency === 'ARS' || !c.currency)
+                .reduce((sum, c) => sum + c.amount, 0)
+            const closingTotalUsd = closingConsumptions
+                .filter(c => c.currency === 'USD')
+                .reduce((sum, c) => sum + c.amount, 0)
+            const closingTotal = closingTotalArs + closingTotalUsd // Mixed sum
 
             // Statement due this month (closed last month)
             const dueStatement = getStatementDueInMonth(card.closingDay, card.dueDay, yearMonth)
@@ -162,7 +208,21 @@ export function usePersonalFinancesV3() {
                 s => s.cardId === card.id && s.dueYearMonth === yearMonth
             ) || null
             const dueConsumptions = consumptions.filter(c => c.cardId === card.id)
-            const dueTotal = dueStatementRecord?.totalAmount ?? dueConsumptions.reduce((sum, c) => sum + c.amount, 0)
+
+            // For due totals, prefer statement record if exists, otherwise sum consumptions
+            const dueTotalArs = dueStatementRecord
+                ? dueStatementRecord.totalAmount // Assumes statement is mostly ARS or consolidated. TODO: Add currency to statement?
+                : dueConsumptions
+                    .filter(c => c.currency === 'ARS' || !c.currency)
+                    .reduce((sum, c) => sum + c.amount, 0)
+
+            const dueTotalUsd = dueStatementRecord
+                ? 0 // If using statement record, we don't have split USD info yet in PFStatement
+                : dueConsumptions
+                    .filter(c => c.currency === 'USD')
+                    .reduce((sum, c) => sum + c.amount, 0)
+
+            const dueTotal = dueTotalArs + dueTotalUsd
             const isPaid = dueStatementRecord?.status === 'PAID'
 
             return {
@@ -170,14 +230,18 @@ export function usePersonalFinancesV3() {
                 closingStatement,
                 closingConsumptions,
                 closingTotal,
+                closingTotalArs,
+                closingTotalUsd,
                 dueStatement,
                 dueStatementRecord,
                 dueConsumptions,
                 dueTotal,
+                dueTotalArs,
+                dueTotalUsd,
                 isPaid,
             }
         })
-    }, [creditCards, consumptionsClosing, consumptions, statements, yearMonth])
+    }, [creditCards, consumptionsClosing, recurringConsumptions, consumptions, statements, yearMonth])
 
     // Group consumptions by card (for backward compatibility - uses closing month consumptions)
     const consumptionsByCard = useMemo(() => {
@@ -198,8 +262,11 @@ export function usePersonalFinancesV3() {
             fixedExpenses,
             consumptionsClosing,
             statementsDueNextMonth,
+            statementsDueThisMonth,
             statements,
             debts,
+            budgets,
+            mepSell,
         })
     }, [
         yearMonth,
@@ -208,8 +275,12 @@ export function usePersonalFinancesV3() {
         fixedExpenses,
         consumptionsClosing,
         statementsDueNextMonth,
+        statementsDueThisMonth,
+        statementsDueThisMonth,
         statements,
         debts,
+        budgets,
+        mepSell,
     ])
 
     // Month navigation

@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Header glassmorphism styles */
+@import './styles/header.css';
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -147,6 +150,50 @@
   background: rgba(30, 41, 59, 0.4);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Glass Alert (warning style with gradient border) */
+.glass-alert {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.05), rgba(30, 41, 59, 0.6));
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-alert::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(to bottom, #F59E0B, transparent);
+}
+
+/* Shadow Glow Utilities */
+.shadow-glow {
+  box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.3);
+}
+
+.shadow-glow-sm {
+  box-shadow: 0 0 10px -2px rgba(99, 102, 241, 0.2);
+}
+
+.shadow-glow-warn {
+  box-shadow: 0 0 15px -3px rgba(245, 158, 11, 0.2);
+}
+
+/* Insight Tile Transitions */
+.insight-tile {
+  transition: all 0.3s ease;
+}
+
+.insight-tile:hover {
+  transform: translateY(-2px);
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 }
 
 /* Input Base Styling (from prototype) */

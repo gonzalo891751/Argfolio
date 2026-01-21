@@ -27,6 +27,7 @@ import { computeTEA } from '@/domain/yield/accrual'
 const formatQty = (n: number) => n.toLocaleString('es-AR', { maximumFractionDigits: 8 })
 import { AssetTypeahead, type AssetOption, MOCK_ASSETS } from './AssetTypeahead'
 import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
+import { sortAccountsForAssetClass, calculateUnitPrice, calculateTotal, sanitizeFloat } from './wizard-helpers'
 
 // Helper Component for PF Selection
 function ExistingPFSelector({
@@ -115,6 +116,9 @@ interface WizardState {
         vcp: number
         date: string
     }
+    // Price / Total Logic
+    totalAmountInput: string
+    priceMode: 'auto' | 'manual'
 }
 
 interface MovementWizardProps {
@@ -241,6 +245,8 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 termDays: pm.termDays || pm.meta?.fixedDeposit?.termDays,
 
                 coingeckoId: (pm.assetClass === 'crypto' && asset) ? (asset as CryptoOption).coingeckoId : undefined,
+                totalAmountInput: '',
+                priceMode: 'auto'
             }
         }
 
@@ -267,6 +273,10 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
             pfCode: `PF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
             tna: 35,
             termDays: 30,
+
+            // New defaults
+            totalAmountInput: '',
+            priceMode: 'auto'
         }
     }
 
@@ -306,6 +316,42 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
         })
         return Math.max(0, val)
     }, [state.asset, state.opType, state.accountId, allMovements])
+
+    // Sort Accounts based on Asset Class
+    const sortedAccounts = useMemo(() => {
+        return sortAccountsForAssetClass(accountsList, state.assetClass)
+    }, [accountsList, state.assetClass])
+
+    // Auto-select Exchange for Crypto
+    useEffect(() => {
+        if (state.assetClass !== 'crypto') return
+        // If we already have a selected account, check if it's "bad" (e.g. generic bank) vs available exchange?
+        // Or just if we have NO account selected, or if we switched class.
+        // Requirement: "si es CRYPTO y existe al menos un Exchange: Autoseleccionar el primer Exchange"
+
+        // Only auto-select if user hasn't manually picked a valid one OR if we just switched class
+        // For simplicity: If the current account is NOT an exchange, and we have exchanges, pick the first one.
+
+        const currentAcc = accountsList.find(a => a.id === state.accountId)
+        // We use the helper's sorting, so the first one in sortedAccounts is likely the best match (Exchange)
+        const bestMatch = sortedAccounts[0]
+
+        if (bestMatch && bestMatch.id !== state.accountId) {
+            // Heuristic: If current is Bank and we want Exchange, switch.
+            // If we rely purely on sorting, we can just switch to sortedAccounts[0] if it's much better?
+            // Let's iterate sortedAccounts. If the top one is Exchange and current is NOT Exchange, switch.
+            // We need to know the 'kind' of the top one.
+            // We can check if sortedAccounts[0] is an Exchange/Broker and current is not.
+
+            // Simple implementation: If there is an Exchange, and current is not Exchange, switch.
+            const isCurrentExchange = currentAcc && (currentAcc.kind === 'EXCHANGE' || currentAcc.name.toLowerCase().includes('binance') || currentAcc.name.toLowerCase().includes('lemon'))
+            const firstIsExchange = bestMatch.kind === 'EXCHANGE' || bestMatch.name.toLowerCase().includes('binance')
+
+            if (firstIsExchange && !isCurrentExchange) {
+                setState(s => ({ ...s, accountId: bestMatch.id }))
+            }
+        }
+    }, [state.assetClass, sortedAccounts]) // Depend on sortedAccounts which updates when accountsList or assetClass changes
 
     // Update FX rate when fxType or fxRates change
     useEffect(() => {
@@ -1426,7 +1472,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                     tna: acc?.cashYield?.tna || undefined
                                                 }))
                                             }}
-                                            accounts={accountsList}
+                                            accounts={sortedAccounts}
                                         />
 
                                         {/* Yield Configuration for Wallet/Liquidity */}
@@ -1787,41 +1833,14 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                         </div>
                                                     </div>
                                                 </div>
-                                            ) : (
-                                                /* Standard Generic UI */
-                                                <>
-                                                    {/* Currency Toggle */}
-                                                    <div>
-                                                        <label className="block text-xs font-mono text-slate-500 uppercase mb-2">
-                                                            Moneda de operación
-                                                        </label>
-                                                        <div className="flex space-x-4">
-                                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                                <input
-                                                                    type="radio"
-                                                                    name="currency"
-                                                                    value="ARS"
-                                                                    checked={state.currency === 'ARS'}
-                                                                    onChange={() => setState(s => ({ ...s, currency: 'ARS' }))}
-                                                                    className="text-indigo-500 focus:ring-indigo-500 bg-slate-800 border-slate-600"
-                                                                />
-                                                                <span className="text-white font-mono">ARS (Pesos)</span>
-                                                            </label>
-                                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                                <input
-                                                                    type="radio"
-                                                                    name="currency"
-                                                                    value="USD"
-                                                                    checked={state.currency === 'USD'}
-                                                                    onChange={() => setState(s => ({ ...s, currency: 'USD' }))}
-                                                                    className="text-indigo-500 focus:ring-indigo-500 bg-slate-800 border-slate-600"
-                                                                />
-                                                                <span className="text-white font-mono">USD (Dólares)</span>
-                                                            </label>
-                                                        </div>
-                                                    </div>
+                                            ) : null}
 
-                                                    {/* Qty & Price */}
+                                            {/* Generic / Crypto Step 3 UI with Total-Input */}
+                                            {/* Replaces the old Generic UI block if we want to standardize input behavior */}
+                                            {/* Generic / Crypto Step 3 UI with Total-Input */}
+                                            {state.assetClass !== 'currency' && (
+                                                <div className="space-y-6">
+                                                    {/* Row 1: Qty & Total (The new layout for Crypto) */}
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div>
                                                             <label className="block text-sm font-medium text-slate-400 mb-2">
@@ -1832,33 +1851,94 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                 value={state.qtyStr || ''}
                                                                 onChange={e => {
                                                                     const rawVal = e.target.value;
+                                                                    let val = 0;
+
                                                                     if (state.assetClass === 'crypto') {
                                                                         const sanitized = rawVal.replace(/[^0-9,.]/g, '');
                                                                         const parts = sanitized.split(/[.,]/);
                                                                         if (parts.length > 2) return;
                                                                         if (parts[1] && parts[1].length > 8) return;
+                                                                        val = parseFloat(sanitized.replace(',', '.')) || 0;
 
-                                                                        const normalized = sanitized.replace(',', '.');
-                                                                        setState(s => ({
-                                                                            ...s,
-                                                                            qtyStr: sanitized,
-                                                                            qty: parseFloat(normalized) || 0
-                                                                        }));
+                                                                        setState(s => {
+                                                                            // Logic: 
+                                                                            // Mode Auto: Price = Total (fixed) / Qty
+                                                                            // Mode Manual: Total = Qty * Price (fixed)
+                                                                            let newPrice = s.price
+                                                                            let newTotalStr = s.totalAmountInput
+
+                                                                            if (s.priceMode === 'auto') {
+                                                                                // Keep Total fixed (from input), calc Price
+                                                                                const currentTotal = parseFloat(s.totalAmountInput) || 0
+                                                                                newPrice = calculateUnitPrice(currentTotal, val)
+                                                                            } else {
+                                                                                // Keep Price fixed, calc Total
+                                                                                const newTotal = calculateTotal(s.price, val)
+                                                                                newTotalStr = newTotal > 0 ? newTotal.toFixed(2) : ''
+                                                                            }
+
+                                                                            return {
+                                                                                ...s,
+                                                                                qtyStr: sanitized,
+                                                                                qty: val,
+                                                                                price: sanitizeFloat(newPrice),
+                                                                                totalAmountInput: newTotalStr
+                                                                            }
+                                                                        });
                                                                     } else {
-                                                                        const val = parseFloat(rawVal) || 0;
-                                                                        setState(s => ({ ...s, qtyStr: rawVal, qty: val }));
+                                                                        val = parseFloat(rawVal) || 0;
+                                                                        setState(s => {
+                                                                            let newPrice = s.price
+                                                                            let newTotalStr = s.totalAmountInput
+                                                                            if (s.priceMode === 'auto') {
+                                                                                const currentTotal = parseFloat(s.totalAmountInput) || 0
+                                                                                newPrice = calculateUnitPrice(currentTotal, val)
+                                                                            } else {
+                                                                                const newTotal = calculateTotal(s.price, val)
+                                                                                newTotalStr = newTotal > 0 ? newTotal.toFixed(2) : ''
+                                                                            }
+                                                                            return { ...s, qtyStr: rawVal, qty: val, price: sanitizeFloat(newPrice), totalAmountInput: newTotalStr }
+                                                                        });
                                                                     }
                                                                 }}
                                                                 placeholder={state.assetClass === 'crypto' ? "0,00000000" : "0"}
                                                                 step={state.assetClass === 'crypto' ? "0.00000001" : "1"}
                                                                 inputMode="decimal"
-                                                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                                                 className="input-base w-full rounded-lg px-4 py-3 text-white font-mono text-lg"
                                                             />
                                                         </div>
                                                         <div>
                                                             <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                Total Operación ({state.currency === 'USD' ? 'u$s' : '$'})
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                value={state.totalAmountInput || ''}
+                                                                onChange={e => {
+                                                                    const val = parseFloat(e.target.value) || 0
+                                                                    setState(s => ({
+                                                                        ...s,
+                                                                        totalAmountInput: e.target.value,
+                                                                        priceMode: 'auto', // User editing total => Auto mode
+                                                                        price: calculateUnitPrice(val, s.qty)
+                                                                    }))
+                                                                }}
+                                                                placeholder="0.00"
+                                                                className="input-base w-full rounded-lg px-4 py-3 text-white font-mono text-lg"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 2: Price (Auto-calc but editable) & Currency */}
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="flex items-center gap-2 text-sm font-medium text-slate-400 mb-2">
                                                                 Precio Unitario
+                                                                {state.priceMode === 'auto' && (
+                                                                    <span className="text-[10px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">
+                                                                        Auto
+                                                                    </span>
+                                                                )}
                                                             </label>
                                                             <div className="relative">
                                                                 <span className="absolute left-3 top-3.5 text-slate-500 font-mono">
@@ -1867,19 +1947,58 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                 <input
                                                                     type="number"
                                                                     value={state.price || ''}
-                                                                    onChange={e =>
-                                                                        setState(s => ({
-                                                                            ...s,
-                                                                            price: parseFloat(e.target.value) || 0,
-                                                                        }))
-                                                                    }
+                                                                    onChange={e => {
+                                                                        const val = parseFloat(e.target.value) || 0
+                                                                        setState(s => {
+                                                                            // User editing Price => Manual Mode
+                                                                            // Recalc Total based on Qty * Price
+                                                                            const newTotal = calculateTotal(val, s.qty)
+
+                                                                            return {
+                                                                                ...s,
+                                                                                price: val,
+                                                                                priceMode: 'manual',
+                                                                                totalAmountInput: newTotal > 0 ? newTotal.toFixed(2) : ''
+                                                                            }
+                                                                        })
+                                                                    }}
                                                                     placeholder="0.00"
-                                                                    className="input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg"
+                                                                    className={cn(
+                                                                        "input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg transition-colors",
+                                                                        state.priceMode === 'auto' ? "bg-slate-800/50 text-slate-300 focus:bg-slate-800 focus:text-white" : ""
+                                                                    )}
                                                                 />
                                                             </div>
                                                         </div>
+
+                                                        {/* Currency Selector */}
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                Moneda
+                                                            </label>
+                                                            <div className="flex bg-slate-800/50 rounded-lg p-1 border border-white/5">
+                                                                <button
+                                                                    onClick={() => setState(s => ({ ...s, currency: 'ARS' }))}
+                                                                    className={cn(
+                                                                        "flex-1 py-2 text-sm font-medium rounded-md transition-all",
+                                                                        state.currency === 'ARS' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
+                                                                    )}
+                                                                >
+                                                                    ARS
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setState(s => ({ ...s, currency: 'USD' }))}
+                                                                    className={cn(
+                                                                        "flex-1 py-2 text-sm font-medium rounded-md transition-all",
+                                                                        state.currency === 'USD' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
+                                                                    )}
+                                                                >
+                                                                    USD
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </>
+                                                </div>
                                             )}
 
                                             {/* Commission Section */}

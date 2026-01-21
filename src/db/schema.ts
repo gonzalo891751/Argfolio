@@ -32,6 +32,14 @@ export interface PFCardConsumption {
     installmentTotal?: number     // null = single payment
     installmentIndex?: number     // 1-based
     category?: string
+    isRecurring?: boolean
+    recurring?: {
+        freq: 'monthly'
+        interval?: number
+        startDate: string // ISO
+        until?: string | null
+    }
+    recurringId?: string
     createdAt: string
 }
 

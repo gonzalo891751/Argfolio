@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Favicon System</title>
+    
+    <!-- Fonts: Brand Book Standard -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tailwind Config based on Argfolio Brand Book -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0B1121', // Deep Navy (Main BG)
+                            800: '#151E32', // Surface 1
+                            700: '#1E293B', // Surface 2
+                            primary: '#6366F1', // Indigo Electric
+                            accent: '#0EA5E9', // Sky Blue
+                        },
+                        semantic: {
+                            up: '#10b981', 
+                            down: '#f43f5e',
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.15)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Utilities */
+        body {
+            background-color: #0B1121;
+            color: #F8FAFC;
+        }
+        
+        .grid-bg {
+            background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* Browser Mockup Styles */
+        .browser-tab {
+            clip-path: polygon(10% 0, 90% 0, 100% 100%, 0% 100%);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-6 md:p-12 selection:bg-brand-primary selection:text-white">
+
+    <!-- Header -->
+    <header class="max-w-6xl mx-auto mb-16 border-b border-white/10 pb-8">
+        <div class="flex items-center gap-4 mb-4">
+            <!-- Mini Logo Reference -->
+            <svg class="w-8 h-8 text-brand-primary" viewBox="0 0 100 100" fill="none">
+                <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                <circle cx="50" cy="35" r="8" fill="white"/>
+            </svg>
+            <div>
+                <h1 class="font-display font-bold text-3xl md:text-4xl text-white tracking-tight">Favicon System</h1>
+                <p class="font-mono text-sm text-slate-500 mt-1">Argfolio UI Kit v1.0 • <span class="text-brand-primary">Production Ready</span></p>
+            </div>
+        </div>
+        <p class="text-slate-400 max-w-2xl text-lg font-light leading-relaxed">
+            Sistema de iconos optimizado para escalabilidad en navegador y OS.
+            Diseñado para legibilidad máxima desde <span class="font-mono text-brand-primary">16px</span> hasta <span class="font-mono text-brand-primary">512px</span>.
+        </p>
+    </header>
+
+    <main class="max-w-6xl mx-auto space-y-20">
+
+        <!-- SECTION 1: THE CANDIDATES -->
+        <section>
+            <div class="flex items-end justify-between mb-6">
+                <h2 class="font-mono text-sm text-brand-primary uppercase tracking-widest font-bold">01. Variantes Propuestas</h2>
+                <span class="text-xs text-slate-500 font-mono hidden md:inline-block">SVG VECTORS • 1:1 RATIO</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                
+                <!-- Variant A: Brand Solid (Recomendado PWA) -->
+                <div class="group">
+                    <div class="relative bg-brand-800 border border-white/10 rounded-2xl p-12 flex items-center justify-center aspect-square transition-all hover:border-brand-primary/50 hover:shadow-glow">
+                        <div class="absolute top-4 left-4 font-mono text-xs text-slate-500 group-hover:text-brand-primary transition-colors">OPCIÓN A (SOLID)</div>
+                        
+                        <!-- Icon Render -->
+                        <div class="w-32 h-32 bg-brand-primary rounded-2xl shadow-lg flex items-center justify-center relative overflow-hidden">
+                            <svg class="w-20 h-20 text-white drop-shadow-md" viewBox="0 0 100 100" fill="none">
+                                <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                                <circle cx="50" cy="35" r="8" fill="currentColor"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <h3 class="font-display font-bold text-lg text-white">Brand Solid</h3>
+                        <p class="text-sm text-slate-400 mt-1">Fondo Indigo primario. Máximo impacto. Ideal para <span class="text-white">Home Screen (iOS/Android)</span>.</p>
+                    </div>
+                </div>
+
+                <!-- Variant B: Glyph (Recomendado Browser) -->
+                <div class="group">
+                    <div class="relative grid-bg bg-brand-800/50 border border-white/10 rounded-2xl p-12 flex items-center justify-center aspect-square transition-all hover:border-brand-primary/50 hover:shadow-glow">
+                        <div class="absolute top-4 left-4 font-mono text-xs text-slate-500 group-hover:text-brand-primary transition-colors">OPCIÓN B (GLYPH)</div>
+                        
+                        <!-- Icon Render -->
+                         <div class="w-32 h-32 flex items-center justify-center">
+                            <svg class="w-full h-full text-brand-primary filter drop-shadow-[0_0_15px_rgba(99,102,241,0.4)]" viewBox="0 0 100 100" fill="none">
+                                <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                                <circle cx="50" cy="35" r="8" fill="white"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <h3 class="font-display font-bold text-lg text-white">Indigo Glyph</h3>
+                        <p class="text-sm text-slate-400 mt-1">Fondo transparente. Silueta limpia. Ideal para <span class="text-white">Pestañas de Navegador</span> (Light/Dark).</p>
+                    </div>
+                </div>
+
+                <!-- Variant C: Dark (Recomendado Alternativo) -->
+                <div class="group">
+                    <div class="relative bg-[#E2E8F0] border border-white/10 rounded-2xl p-12 flex items-center justify-center aspect-square transition-all hover:border-brand-900/50">
+                        <div class="absolute top-4 left-4 font-mono text-xs text-slate-500">OPCIÓN C (DARK)</div>
+                        
+                        <!-- Icon Render -->
+                        <div class="w-32 h-32 bg-brand-900 rounded-2xl shadow-xl flex items-center justify-center">
+                            <svg class="w-20 h-20 text-brand-primary" viewBox="0 0 100 100" fill="none">
+                                <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                                <circle cx="50" cy="35" r="8" fill="white"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <h3 class="font-display font-bold text-lg text-white">Deep Navy</h3>
+                        <p class="text-sm text-slate-400 mt-1">Fondo oscuro corporativo. Elegante y sobrio. Alternativa para <span class="text-white">Modo Claro</span>.</p>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SECTION 2: BROWSER SIMULATION -->
+        <section>
+            <h2 class="font-mono text-sm text-brand-primary uppercase tracking-widest font-bold mb-6">02. Browser Context (Real World)</h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                
+                <!-- Dark Mode Browser -->
+                <div class="rounded-xl overflow-hidden border border-white/10 bg-[#0F172A] shadow-2xl">
+                    <!-- Browser Chrome -->
+                    <div class="bg-[#1E293B] px-4 pt-3 pb-0 flex items-end gap-2 border-b border-black/20">
+                        <div class="flex gap-1.5 mb-3 mr-4">
+                            <div class="w-3 h-3 rounded-full bg-red-500/20"></div>
+                            <div class="w-3 h-3 rounded-full bg-yellow-500/20"></div>
+                            <div class="w-3 h-3 rounded-full bg-green-500/20"></div>
+                        </div>
+                        
+                        <!-- Active Tab -->
+                        <div class="bg-[#0F172A] rounded-t-lg px-4 py-2 flex items-center gap-3 min-w-[180px] shadow-sm relative top-[1px]">
+                            <!-- FAVICON 16PX USAGE -->
+                            <svg class="w-4 h-4 text-brand-primary" viewBox="0 0 100 100" fill="none">
+                                <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                                <circle cx="50" cy="35" r="10" fill="white"/> <!-- Slightly larger dot for 16px readability -->
+                            </svg>
+                            <span class="text-xs font-sans text-white truncate">Mi Portafolio — Argfolio</span>
+                            <span class="ml-auto text-slate-500 hover:text-white cursor-pointer">×</span>
+                        </div>
+                        
+                        <!-- Inactive Tab -->
+                        <div class="px-4 py-2 flex items-center gap-3 min-w-[150px] opacity-50 hover:opacity-100 transition-opacity">
+                            <div class="w-4 h-4 bg-slate-600 rounded-full"></div>
+                            <span class="text-xs font-sans text-slate-400 truncate">Dólar Hoy - Cotiz...</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Browser Body -->
+                    <div class="p-8 bg-[#0B1121] h-48 flex flex-col items-center justify-center border-t border-brand-primary/20">
+                         <h4 class="font-display text-2xl text-white mb-2">Dark Mode</h4>
+                         <p class="text-slate-400 text-sm">El icono "Glyph" (Opción B) brilla con el propio color de acento.</p>
+                    </div>
+                </div>
+
+                <!-- Light Mode Browser -->
+                <div class="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
+                    <!-- Browser Chrome -->
+                    <div class="bg-[#F1F5F9] px-4 pt-3 pb-0 flex items-end gap-2 border-b border-slate-300">
+                        <div class="flex gap-1.5 mb-3 mr-4">
+                            <div class="w-3 h-3 rounded-full bg-slate-300"></div>
+                            <div class="w-3 h-3 rounded-full bg-slate-300"></div>
+                            <div class="w-3 h-3 rounded-full bg-slate-300"></div>
+                        </div>
+                        
+                        <!-- Active Tab -->
+                        <div class="bg-white rounded-t-lg px-4 py-2 flex items-center gap-3 min-w-[180px] shadow-sm relative top-[1px] border-t border-r border-l border-slate-200">
+                            <!-- FAVICON 16PX USAGE -->
+                            <svg class="w-4 h-4 text-brand-primary" viewBox="0 0 100 100" fill="none">
+                                <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                                <circle cx="50" cy="35" r="10" fill="white"/> <!-- Slightly larger dot for 16px readability -->
+                            </svg>
+                            <span class="text-xs font-sans text-slate-900 font-medium truncate">Mercado — Argfolio</span>
+                            <span class="ml-auto text-slate-400 hover:text-slate-700 cursor-pointer">×</span>
+                        </div>
+                         <!-- Inactive Tab -->
+                         <div class="px-4 py-2 flex items-center gap-3 min-w-[150px] opacity-60">
+                            <img src="https://www.google.com/favicon.ico" class="w-4 h-4 opacity-50" alt="">
+                            <span class="text-xs font-sans text-slate-500 truncate">Google Search</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Browser Body -->
+                    <div class="p-8 bg-white h-48 flex flex-col items-center justify-center">
+                        <h4 class="font-display text-2xl text-slate-900 mb-2">Light Mode</h4>
+                        <p class="text-slate-500 text-sm">El contraste Indigo sobre fondo claro es excelente.</p>
+                   </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SECTION 3: SCALABILITY TEST -->
+        <section class="bg-brand-800/30 rounded-2xl border border-white/5 p-8">
+            <h2 class="font-mono text-sm text-brand-primary uppercase tracking-widest font-bold mb-8">03. Scalability Grid (Pixel Perfect)</h2>
+            
+            <div class="flex flex-col md:flex-row gap-12 justify-center items-end">
+                
+                <!-- 16px -->
+                <div class="flex flex-col items-center gap-4">
+                    <div class="w-[64px] h-[64px] flex items-center justify-center bg-white/5 rounded border border-white/10">
+                        <svg class="w-4 h-4 text-brand-primary" viewBox="0 0 100 100" fill="none">
+                            <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                            <circle cx="50" cy="35" r="12" fill="white"/> <!-- Adjusted radius for small size -->
+                        </svg>
+                    </div>
+                    <div class="text-center">
+                        <div class="font-mono text-brand-accent text-lg">16px</div>
+                        <div class="text-[10px] text-slate-500 uppercase">Tab / Bookmark</div>
+                    </div>
+                </div>
+
+                <!-- 32px -->
+                <div class="flex flex-col items-center gap-4">
+                     <div class="w-[64px] h-[64px] flex items-center justify-center bg-white/5 rounded border border-white/10">
+                        <svg class="w-8 h-8 text-brand-primary" viewBox="0 0 100 100" fill="none">
+                            <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                            <circle cx="50" cy="35" r="8" fill="white"/>
+                        </svg>
+                    </div>
+                    <div class="text-center">
+                        <div class="font-mono text-brand-accent text-lg">32px</div>
+                        <div class="text-[10px] text-slate-500 uppercase">Retina / Shortcut</div>
+                    </div>
+                </div>
+
+                <!-- 48px -->
+                <div class="flex flex-col items-center gap-4">
+                     <div class="w-[64px] h-[64px] flex items-center justify-center bg-white/5 rounded border border-white/10">
+                        <svg class="w-12 h-12 text-brand-primary" viewBox="0 0 100 100" fill="none">
+                            <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                            <circle cx="50" cy="35" r="8" fill="white"/>
+                        </svg>
+                    </div>
+                    <div class="text-center">
+                        <div class="font-mono text-brand-accent text-lg">48px</div>
+                        <div class="text-[10px] text-slate-500 uppercase">Desktop Icon</div>
+                    </div>
+                </div>
+
+                 <!-- 180px (App Icon) -->
+                 <div class="flex flex-col items-center gap-4 ml-0 md:ml-8">
+                    <div class="w-[64px] h-[64px] bg-brand-primary rounded-xl shadow-lg flex items-center justify-center overflow-hidden">
+                       <svg class="w-10 h-10 text-white" viewBox="0 0 100 100" fill="none">
+                           <path d="M50 10L10 90H30L50 50L70 90H90L50 10Z" fill="currentColor"/>
+                           <circle cx="50" cy="35" r="8" fill="currentColor"/>
+                       </svg>
+                   </div>
+                   <div class="text-center">
+                       <div class="font-mono text-brand-accent text-lg">180px</div>
+                       <div class="text-[10px] text-slate-500 uppercase">iOS Touch Icon</div>
+                   </div>
+               </div>
+
+            </div>
+        </section>
+
+        <!-- CHECKLIST / FOOTER -->
+        <footer class="border-t border-white/10 pt-8 pb-16">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div class="space-y-2">
+                    <h3 class="text-white font-medium">Próximos Pasos</h3>
+                    <ul class="text-sm text-slate-400 space-y-1 font-mono">
+                        <li class="flex items-center gap-2"><span class="text-brand-semantic-up">✓</span> Validar contraste en modo oscuro</li>
+                        <li class="flex items-center gap-2"><span class="text-brand-semantic-up">✓</span> Verificar legibilidad geométrica</li>
+                        <li class="flex items-center gap-2 text-slate-600">○ Exportar SVGs finales</li>
+                        <li class="flex items-center gap-2 text-slate-600">○ Generar favicon.ico multisize</li>
+                    </ul>
+                </div>
+                <div class="flex gap-4">
+                    <button class="px-6 py-3 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 transition text-sm font-medium">
+                        Descargar Assets (.ZIP)
+                    </button>
+                    <button class="px-6 py-3 rounded-lg bg-brand-primary text-white hover:bg-indigo-500 transition shadow-glow text-sm font-medium">
+                        Aprobar Diseño
+                    </button>
+                </div>
+            </div>
+        </footer>
+
+    </main>
+</body>
+</html>
