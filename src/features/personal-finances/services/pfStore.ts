@@ -325,6 +325,7 @@ export interface CreateConsumptionInput {
     category?: string
     installmentTotal?: number
     createAllInstallments?: boolean
+    isRecurring?: boolean
 }
 
 export interface UpdateConsumptionInput {
@@ -340,7 +341,7 @@ export async function createConsumption(
     input: CreateConsumptionInput,
     card: PFCreditCard
 ): Promise<PFCardConsumption[]> {
-    const { cardId, description, amount, purchaseDateISO, currency, category, installmentTotal, createAllInstallments } = input
+    const { cardId, description, amount, purchaseDateISO, currency, category, installmentTotal, createAllInstallments, isRecurring } = input
 
     // Calculate which statement this consumption belongs to
     const baseStatement = getStatementForTransaction(card.closingDay, card.dueDay, purchaseDateISO)
@@ -369,6 +370,15 @@ export async function createConsumption(
             installmentTotal: installments > 1 ? installments : undefined,
             installmentIndex: installments > 1 ? i + 1 : undefined,
             category,
+            // Recurrence: Only if no installments
+            isRecurring: (isRecurring && installments === 1) ? true : undefined,
+            recurring: (isRecurring && installments === 1) ? {
+                freq: 'monthly',
+                interval: 1,
+                startDate: purchaseDateISO,
+                until: null,
+            } : undefined,
+            recurringId: (isRecurring && installments === 1) ? crypto.randomUUID() : undefined,
             createdAt: new Date().toISOString(),
         }
         await db.pfConsumptions.put(cons)
@@ -802,4 +812,8 @@ export async function recordDebtPayment(
     if (!debt) return
     const payments = [...(debt.payments || []), params]
     await db.pfDebts.update(id, { payments })
+}
+
+export async function getAllRecurringConsumptions(): Promise<PFCardConsumption[]> {
+    return db.pfConsumptions.filter(c => !!c.isRecurring).toArray()
 }

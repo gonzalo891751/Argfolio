@@ -21,6 +21,7 @@ import {
     type StatementPeriod
 } from '../utils/dateHelpers'
 import { computeMonthlyKpis, type MonthlyKpis } from '../models/kpis'
+import { expandRecurringConsumptions } from '../utils/recurrence'
 
 export interface CardStatementData {
     card: PFCreditCard
@@ -48,6 +49,7 @@ export function usePersonalFinancesV3(mepSell?: number | null) {
     const [creditCards, setCreditCards] = useState<PFCreditCard[]>([])
     const [consumptions, setConsumptions] = useState<PFCardConsumption[]>([])
     const [consumptionsClosing, setConsumptionsClosing] = useState<PFCardConsumption[]>([])
+    const [recurringConsumptions, setRecurringConsumptions] = useState<PFCardConsumption[]>([])
     const [statements, setStatements] = useState<PFStatement[]>([])
     const [statementsDueNextMonth, setStatementsDueNextMonth] = useState<PFStatement[]>([])
     const [statementsDueThisMonth, setStatementsDueThisMonth] = useState<PFStatement[]>([])
@@ -110,6 +112,10 @@ export function usePersonalFinancesV3(mepSell?: number | null) {
         const closingCons = await store.getAllConsumptionsByClosingMonth(yearMonth)
         setConsumptionsClosing(closingCons)
 
+        // Get ALL recurring consumptions (global)
+        const recurring = await store.getAllRecurringConsumptions()
+        setRecurringConsumptions(recurring)
+
         // Get consumptions that are DUE this month (close was last month)
         const dueCons = await store.getConsumptionsByYearMonth(yearMonth)
         setConsumptions(dueCons)
@@ -163,10 +169,31 @@ export function usePersonalFinancesV3(mepSell?: number | null) {
 
     // Build card data with both closing and due periods
     const cardStatementData = useMemo<CardStatementData[]>(() => {
+        // Expand recurring consumptions for this month
+        const expandedRecurring = expandRecurringConsumptions(
+            recurringConsumptions,
+            creditCards,
+            yearMonth
+        )
+
+        // Merge with real closing consumptions
+        // Deduplicate: if a real record exists for this series in this month (checked by recurringId), prefer real.
+        const materializedRecurrenceIds = new Set(
+            consumptionsClosing
+                .map(c => c.recurringId)
+                .filter(id => !!id)
+        )
+
+        const effectiveExpanded = expandedRecurring.filter(e =>
+            !e.recurringId || !materializedRecurrenceIds.has(e.recurringId)
+        )
+
+        const mergedClosingConsumptions = [...consumptionsClosing, ...effectiveExpanded]
+
         return creditCards.map(card => {
             // Statement closing this month
             const closingStatement = getStatementClosingInMonth(card.closingDay, card.dueDay, yearMonth)
-            const closingConsumptions = consumptionsClosing.filter(c => c.cardId === card.id)
+            const closingConsumptions = mergedClosingConsumptions.filter(c => c.cardId === card.id)
             const closingTotalArs = closingConsumptions
                 .filter(c => c.currency === 'ARS' || !c.currency)
                 .reduce((sum, c) => sum + c.amount, 0)
@@ -214,7 +241,7 @@ export function usePersonalFinancesV3(mepSell?: number | null) {
                 isPaid,
             }
         })
-    }, [creditCards, consumptionsClosing, consumptions, statements, yearMonth])
+    }, [creditCards, consumptionsClosing, recurringConsumptions, consumptions, statements, yearMonth])
 
     // Group consumptions by card (for backward compatibility - uses closing month consumptions)
     const consumptionsByCard = useMemo(() => {
