@@ -170,9 +170,10 @@ export function PersonalFinancesPage() {
                 />
                 <KPICard
                     title="Total Tarjetas"
-                    value={formatARS(pf.totals.totalCards)}
+                    value={formatARS(pf.totals.totalCardsDueUnpaid)}
                     icon={TrendingDown}
-                    type="neutral"
+                    type={pf.totals.totalCardsDueUnpaid > 0 ? 'danger' : 'neutral'}
+                    subValue={pf.totals.totalCards > 0 ? `Devengado: ${formatARS(pf.totals.totalCards)}` : undefined}
                 />
                 <CoverageRatioCard
                     ratio={coverageRatio}
@@ -217,9 +218,7 @@ export function PersonalFinancesPage() {
                     <div className="space-y-8">
                         {/* Credit Cards Section */}
                         <CreditCardsSection
-                            cards={pf.creditCards}
-                            consumptionsByCard={pf.consumptionsByCard}
-                            yearMonth={pf.yearMonth}
+                            cardData={pf.cardStatementData}
                             onManageCards={() => setIsCardManageOpen(true)}
                             onAddConsumption={(cardId) => {
                                 const card = pf.creditCards.find(c => c.id === cardId)
@@ -229,6 +228,8 @@ export function PersonalFinancesPage() {
                                 // TODO: Navigate to full detail or open modal
                                 console.log('View all', cardId)
                             }}
+                            onMarkPaid={(cardId, date) => pf.markStatementPaid(cardId, date)}
+                            onMarkUnpaid={(cardId) => pf.markStatementUnpaid(cardId)}
                         />
 
                         {/* Traditional Debts */}

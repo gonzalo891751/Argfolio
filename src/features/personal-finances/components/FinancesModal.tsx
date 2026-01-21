@@ -135,7 +135,11 @@ export function FinancesModal({
                     )}
 
                     {step === 'form' && selectedType === 'debt' && (
-                        <DebtWizard onSave={handleSave} onBack={handleBackToType} />
+                        <DebtWizard
+                            onSave={handleSave}
+                            onBack={handleBackToType}
+                            initialData={editItem as PFDebt | undefined}
+                        />
                     )}
 
                     {step === 'form' && selectedType === 'budget' && (

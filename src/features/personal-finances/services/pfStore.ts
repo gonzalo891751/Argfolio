@@ -2,8 +2,13 @@
 // Personal Finances V3 Store — Dexie Persistence
 // =============================================================================
 
-import { db, type PFCreditCard, type PFCardConsumption, type PFDebt, type PFFixedExpense, type PFIncome, type PFBudgetCategory } from '@/db/schema'
-import { calculatePostedYearMonth, addMonthsToYearMonth, getCurrentYearMonth } from '../utils/dateHelpers'
+import { db, type PFCreditCard, type PFCardConsumption, type PFStatement, type PFDebt, type PFFixedExpense, type PFIncome, type PFBudgetCategory } from '@/db/schema'
+import {
+    addMonthsToYearMonth,
+    getCurrentYearMonth,
+    getStatementForTransaction,
+    getStatementClosingInMonth,
+} from '../utils/dateHelpers'
 
 // Legacy localStorage keys
 const STORAGE_KEY_V2 = 'argfolio.personalFinances.v2'
@@ -67,6 +72,7 @@ export async function migrateToV3(): Promise<void> {
                 if (card.consumptions?.length) {
                     for (const cons of card.consumptions) {
                         const purchaseDate = cons.date || new Date().toISOString().split('T')[0]
+                        const statement = getStatementForTransaction(newCard.closingDay, newCard.dueDay, purchaseDate)
                         const newCons: PFCardConsumption = {
                             id: cons.id || crypto.randomUUID(),
                             cardId: newCard.id,
@@ -74,7 +80,8 @@ export async function migrateToV3(): Promise<void> {
                             amount: cons.amount || 0,
                             currency: 'ARS',
                             purchaseDateISO: purchaseDate,
-                            postedYearMonth: calculatePostedYearMonth(purchaseDate, newCard.closingDay, newCard.dueDay),
+                            closingYearMonth: statement.closingYearMonth,
+                            postedYearMonth: statement.dueYearMonth,
                             installmentTotal: cons.installments?.total,
                             installmentIndex: cons.installments?.current,
                             category: cons.category,
@@ -168,6 +175,35 @@ export async function migrateToV3(): Promise<void> {
     }
 }
 
+/**
+ * Migrate existing consumptions to add closingYearMonth if missing.
+ * This handles the V3 -> V4 schema upgrade.
+ */
+export async function migrateConsumptionsToV4(): Promise<void> {
+    const consumptions = await db.pfConsumptions.toArray()
+    const cards = await db.pfCreditCards.toArray()
+    const cardMap = new Map(cards.map(c => [c.id, c]))
+
+    for (const cons of consumptions) {
+        // Skip if already has closingYearMonth
+        if (cons.closingYearMonth) continue
+
+        const card = cardMap.get(cons.cardId)
+        if (!card) continue
+
+        // Calculate closingYearMonth from purchaseDateISO
+        const statement = getStatementForTransaction(card.closingDay, card.dueDay, cons.purchaseDateISO)
+
+        await db.pfConsumptions.update(cons.id, {
+            closingYearMonth: statement.closingYearMonth,
+            // Also update postedYearMonth if it's wrong
+            postedYearMonth: statement.dueYearMonth,
+        })
+    }
+
+    console.log('[PF V4] Consumptions migration complete')
+}
+
 // =============================================================================
 // CREDIT CARD OPERATIONS
 // =============================================================================
@@ -235,7 +271,8 @@ export async function createConsumption(
 ): Promise<PFCardConsumption[]> {
     const { cardId, description, amount, purchaseDateISO, category, installmentTotal, createAllInstallments } = input
 
-    const basePostedYM = calculatePostedYearMonth(purchaseDateISO, card.closingDay, card.dueDay)
+    // Calculate which statement this consumption belongs to
+    const baseStatement = getStatementForTransaction(card.closingDay, card.dueDay, purchaseDateISO)
     const created: PFCardConsumption[] = []
 
     const installments = installmentTotal && installmentTotal > 1 ? installmentTotal : 1
@@ -245,7 +282,9 @@ export async function createConsumption(
         // Only create first or all if requested
         if (i > 0 && !createAllInstallments) break
 
-        const postedYM = i === 0 ? basePostedYM : addMonthsToYearMonth(basePostedYM, i)
+        // For installments, each goes to the next month's statement
+        const closingYM = i === 0 ? baseStatement.closingYearMonth : addMonthsToYearMonth(baseStatement.closingYearMonth, i)
+        const dueYM = i === 0 ? baseStatement.dueYearMonth : addMonthsToYearMonth(baseStatement.dueYearMonth, i)
 
         const cons: PFCardConsumption = {
             id: crypto.randomUUID(),
@@ -254,7 +293,8 @@ export async function createConsumption(
             amount: amountPerInstallment,
             currency: 'ARS',
             purchaseDateISO,
-            postedYearMonth: postedYM,
+            closingYearMonth: closingYM,
+            postedYearMonth: dueYM,
             installmentTotal: installments > 1 ? installments : undefined,
             installmentIndex: installments > 1 ? i + 1 : undefined,
             category,
@@ -269,6 +309,167 @@ export async function createConsumption(
 
 export async function deleteConsumption(id: string): Promise<void> {
     await db.pfConsumptions.delete(id)
+}
+
+/**
+ * Get consumptions that belong to a statement closing in a specific month.
+ * These are the "devengado" consumptions - what was spent during the period.
+ */
+export async function getConsumptionsByClosingMonth(cardId: string, closingYearMonth: string): Promise<PFCardConsumption[]> {
+    return db.pfConsumptions
+        .where('cardId').equals(cardId)
+        .and(c => c.closingYearMonth === closingYearMonth)
+        .toArray()
+}
+
+/**
+ * Get all consumptions for a card that close in a specific month (across all cards).
+ */
+export async function getAllConsumptionsByClosingMonth(closingYearMonth: string): Promise<PFCardConsumption[]> {
+    return db.pfConsumptions.where('closingYearMonth').equals(closingYearMonth).toArray()
+}
+
+// =============================================================================
+// STATEMENT OPERATIONS
+// =============================================================================
+
+/**
+ * Get or create a statement for a card in a specific closing month.
+ */
+export async function getOrCreateStatement(
+    card: PFCreditCard,
+    closingYearMonth: string
+): Promise<PFStatement> {
+    // Check if statement exists
+    const existing = await db.pfStatements
+        .where('cardId').equals(card.id)
+        .and(s => s.closingYearMonth === closingYearMonth)
+        .first()
+
+    if (existing) return existing
+
+    // Create new statement
+    const period = getStatementClosingInMonth(card.closingDay, card.dueDay, closingYearMonth)
+
+    // Calculate total from consumptions
+    const consumptions = await getConsumptionsByClosingMonth(card.id, closingYearMonth)
+    const total = consumptions.reduce((sum, c) => sum + c.amount, 0)
+
+    const statement: PFStatement = {
+        id: crypto.randomUUID(),
+        cardId: card.id,
+        closeDate: period.closeDate,
+        dueDate: period.dueDate,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        closingYearMonth: period.closingYearMonth,
+        dueYearMonth: period.dueYearMonth,
+        totalAmount: total,
+        status: 'UNPAID',
+        createdAt: new Date().toISOString(),
+    }
+
+    await db.pfStatements.put(statement)
+    return statement
+}
+
+/**
+ * Get statement for a card by closing month (returns null if not exists).
+ */
+export async function getStatementByClosingMonth(
+    cardId: string,
+    closingYearMonth: string
+): Promise<PFStatement | undefined> {
+    return db.pfStatements
+        .where('cardId').equals(cardId)
+        .and(s => s.closingYearMonth === closingYearMonth)
+        .first()
+}
+
+/**
+ * Get statement for a card by due month (returns null if not exists).
+ */
+export async function getStatementByDueMonth(
+    cardId: string,
+    dueYearMonth: string
+): Promise<PFStatement | undefined> {
+    return db.pfStatements
+        .where('cardId').equals(cardId)
+        .and(s => s.dueYearMonth === dueYearMonth)
+        .first()
+}
+
+/**
+ * Get all statements due in a specific month.
+ */
+export async function getStatementsDueInMonth(dueYearMonth: string): Promise<PFStatement[]> {
+    return db.pfStatements.where('dueYearMonth').equals(dueYearMonth).toArray()
+}
+
+/**
+ * Get all statements closing in a specific month.
+ */
+export async function getStatementsClosingInMonth(closingYearMonth: string): Promise<PFStatement[]> {
+    return db.pfStatements.where('closingYearMonth').equals(closingYearMonth).toArray()
+}
+
+/**
+ * Update statement total (recalculate from consumptions).
+ */
+export async function recalculateStatementTotal(statementId: string): Promise<number> {
+    const statement = await db.pfStatements.get(statementId)
+    if (!statement) return 0
+
+    const consumptions = await getConsumptionsByClosingMonth(statement.cardId, statement.closingYearMonth)
+    const total = consumptions.reduce((sum, c) => sum + c.amount, 0)
+
+    await db.pfStatements.update(statementId, {
+        totalAmount: total,
+        updatedAt: new Date().toISOString(),
+    })
+
+    return total
+}
+
+/**
+ * Mark a statement as paid, creating a movement record.
+ * @returns The payment movement ID
+ */
+export async function markStatementPaid(
+    statementId: string,
+    paymentDateISO: string,
+    movementId?: string
+): Promise<void> {
+    await db.pfStatements.update(statementId, {
+        status: 'PAID',
+        paidAt: paymentDateISO,
+        paymentMovementId: movementId,
+        updatedAt: new Date().toISOString(),
+    })
+}
+
+/**
+ * Mark a statement as unpaid (reverse payment).
+ */
+export async function markStatementUnpaid(statementId: string): Promise<void> {
+    await db.pfStatements.update(statementId, {
+        status: 'UNPAID',
+        paidAt: undefined,
+        paymentMovementId: undefined,
+        updatedAt: new Date().toISOString(),
+    })
+}
+
+/**
+ * Get total unpaid card amount for a specific due month.
+ */
+export async function getTotalUnpaidCardsDueInMonth(dueYearMonth: string): Promise<number> {
+    const statements = await db.pfStatements
+        .where('dueYearMonth').equals(dueYearMonth)
+        .and(s => s.status === 'UNPAID')
+        .toArray()
+
+    return statements.reduce((sum, s) => sum + s.totalAmount, 0)
 }
 
 // =============================================================================

@@ -26,11 +26,32 @@ export interface PFCardConsumption {
     amount: number
     currency: 'ARS'
     purchaseDateISO: string       // Actual purchase date
-    postedYearMonth: string       // "YYYY-MM" (payment month)
+    closingYearMonth: string      // "YYYY-MM" (month where statement closes - devengado)
+    postedYearMonth: string       // "YYYY-MM" (payment month - when due)
+    statementId?: string          // Link to statement (optional, for future use)
     installmentTotal?: number     // null = single payment
     installmentIndex?: number     // 1-based
     category?: string
     createdAt: string
+}
+
+export type PFStatementStatus = 'UNPAID' | 'PAID'
+
+export interface PFStatement {
+    id: string
+    cardId: string
+    closeDate: string             // "YYYY-MM-DD" fecha de cierre
+    dueDate: string               // "YYYY-MM-DD" fecha de vencimiento
+    periodStart: string           // "YYYY-MM-DD" inicio período de consumos
+    periodEnd: string             // "YYYY-MM-DD" = closeDate
+    closingYearMonth: string      // "YYYY-MM" mes donde cierra
+    dueYearMonth: string          // "YYYY-MM" mes donde vence
+    totalAmount: number           // Cached total (can be recalculated)
+    status: PFStatementStatus
+    paidAt?: string               // ISO datetime when marked as paid
+    paymentMovementId?: string    // Link to the movement created for payment
+    createdAt: string
+    updatedAt?: string
 }
 
 export type PFDebtStatus = 'active' | 'paid' | 'pending' | 'overdue'
@@ -110,6 +131,7 @@ export class ArgfolioDatabase extends Dexie {
     // Personal Finances V3 Tables
     pfCreditCards!: Table<PFCreditCard, string>
     pfConsumptions!: Table<PFCardConsumption, string>
+    pfStatements!: Table<PFStatement, string>
     pfDebts!: Table<PFDebt, string>
     pfFixedExpenses!: Table<PFFixedExpense, string>
     pfIncomes!: Table<PFIncome, string>
@@ -138,6 +160,12 @@ export class ArgfolioDatabase extends Dexie {
             pfFixedExpenses: 'id, recurrence, startYearMonth',
             pfIncomes: 'id, yearMonth, status',
             pfBudgets: 'id, yearMonth',
+        })
+
+        // V4: Credit Card Statements + closingYearMonth index
+        this.version(4).stores({
+            pfConsumptions: 'id, cardId, postedYearMonth, closingYearMonth, purchaseDateISO',
+            pfStatements: 'id, cardId, closingYearMonth, dueYearMonth, status',
         })
     }
 }

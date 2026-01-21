@@ -2,16 +2,17 @@
 // DEBT WIZARD — Choose debt subtype and show appropriate form
 // =============================================================================
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CreditCard, Landmark, Users, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { DebtSubtype, DebtCategory } from '../models/types'
+import type { DebtSubtype, DebtCategory, PFDebt } from '../models/types'
 
 interface DebtWizardProps {
     onSave: (data: any) => void
     onBack: () => void
+    initialData?: PFDebt
 }
 
 const DEBT_SUBTYPES: {
@@ -44,21 +45,53 @@ const DEBT_SUBTYPES: {
         },
     ]
 
-export function DebtWizard({ onSave, onBack }: DebtWizardProps) {
-    const [step, setStep] = useState<'subtype' | 'form'>('subtype')
-    const [selectedSubtype, setSelectedSubtype] = useState<DebtSubtype | null>(null)
-    const [formData, setFormData] = useState<any>({
-        title: '',
-        counterparty: '',
-        totalAmount: 0,
-        installmentsCount: 1,
-        currentInstallment: 1,
-        monthlyValue: 0,
-        dueDateDay: 10,
-        interestMode: 'none',
-        status: 'active',
-        category: 'credit_card',
+export function DebtWizard({ onSave, onBack, initialData }: DebtWizardProps) {
+    const isEditMode = !!initialData?.id
+
+    const [step, setStep] = useState<'subtype' | 'form'>(isEditMode ? 'form' : 'subtype')
+    const [selectedSubtype, setSelectedSubtype] = useState<DebtSubtype | null>(() => {
+        if (initialData?.category) {
+            const categoryToSubtype: Record<DebtCategory, DebtSubtype> = {
+                credit_card: 'tarjeta',
+                loan: 'prestamo',
+                personal: 'personal',
+            }
+            return categoryToSubtype[initialData.category as DebtCategory] || 'tarjeta'
+        }
+        return null
     })
+    const [formData, setFormData] = useState<any>(() => {
+        if (initialData) {
+            return {
+                ...initialData,
+            }
+        }
+        return {
+            title: '',
+            counterparty: '',
+            totalAmount: 0,
+            installmentsCount: 1,
+            currentInstallment: 1,
+            monthlyValue: 0,
+            dueDateDay: 10,
+            interestMode: 'none',
+            status: 'active',
+            category: 'credit_card',
+        }
+    })
+
+    useEffect(() => {
+        if (initialData) {
+            setFormData({ ...initialData })
+            setStep('form')
+            const categoryToSubtype: Record<DebtCategory, DebtSubtype> = {
+                credit_card: 'tarjeta',
+                loan: 'prestamo',
+                personal: 'personal',
+            }
+            setSelectedSubtype(categoryToSubtype[initialData.category as DebtCategory] || 'tarjeta')
+        }
+    }, [initialData])
 
     const handleSubtypeSelect = (subtype: DebtSubtype) => {
         setSelectedSubtype(subtype)
@@ -120,15 +153,17 @@ export function DebtWizard({ onSave, onBack }: DebtWizardProps) {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setStep('subtype')}
-                className="mb-2"
-            >
-                <ArrowLeft size={14} className="mr-1" /> Cambiar tipo
-            </Button>
+            {!isEditMode && (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setStep('subtype')}
+                    className="mb-2"
+                >
+                    <ArrowLeft size={14} className="mr-1" /> Cambiar tipo
+                </Button>
+            )}
 
             <div className="space-y-1.5">
                 <Label className="text-xs font-mono text-muted-foreground uppercase">
@@ -233,7 +268,7 @@ export function DebtWizard({ onSave, onBack }: DebtWizardProps) {
 
             <div className="pt-4 flex gap-3">
                 <Button type="submit" className="flex-1">
-                    Guardar Deuda
+                    {isEditMode ? 'Guardar Cambios' : 'Guardar Deuda'}
                 </Button>
             </div>
         </form>

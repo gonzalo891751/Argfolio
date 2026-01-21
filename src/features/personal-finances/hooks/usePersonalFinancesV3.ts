@@ -3,18 +3,40 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { PFCreditCard, PFCardConsumption, PFDebt, PFFixedExpense, PFIncome, PFBudgetCategory } from '@/db/schema'
+import type { PFCreditCard, PFCardConsumption, PFStatement, PFDebt, PFFixedExpense, PFIncome, PFBudgetCategory } from '@/db/schema'
 import * as store from '../services/pfStore'
-import { getCurrentYearMonth, addMonthsToYearMonth } from '../utils/dateHelpers'
+import {
+    getCurrentYearMonth,
+    addMonthsToYearMonth,
+    getStatementClosingInMonth,
+    getStatementDueInMonth,
+    type StatementPeriod
+} from '../utils/dateHelpers'
 
 export interface MonthlyTotals {
     totalIncome: number
     totalDebts: number
     totalFixed: number
-    totalCards: number
+    totalCards: number          // Total of consumptions closing this month
+    totalCardsDue: number       // Total of statements due (to pay) this month
+    totalCardsDueUnpaid: number // Only unpaid statements due this month
     totalBudgeted: number
     commitments: number
     available: number
+}
+
+export interface CardStatementData {
+    card: PFCreditCard
+    // Statement closing this month (devengado)
+    closingStatement: StatementPeriod
+    closingConsumptions: PFCardConsumption[]
+    closingTotal: number
+    // Statement due this month (a pagar)
+    dueStatement: StatementPeriod
+    dueStatementRecord: PFStatement | null
+    dueConsumptions: PFCardConsumption[]
+    dueTotal: number
+    isPaid: boolean
 }
 
 export function usePersonalFinancesV3() {
@@ -24,6 +46,8 @@ export function usePersonalFinancesV3() {
     // Data state
     const [creditCards, setCreditCards] = useState<PFCreditCard[]>([])
     const [consumptions, setConsumptions] = useState<PFCardConsumption[]>([])
+    const [consumptionsClosing, setConsumptionsClosing] = useState<PFCardConsumption[]>([])
+    const [statements, setStatements] = useState<PFStatement[]>([])
     const [debts, setDebts] = useState<PFDebt[]>([])
     const [fixedExpenses, setFixedExpenses] = useState<PFFixedExpense[]>([])
     const [incomes, setIncomes] = useState<PFIncome[]>([])
@@ -34,6 +58,7 @@ export function usePersonalFinancesV3() {
         async function init() {
             setLoading(true)
             await store.migrateToV3()
+            await store.migrateConsumptionsToV4()
             await refreshAll()
             setLoading(false)
         }
@@ -62,49 +87,129 @@ export function usePersonalFinancesV3() {
         setIncomes(monthIncomes)
         setBudgets(monthBudgets)
 
-        // Load consumptions for current month
-        const monthConsumptions = await store.getConsumptionsByYearMonth(yearMonth)
-        setConsumptions(monthConsumptions)
+        // Load consumptions for current month (both closing and due views)
+        await refreshConsumptionsAndStatements(cards)
+    }, [yearMonth])
+
+    const refreshConsumptionsAndStatements = useCallback(async (cards: PFCreditCard[]) => {
+        // Get consumptions that CLOSE this month (devengado)
+        const closingCons = await store.getAllConsumptionsByClosingMonth(yearMonth)
+        setConsumptionsClosing(closingCons)
+
+        // Get consumptions that are DUE this month (close was last month)
+        const dueCons = await store.getConsumptionsByYearMonth(yearMonth)
+        setConsumptions(dueCons)
+
+        // Ensure statements exist for cards with activity
+        const statementsToLoad: PFStatement[] = []
+
+        for (const card of cards) {
+            // Get or create statement for closing month
+            const closingConsForCard = closingCons.filter(c => c.cardId === card.id)
+            if (closingConsForCard.length > 0) {
+                const stmt = await store.getOrCreateStatement(card, yearMonth)
+                statementsToLoad.push(stmt)
+            }
+
+            // Get statement for due month (created when it was closing month)
+            const dueStmt = await store.getStatementByDueMonth(card.id, yearMonth)
+            if (dueStmt && !statementsToLoad.find(s => s.id === dueStmt.id)) {
+                statementsToLoad.push(dueStmt)
+            }
+        }
+
+        setStatements(statementsToLoad)
     }, [yearMonth])
 
     const refreshMonthData = useCallback(async () => {
-        const [monthConsumptions, monthDebts, monthExpenses, monthIncomes, monthBudgets] = await Promise.all([
-            store.getConsumptionsByYearMonth(yearMonth),
+        const [monthDebts, monthExpenses, monthIncomes, monthBudgets] = await Promise.all([
             store.getDebtsByMonth(yearMonth),
             store.getFixedExpensesByMonth(yearMonth),
             store.getIncomesByMonth(yearMonth),
             store.getBudgetsByMonth(yearMonth),
         ])
 
-        setConsumptions(monthConsumptions)
         setDebts(monthDebts)
         setFixedExpenses(monthExpenses)
         setIncomes(monthIncomes)
         setBudgets(monthBudgets)
-    }, [yearMonth])
 
-    // Group consumptions by card
+        // Refresh consumptions and statements
+        await refreshConsumptionsAndStatements(creditCards)
+    }, [yearMonth, creditCards, refreshConsumptionsAndStatements])
+
+    // Build card data with both closing and due periods
+    const cardStatementData = useMemo<CardStatementData[]>(() => {
+        return creditCards.map(card => {
+            // Statement closing this month
+            const closingStatement = getStatementClosingInMonth(card.closingDay, card.dueDay, yearMonth)
+            const closingConsumptions = consumptionsClosing.filter(c => c.cardId === card.id)
+            const closingTotal = closingConsumptions.reduce((sum, c) => sum + c.amount, 0)
+
+            // Statement due this month (closed last month)
+            const dueStatement = getStatementDueInMonth(card.closingDay, card.dueDay, yearMonth)
+            const dueStatementRecord = statements.find(
+                s => s.cardId === card.id && s.dueYearMonth === yearMonth
+            ) || null
+            const dueConsumptions = consumptions.filter(c => c.cardId === card.id)
+            const dueTotal = dueStatementRecord?.totalAmount ?? dueConsumptions.reduce((sum, c) => sum + c.amount, 0)
+            const isPaid = dueStatementRecord?.status === 'PAID'
+
+            return {
+                card,
+                closingStatement,
+                closingConsumptions,
+                closingTotal,
+                dueStatement,
+                dueStatementRecord,
+                dueConsumptions,
+                dueTotal,
+                isPaid,
+            }
+        })
+    }, [creditCards, consumptionsClosing, consumptions, statements, yearMonth])
+
+    // Group consumptions by card (for backward compatibility - uses closing month consumptions)
     const consumptionsByCard = useMemo(() => {
         const map: Record<string, PFCardConsumption[]> = {}
-        for (const c of consumptions) {
+        for (const c of consumptionsClosing) {
             if (!map[c.cardId]) map[c.cardId] = []
             map[c.cardId].push(c)
         }
         return map
-    }, [consumptions])
+    }, [consumptionsClosing])
 
     // Calculate totals for current month
     const totals = useMemo<MonthlyTotals>(() => {
         const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0)
-        const totalCards = consumptions.reduce((sum, c) => sum + c.amount, 0)
+        const totalCards = consumptionsClosing.reduce((sum, c) => sum + c.amount, 0) // Devengado
+
+        // Calculate due (to pay) this month
+        const totalCardsDue = cardStatementData.reduce((sum, d) => sum + d.dueTotal, 0)
+        const totalCardsDueUnpaid = cardStatementData
+            .filter(d => !d.isPaid)
+            .reduce((sum, d) => sum + d.dueTotal, 0)
+
         const totalDebts = debts.reduce((sum, d) => sum + d.monthlyValue, 0)
         const totalFixed = fixedExpenses.reduce((sum, e) => sum + e.amount, 0)
         const totalBudgeted = budgets.reduce((sum, b) => sum + b.estimatedAmount, 0)
-        const commitments = totalCards + totalDebts + totalFixed
+
+        // Commitments = what needs to be PAID this month (cashflow)
+        const commitments = totalCardsDueUnpaid + totalDebts + totalFixed
         const available = totalIncome - commitments - totalBudgeted
 
-        return { totalIncome, totalDebts, totalFixed, totalCards, totalBudgeted, commitments, available }
-    }, [incomes, consumptions, debts, fixedExpenses, budgets])
+        return {
+            totalIncome,
+            totalDebts,
+            totalFixed,
+            totalCards,
+            totalCardsDue,
+            totalCardsDueUnpaid,
+            totalBudgeted,
+            commitments,
+            available,
+        }
+    }, [incomes, consumptionsClosing, cardStatementData, debts, fixedExpenses, budgets])
 
     // Month navigation
     const goToPrevMonth = useCallback(() => {
@@ -135,6 +240,7 @@ export function usePersonalFinancesV3() {
         await store.deleteCreditCard(id)
         setCreditCards(cards => cards.filter(c => c.id !== id))
         setConsumptions(cons => cons.filter(c => c.cardId !== id))
+        setConsumptionsClosing(cons => cons.filter(c => c.cardId !== id))
     }, [])
 
     // Consumption CRUD
@@ -143,18 +249,57 @@ export function usePersonalFinancesV3() {
         card: PFCreditCard
     ) => {
         const created = await store.createConsumption(input, card)
-        // Only add consumptions that belong to current month
-        const toAdd = created.filter(c => c.postedYearMonth === yearMonth)
-        if (toAdd.length > 0) {
-            setConsumptions(cons => [...cons, ...toAdd])
-        }
+        // Refresh to pick up new data
+        await refreshConsumptionsAndStatements(creditCards)
         return created
-    }, [yearMonth])
+    }, [creditCards, refreshConsumptionsAndStatements])
 
     const deleteConsumption = useCallback(async (id: string) => {
         await store.deleteConsumption(id)
         setConsumptions(cons => cons.filter(c => c.id !== id))
+        setConsumptionsClosing(cons => cons.filter(c => c.id !== id))
     }, [])
+
+    // Statement Payment
+    const markStatementPaid = useCallback(async (
+        cardId: string,
+        paymentDateISO: string
+    ) => {
+        // Find the statement due this month for this card
+        const stmt = statements.find(s => s.cardId === cardId && s.dueYearMonth === yearMonth)
+        if (!stmt) {
+            console.warn('No statement found to mark as paid')
+            return
+        }
+
+        // TODO: Create actual movement in the movements system
+        // For now, just mark the statement as paid
+        const movementId = crypto.randomUUID() // Placeholder
+
+        await store.markStatementPaid(stmt.id, paymentDateISO, movementId)
+
+        // Update local state
+        setStatements(prev => prev.map(s =>
+            s.id === stmt.id
+                ? { ...s, status: 'PAID' as const, paidAt: paymentDateISO, paymentMovementId: movementId }
+                : s
+        ))
+    }, [statements, yearMonth])
+
+    const markStatementUnpaid = useCallback(async (cardId: string) => {
+        const stmt = statements.find(s => s.cardId === cardId && s.dueYearMonth === yearMonth)
+        if (!stmt) return
+
+        // TODO: Delete or reverse the movement
+
+        await store.markStatementUnpaid(stmt.id)
+
+        setStatements(prev => prev.map(s =>
+            s.id === stmt.id
+                ? { ...s, status: 'UNPAID' as const, paidAt: undefined, paymentMovementId: undefined }
+                : s
+        ))
+    }, [statements, yearMonth])
 
     // Debt CRUD
     const createDebt = useCallback(async (debt: Omit<PFDebt, 'id' | 'createdAt'>) => {
@@ -251,8 +396,11 @@ export function usePersonalFinancesV3() {
 
         // Data
         creditCards,
-        consumptions,
-        consumptionsByCard,
+        consumptions,            // Consumptions DUE this month (legacy)
+        consumptionsClosing,     // Consumptions CLOSING this month (devengado)
+        consumptionsByCard,      // Grouped by card (uses closing month)
+        cardStatementData,       // Full card data with both periods
+        statements,
         debts,
         fixedExpenses,
         incomes,
@@ -265,6 +413,8 @@ export function usePersonalFinancesV3() {
         deleteCard,
         createConsumption,
         deleteConsumption,
+        markStatementPaid,
+        markStatementUnpaid,
         createDebt,
         updateDebt,
         deleteDebt,

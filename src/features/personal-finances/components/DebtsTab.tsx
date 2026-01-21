@@ -2,10 +2,16 @@
 // DEBTS TAB COMPONENT
 // =============================================================================
 
-import { MoreHorizontal } from 'lucide-react'
+import { MoreVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatARS } from '../models/calculations'
 import type { PFDebt } from '@/db/schema'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface DebtsTabProps {
     debts: PFDebt[]
@@ -144,25 +150,29 @@ function StatusBadge({ status }: { status: string }) {
 
 function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
     return (
-        <div className="relative group">
-            <button className="text-muted-foreground hover:text-foreground p-1 rounded">
-                <MoreHorizontal size={18} />
-            </button>
-            <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[120px]">
-                <button
-                    onClick={onEdit}
-                    className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-accent transition"
-                >
-                    Editar
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <button className="text-muted-foreground hover:text-foreground p-1 rounded focus:outline-none">
+                    <MoreVertical size={18} />
                 </button>
-                <button
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+                align="end"
+                sideOffset={4}
+                collisionPadding={8}
+                className="min-w-[120px]"
+            >
+                <DropdownMenuItem onClick={onEdit}>
+                    Editar
+                </DropdownMenuItem>
+                <DropdownMenuItem
                     onClick={onDelete}
-                    className="w-full text-left px-3 py-2 text-sm text-rose-400 hover:bg-accent transition"
+                    className="text-rose-400 focus:text-rose-400"
                 >
                     Eliminar
-                </button>
-            </div>
-        </div>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
     )
 }
 

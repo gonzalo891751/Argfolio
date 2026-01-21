@@ -1,26 +1,26 @@
 import { CreditCard as CreditCardIcon, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { PFCreditCard, PFCardConsumption } from '@/db/schema'
+import type { CardStatementData } from '../hooks/usePersonalFinancesV3'
 import { CreditCardTile } from './CreditCardTile'
 
 interface CreditCardsSectionProps {
-    cards: PFCreditCard[]
-    consumptionsByCard: Record<string, PFCardConsumption[]>
-    yearMonth: string
+    cardData: CardStatementData[]
     onManageCards: () => void
     onAddConsumption: (cardId: string) => void
     onViewAllConsumptions: (cardId: string) => void
+    onMarkPaid: (cardId: string, paymentDateISO: string) => void
+    onMarkUnpaid: (cardId: string) => void
 }
 
 export function CreditCardsSection({
-    cards,
-    consumptionsByCard,
-    yearMonth,
+    cardData,
     onManageCards,
     onAddConsumption,
     onViewAllConsumptions,
+    onMarkPaid,
+    onMarkUnpaid,
 }: CreditCardsSectionProps) {
-    if (cards.length === 0) {
+    if (cardData.length === 0) {
         return (
             <section className="mb-8">
                 <div className="flex items-center justify-between mb-4">
@@ -51,14 +51,14 @@ export function CreditCardsSection({
                 </Button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {cards.map((card) => (
+                {cardData.map((data) => (
                     <CreditCardTile
-                        key={card.id}
-                        card={card}
-                        consumptions={consumptionsByCard[card.id] || []}
-                        yearMonth={yearMonth}
-                        onAddConsumption={() => onAddConsumption(card.id)}
-                        onViewAll={() => onViewAllConsumptions(card.id)}
+                        key={data.card.id}
+                        data={data}
+                        onAddConsumption={() => onAddConsumption(data.card.id)}
+                        onViewAll={() => onViewAllConsumptions(data.card.id)}
+                        onMarkPaid={(date) => onMarkPaid(data.card.id, date)}
+                        onMarkUnpaid={() => onMarkUnpaid(data.card.id)}
                     />
                 ))}
             </div>

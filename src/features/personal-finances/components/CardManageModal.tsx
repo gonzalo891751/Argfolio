@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import type { PFCreditCard } from '@/db/schema'
+import { makeDateISO, parseDateISO, getCurrentYearMonth, parseYearMonth } from '../utils/dateHelpers'
 
 interface CardManageModalProps {
     open: boolean
@@ -20,17 +21,30 @@ interface CardFormData {
     name: string
     last4: string
     network: 'VISA' | 'MASTERCARD' | 'AMEX'
-    closingDay: number
-    dueDay: number
+    closingDate: string // YYYY-MM-DD format
+    dueDate: string // YYYY-MM-DD format
 }
 
-const defaultFormData: CardFormData = {
-    bank: '',
-    name: '',
-    last4: '',
-    network: 'VISA',
-    closingDay: 25,
-    dueDay: 5,
+function getDefaultDates(): { closingDate: string; dueDate: string } {
+    const { year, month } = parseYearMonth(getCurrentYearMonth())
+    // Default: close on 25th of current month, due on 10th of next month
+    const closingDate = makeDateISO(year, month, 25)
+    const nextMonth = month === 12 ? 1 : month + 1
+    const nextYear = month === 12 ? year + 1 : year
+    const dueDate = makeDateISO(nextYear, nextMonth, 10)
+    return { closingDate, dueDate }
+}
+
+function createDefaultFormData(): CardFormData {
+    const dates = getDefaultDates()
+    return {
+        bank: '',
+        name: '',
+        last4: '',
+        network: 'VISA',
+        closingDate: dates.closingDate,
+        dueDate: dates.dueDate,
+    }
 }
 
 export function CardManageModal({
@@ -43,14 +57,14 @@ export function CardManageModal({
 }: CardManageModalProps) {
     const [mode, setMode] = useState<'list' | 'add' | 'edit'>('list')
     const [editingId, setEditingId] = useState<string | null>(null)
-    const [formData, setFormData] = useState<CardFormData>(defaultFormData)
+    const [formData, setFormData] = useState<CardFormData>(createDefaultFormData())
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
         if (!open) {
             setMode('list')
             setEditingId(null)
-            setFormData(defaultFormData)
+            setFormData(createDefaultFormData())
         }
     }, [open])
 
@@ -58,13 +72,21 @@ export function CardManageModal({
 
     const handleEdit = (card: PFCreditCard) => {
         setEditingId(card.id)
+        // Convert days to dates for the form
+        const { year, month } = parseYearMonth(getCurrentYearMonth())
+        const closingDate = makeDateISO(year, month, card.closingDay)
+        // Due is next month
+        const nextMonth = month === 12 ? 1 : month + 1
+        const nextYear = month === 12 ? year + 1 : year
+        const dueDate = makeDateISO(nextYear, nextMonth, card.dueDay)
+
         setFormData({
             bank: card.bank,
             name: card.name,
             last4: card.last4,
             network: card.network || 'VISA',
-            closingDay: card.closingDay,
-            dueDay: card.dueDay,
+            closingDate,
+            dueDate,
         })
         setMode('edit')
     }
@@ -72,16 +94,32 @@ export function CardManageModal({
     const handleSave = async () => {
         setLoading(true)
         try {
+            // Extract days from dates
+            const closingDay = parseDateISO(formData.closingDate).day
+            const dueDay = parseDateISO(formData.dueDate).day
+
             if (mode === 'add') {
                 await onCreateCard({
-                    ...formData,
+                    bank: formData.bank,
+                    name: formData.name,
+                    last4: formData.last4,
+                    network: formData.network,
+                    closingDay,
+                    dueDay,
                     currency: 'ARS',
                 })
             } else if (mode === 'edit' && editingId) {
-                await onUpdateCard(editingId, formData)
+                await onUpdateCard(editingId, {
+                    bank: formData.bank,
+                    name: formData.name,
+                    last4: formData.last4,
+                    network: formData.network,
+                    closingDay,
+                    dueDay,
+                })
             }
             setMode('list')
-            setFormData(defaultFormData)
+            setFormData(createDefaultFormData())
             setEditingId(null)
         } finally {
             setLoading(false)
@@ -93,6 +131,12 @@ export function CardManageModal({
             await onDeleteCard(id)
         }
     }
+
+    // Validation: due should be after close (considering it's next month)
+    const closingParsed = parseDateISO(formData.closingDate)
+    const dueParsed = parseDateISO(formData.dueDate)
+    const isValidDates = closingParsed.day >= 1 && closingParsed.day <= 31 &&
+        dueParsed.day >= 1 && dueParsed.day <= 31
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -131,7 +175,7 @@ export function CardManageModal({
                                             <div>
                                                 <div className="text-white font-medium">{card.name}</div>
                                                 <div className="text-xs text-slate-400">
-                                                    {card.bank} •  **** {card.last4}
+                                                    {card.bank} • **** {card.last4} • Cierre día {card.closingDay}
                                                 </div>
                                             </div>
                                         </div>
@@ -201,26 +245,35 @@ export function CardManageModal({
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Día de Cierre</Label>
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        max={31}
-                                        value={formData.closingDay}
-                                        onChange={(e) => setFormData({ ...formData, closingDay: Number(e.target.value) })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Día de Vencimiento</Label>
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        max={31}
-                                        value={formData.dueDay}
-                                        onChange={(e) => setFormData({ ...formData, dueDay: Number(e.target.value) })}
-                                    />
+                            {/* Date pickers for closing and due */}
+                            <div className="p-4 rounded-lg bg-slate-900/50 border border-white/10 space-y-4">
+                                <p className="text-xs text-slate-400">
+                                    Seleccioná las fechas de cierre y vencimiento. El sistema usará los días
+                                    como patrón para calcular automáticamente los ciclos de cada mes.
+                                </p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Fecha de Cierre</Label>
+                                        <Input
+                                            type="date"
+                                            value={formData.closingDate}
+                                            onChange={(e) => setFormData({ ...formData, closingDate: e.target.value })}
+                                        />
+                                        <p className="text-[10px] text-slate-500">
+                                            Día {closingParsed.day} de cada mes
+                                        </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Fecha de Vencimiento</Label>
+                                        <Input
+                                            type="date"
+                                            value={formData.dueDate}
+                                            onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                                        />
+                                        <p className="text-[10px] text-slate-500">
+                                            Día {dueParsed.day} del mes siguiente
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 
@@ -231,7 +284,7 @@ export function CardManageModal({
                                 <Button
                                     className="flex-1"
                                     onClick={handleSave}
-                                    disabled={loading || !formData.bank || !formData.name || !formData.last4}
+                                    disabled={loading || !formData.bank || !formData.name || !formData.last4 || !isValidDates}
                                 >
                                     {loading ? 'Guardando...' : 'Guardar'}
                                 </Button>
