@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Header Prototipo V5 (Ticker Only)</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Configuración Brand Book -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        bg: {
+                            app: '#0B1121', // Deep Navy
+                            surface: '#151E32',
+                            glass: 'rgba(30, 41, 59, 0.4)'
+                        },
+                        brand: {
+                            primary: '#6366F1', // Indigo Electric
+                            accent: '#0EA5E9', // Sky
+                        },
+                        semantic: {
+                            up: '#10B981', // Emerald
+                            down: '#F43F5E', // Rose
+                            warn: '#F59E0B', // Amber
+                            info: '#3B82F6', // Blue
+                            hot: '#F43F5E', // Red for Hot
+                        }
+                    },
+                    animation: {
+                        'spin-slow': 'spin 3s linear infinite',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    boxShadow: {
+                        'glow-hot': '0 0 20px rgba(244, 63, 94, 0.25)',
+                        'glow-primary': '0 0 20px rgba(99, 102, 241, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Estilos Base & Utilities */
+        :root {
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        body {
+            background-color: #0B1121;
+            color: #F8FAFC;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphism Premium */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .glass-button {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            transition: all 0.2s ease;
+        }
+
+        .glass-button:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
+        }
+        
+        .glass-dropdown {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Scrollbar Oculta para el ticker */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Utilitarios Financieros */
+        .text-up { color: #10B981; }
+        .text-down { color: #F43F5E; }
+        .text-neutral { color: #94A3B8; }
+
+        /* Estilo para items del ticker */
+        .ticker-item {
+            display: inline-flex;
+            align-items: center;
+            flex-shrink: 0;
+            height: 100%;
+        }
+        
+        /* CAMBIO 3: Gradiente HOT para Inflación */
+        .bg-gradient-hot {
+            background: linear-gradient(135deg, rgba(244,63,94,0.15) 0%, rgba(245,158,11,0.15) 100%);
+            border: 1px solid rgba(244,63,94,0.4);
+            box-shadow: 0 0 15px rgba(244, 63, 94, 0.1);
+        }
+        
+        /* Fade masks para el ticker */
+        .mask-linear {
+            mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent);
+            -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent);
+        }
+    </style>
+</head>
+<body class="min-h-screen relative font-sans antialiased selection:bg-brand-primary selection:text-white">
+
+    <!-- REFRESH OVERLAY (Sin cambios) -->
+    <div id="loadingOverlay" class="fixed inset-0 z-[100] bg-bg-app/90 backdrop-blur-md flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="text-center">
+            <div class="relative w-16 h-16 mx-auto mb-6">
+                <div class="absolute inset-0 border-4 border-brand-primary/20 rounded-full"></div>
+                <div class="absolute inset-0 border-4 border-brand-primary border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <p class="font-display text-sm tracking-widest text-brand-primary font-bold animate-pulse uppercase">Actualizando Mercado</p>
+            <p class="font-mono text-xs text-slate-500 mt-2">Conectando con Argfolio Engine...</p>
+        </div>
+    </div>
+
+    <!-- === HEADER === -->
+    <header class="fixed top-0 left-0 right-0 z-50 glass-panel border-b-0 border-b-white/5 h-16 transition-all duration-300">
+        <div class="h-full flex items-center justify-between px-4 lg:px-6 gap-4">
+            
+            <!-- 1. LOGO -->
+            <div class="flex items-center gap-3 shrink-0 cursor-pointer group w-10 md:w-auto">
+                <div class="w-9 h-9 flex items-center justify-center relative transition-transform group-hover:scale-105 duration-300">
+                    <div class="absolute inset-0 bg-brand-primary/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <svg viewBox="0 0 40 40" fill="none" class="w-full h-full text-brand-primary drop-shadow-[0_0_8px_rgba(99,102,241,0.6)] relative z-10">
+                        <path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/>
+                        <circle cx="20" cy="14" r="3" class="text-white" fill="currentColor"/>
+                    </svg>
+                </div>
+                <span class="font-display font-bold text-xl tracking-tight hidden md:block text-white group-hover:text-brand-primary/90 transition-colors">
+                    Argfolio
+                </span>
+            </div>
+
+            <!-- 2. CAMBIO 2: TICKER NAVEGABLE (Centro) -->
+            <div class="flex-1 max-w-5xl mx-2 md:mx-4 relative h-full flex items-center gap-2 overflow-hidden">
+                
+                <!-- Left Arrow -->
+                <button id="tickerPrev" class="hidden md:flex h-8 w-8 items-center justify-center rounded-full glass-button text-slate-400 hover:text-white shrink-0 z-10 active:scale-95 transition-transform" aria-label="Anterior">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                </button>
+
+                <!-- Viewport (Overflow Hidden, Managed by JS) -->
+                <div id="tickerViewport" class="flex-1 overflow-x-auto no-scrollbar relative h-full flex items-center cursor-grab active:cursor-grabbing mask-linear">
+                    <!-- Ticker Content Track -->
+                    <div id="tickerTrack" class="flex items-center gap-0 whitespace-nowrap will-change-transform h-full pr-8">
+                        <!-- Data goes here -->
+                    </div>
+                </div>
+
+                <!-- Right Arrow -->
+                <button id="tickerNext" class="hidden md:flex h-8 w-8 items-center justify-center rounded-full glass-button text-slate-400 hover:text-white shrink-0 z-10 active:scale-95 transition-transform" aria-label="Siguiente">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+            </div>
+
+            <!-- 3. ACCIONES (Derecha) -->
+            <div class="flex items-center gap-2 shrink-0 relative">
+                
+                <!-- SELECTOR DE MODO (Sin lógica de Drawer) -->
+                <div class="relative group" id="modeSelectorContainer">
+                    <button id="btnModeSelector" class="glass-button h-9 px-4 rounded-full flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-200 hover:text-white transition-colors" aria-expanded="false" aria-haspopup="true">
+                        <span id="currentModeLabel">Dólar Hoy</span>
+                        <!-- CAMBIO: Flecha simple unificada -->
+                        <svg id="chevronMode" class="w-3 h-3 text-brand-accent ml-1 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    
+                    <!-- Dropdown Menu -->
+                    <div id="modeDropdown" class="absolute top-full right-0 mt-2 w-44 glass-dropdown rounded-xl overflow-hidden opacity-0 invisible transform -translate-y-2 transition-all duration-200 origin-top-right z-50">
+                        <ul class="py-1">
+                            <li>
+                                <button class="w-full text-left px-4 py-3 text-sm font-medium text-slate-300 hover:bg-brand-primary/20 hover:text-white transition-colors flex items-center gap-2 group/item" onclick="handleModeSelection('dolar')">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-brand-accent opacity-0 group-hover/item:opacity-100"></span>
+                                    Dólar Hoy
+                                </button>
+                            </li>
+                            <li>
+                                <button class="w-full text-left px-4 py-3 text-sm font-medium text-slate-300 hover:bg-brand-primary/20 hover:text-white transition-colors flex items-center gap-2 group/item" onclick="handleModeSelection('mercado')">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-brand-primary opacity-0 group-hover/item:opacity-100"></span>
+                                    Mercado
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="w-px h-6 bg-white/10 mx-1 hidden sm:block"></div>
+
+                <!-- Botón Actualizar -->
+                <button id="btnRefresh" class="glass-button w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-white group relative overflow-hidden" aria-label="Actualizar datos">
+                    <svg class="w-4 h-4 relative z-10 transition-transform group-hover:rotate-180 duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                </button>
+
+                <!-- Avatar -->
+                <div class="w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-white/10 flex items-center justify-center ml-1 cursor-pointer hover:border-brand-primary/50 transition-colors shadow-lg hidden sm:flex">
+                    <span class="font-display text-sm font-bold text-white">U</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- CAMBIO 1: Drawer eliminado por completo del HTML -->
+    </header>
+
+    <!-- MAIN CONTENT PLACEHOLDER -->
+    <main class="pt-32 px-6 max-w-7xl mx-auto min-h-[120vh]">
+        <div class="mt-8 mb-12 animate-fade-in-up">
+            <h1 class="text-6xl md:text-8xl font-display font-bold text-white mb-6 tracking-tighter">
+                Argfolio
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-primary to-brand-accent">Live</span>
+            </h1>
+            <p class="text-xl text-slate-400 max-w-2xl font-light">
+                Ahora podés navegar el ticker superior manualmente con las flechas o arrastrando.
+                <br>Cambiá a modo <span class="text-white bg-white/10 px-2 py-0.5 rounded font-mono text-sm">Mercado</span> para ver el top de instrumentos.
+            </p>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 opacity-60">
+            <div class="h-64 rounded-2xl border border-dashed border-white/10 bg-white/5 flex items-center justify-center">
+                <span class="font-mono text-slate-500">Widget Area 1</span>
+            </div>
+            <div class="h-64 rounded-2xl border border-dashed border-white/10 bg-white/5 flex items-center justify-center">
+                <span class="font-mono text-slate-500">Widget Area 2</span>
+            </div>
+            <div class="h-64 rounded-2xl border border-dashed border-white/10 bg-white/5 flex items-center justify-center">
+                <span class="font-mono text-slate-500">Widget Area 3</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- JAVASCRIPT -->
+    <script>
+        /* --- 1. DATA MOCKS --- */
+        const AR_LOCALE = 'es-AR';
+        function formatMoney(amount, isUsd = false) {
+            let formatted = amount.toLocaleString(AR_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return isUsd ? `US$ ${formatted}` : `$ ${formatted}`;
+        }
+
+        const fxData = [
+            { label: 'OFICIAL', buy: 854.50, sell: 894.00, delta: 0.001 },
+            { label: 'BLUE', buy: 1225.00, sell: 1245.00, delta: -0.005 },
+            { label: 'MEP', buy: 1185.30, sell: 1188.50, delta: 0.012 },
+            { label: 'CCL', buy: 1255.40, sell: 1260.10, delta: 0.008 },
+            { label: 'CRIPTO', buy: 1205.00, sell: 1215.00, delta: 0.002 },
+        ];
+        
+        // CAMBIO 3: Inflación Hot Data
+        const inflationData = { 
+            monthly: 20.6, 
+            annual: 180.3 
+        };
+
+        // CAMBIO 4: Listas específicas de Mercado
+        const cedears = [
+            { symbol: 'AAPL', price: 21500.50, delta: 0.012 },
+            { symbol: 'MSFT', price: 34200.00, delta: 0.008 },
+            { symbol: 'AMZN', price: 19800.75, delta: 0.021 },
+            { symbol: 'GOOGL', price: 18100.25, delta: -0.012 },
+            { symbol: 'TSLA', price: 15400.00, delta: -0.034 },
+            { symbol: 'NVDA', price: 65400.00, delta: 0.052 },
+            { symbol: 'META', price: 42100.20, delta: 0.031 },
+            { symbol: 'KO', price: 12300.50, delta: 0.001 },
+            { symbol: 'JPM', price: 28900.00, delta: 0.005 },
+            { symbol: 'XOM', price: 17500.80, delta: -0.004 },
+        ];
+
+        const cryptos = [
+            { symbol: 'BTC', price: 64230.00, delta: 0.035, isUsd: true },
+            { symbol: 'ETH', price: 3450.00, delta: 0.021, isUsd: true },
+            { symbol: 'SOL', price: 145.20, delta: 0.084, isUsd: true },
+            { symbol: 'BNB', price: 590.00, delta: -0.005, isUsd: true },
+            { symbol: 'XRP', price: 0.62, delta: 0.012, isUsd: true },
+        ];
+
+        const fcis = [
+            { symbol: 'MM T+0', price: 154.20, delta: 0.095 },
+            { symbol: 'MM T+1', price: 230.45, delta: 0.124 },
+            { symbol: 'RF CP', price: 1120.00, delta: 0.002 },
+            { symbol: 'RF LP', price: 450.10, delta: 0.056 },
+            { symbol: 'CER', price: 890.50, delta: 0.012 },
+            { symbol: 'D. LINKED', price: 1250.30, delta: 0.005 },
+            { symbol: 'ACC ARG', price: 3450.00, delta: 0.045 },
+            { symbol: 'ACC GLOB', price: 5600.20, delta: 0.023 },
+            { symbol: 'MIX BAL', price: 1800.50, delta: 0.015 },
+            { symbol: 'RET TOT', price: 2100.00, delta: 0.032 },
+        ];
+
+        /* --- 2. RENDER FUNCTIONS --- */
+        
+        function getDeltaHtml(delta) {
+            const isPositive = delta > 0;
+            const colorClass = isPositive ? 'text-semantic-up' : (delta < 0 ? 'text-semantic-down' : 'text-neutral');
+            const arrow = isPositive ? '▲' : (delta < 0 ? '▼' : '▬');
+            return `<span class="font-mono text-[10px] ${colorClass} bg-bg-app/50 px-1.5 py-0.5 rounded ml-2">${arrow} ${Math.abs(delta * 100).toFixed(2)}%</span>`;
+        }
+
+        function getSparkline(delta) {
+            const color = delta >= 0 ? '#10B981' : '#F43F5E';
+            let d = "M0,10 ";
+            for(let i=1; i<=10; i++) d += `L${i*3},${Math.floor(Math.random()*15)} `;
+            return `<svg width="30" height="15" viewBox="0 0 30 15" fill="none" class="opacity-80"><path d="${d}" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>`;
+        }
+
+        // CAMBIO 3: Render Inflación estilo Fuego
+        function renderInflationItem() {
+            return `
+                <div class="ticker-item px-4 h-full mx-2">
+                    <div class="flex items-center gap-3 px-5 py-1.5 rounded-full bg-gradient-hot shadow-glow-hot transition-transform hover:scale-105 duration-300">
+                        <svg class="w-5 h-5 text-red-400 animate-pulse-slow drop-shadow-lg" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clip-rule="evenodd" />
+                        </svg>
+                        <div class="flex flex-col leading-none">
+                            <span class="text-[10px] font-bold text-red-200 uppercase tracking-widest font-display mb-0.5 shadow-sm">INFLACIÓN</span>
+                            <div class="flex items-center gap-3">
+                                <span class="font-mono text-sm font-bold text-semantic-down drop-shadow-sm">Men: ${inflationData.monthly.toFixed(1)}%</span>
+                                <span class="w-px h-3 bg-red-400/30"></span>
+                                <span class="font-mono text-xs text-red-300">Int: ${inflationData.annual.toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Helper para render items de mercado
+        function renderMarketBlock(items, label) {
+            let html = `<div class="ticker-item px-2"><span class="px-2 py-0.5 rounded-full bg-white/10 border border-white/10 text-[10px] font-bold text-brand-accent uppercase tracking-wider font-mono">${label}</span></div>`;
+            items.forEach(item => {
+                html += `
+                    <div class="ticker-item px-4 border-r border-white/5 h-8">
+                        <div class="flex flex-col justify-center">
+                            <div class="flex items-center gap-2">
+                                <span class="font-display font-bold text-sm text-white">${item.symbol}</span>
+                                <span class="font-mono text-xs text-slate-300">${formatMoney(item.price, item.isUsd)}</span>
+                                ${getDeltaHtml(item.delta)}
+                                ${getSparkline(item.delta)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            return html;
+        }
+
+        function buildTickerContent(mode) {
+            let html = '';
+            
+            // Duplicamos el contenido varias veces para el scroll infinito
+            // 4 copias aseguran que siempre haya contenido visible al resetear
+            const loops = 4; 
+
+            for(let i=0; i<loops; i++) {
+                if(mode === 'dolar') {
+                    // FX Items
+                    fxData.forEach(item => {
+                        html += `
+                            <div class="ticker-item px-4 border-r border-white/5 h-8">
+                                <div class="flex flex-col items-end justify-center h-full">
+                                    <span class="text-[10px] font-bold text-slate-500 font-display uppercase tracking-widest mb-0.5 leading-none">${item.label}</span>
+                                    <div class="flex items-center gap-2 text-xs font-mono leading-none">
+                                        <!-- CAMBIO 5: Colores C/V -->
+                                        <span class="text-slate-300"><span class="text-semantic-up font-bold">C:</span> ${formatMoney(item.buy)}</span>
+                                        <span class="text-white font-medium"><span class="text-semantic-down font-bold">V:</span> ${formatMoney(item.sell)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    // Insertar Inflación Hot
+                    html += renderInflationItem();
+                    // Separador grande entre loops
+                    html += `<div class="ticker-item w-12 h-full"></div>`;
+                } else {
+                    // CAMBIO 4: Mercado solo en ticker
+                    html += renderMarketBlock(cedears, 'CEDEARs');
+                    html += renderMarketBlock(cryptos, 'Cripto');
+                    html += renderMarketBlock(fcis, 'FCI');
+                    // Separador grande
+                    html += `<div class="ticker-item w-24 h-full"></div>`;
+                }
+            }
+            return html;
+        }
+
+        /* --- 3. CAMBIO 2: TICKER JS ENGINE (Scroll + Nav) --- */
+        
+        const tickerViewport = document.getElementById('tickerViewport');
+        const tickerTrack = document.getElementById('tickerTrack');
+        
+        let animationId;
+        let isPaused = false;
+        let pauseTimeout;
+        const baseSpeed = 0.5; // Velocidad de auto-scroll
+        
+        // Función principal de animación
+        function animate() {
+            if (!isPaused) {
+                tickerViewport.scrollLeft += baseSpeed;
+                checkReset();
+            }
+            animationId = requestAnimationFrame(animate);
+        }
+
+        // Reset infinito suave
+        function checkReset() {
+            // Cuando scrolleamos más allá de la mitad del contenido total
+            // (Asumimos que el contenido está duplicado lo suficiente)
+            const maxScroll = tickerTrack.scrollWidth / 2;
+            if (tickerViewport.scrollLeft >= maxScroll) {
+                tickerViewport.scrollLeft = 0; // O la diferencia para ser exacto pixel perfect
+            }
+        }
+
+        // Helper para pausar temporalmente
+        function pauseBriefly(duration = 3000) {
+            isPaused = true;
+            clearTimeout(pauseTimeout);
+            pauseTimeout = setTimeout(() => {
+                // Solo reanudar si no está el mouse encima
+                if(!isHovering) isPaused = false;
+            }, duration);
+        }
+
+        // Navegación Manual: Flechas
+        document.getElementById('tickerPrev').addEventListener('click', () => {
+            pauseBriefly();
+            tickerViewport.scrollBy({ left: -280, behavior: 'smooth' });
+        });
+        document.getElementById('tickerNext').addEventListener('click', () => {
+            pauseBriefly();
+            tickerViewport.scrollBy({ left: 280, behavior: 'smooth' });
+        });
+
+        // Navegación Manual: Rueda (Scroll Horizontal)
+        tickerViewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            pauseBriefly(1000);
+            tickerViewport.scrollLeft += e.deltaY + e.deltaX; // Convertir Y a X
+            checkReset(); // Chequear loop incluso manual
+        }, { passive: false });
+
+        // Hover Logic
+        let isHovering = false;
+        tickerViewport.addEventListener('mouseenter', () => { isPaused = true; isHovering = true; });
+        tickerViewport.addEventListener('mouseleave', () => { 
+            isHovering = false; 
+            // Reanudar con un pequeño delay
+            pauseTimeout = setTimeout(() => { isPaused = false; }, 500); 
+        });
+
+        /* --- 4. MODE SELECTOR LOGIC --- */
+        let currentMode = 'dolar';
+        const modeDropdown = document.getElementById('modeDropdown');
+        const btnModeSelector = document.getElementById('btnModeSelector');
+        const currentModeLabel = document.getElementById('currentModeLabel');
+        const chevronMode = document.getElementById('chevronMode');
+        const modeSelectorContainer = document.getElementById('modeSelectorContainer');
+
+        function toggleDropdown(show) {
+            btnModeSelector.setAttribute('aria-expanded', show);
+            if(show) {
+                modeDropdown.classList.remove('opacity-0', 'invisible', '-translate-y-2');
+                chevronMode.style.transform = 'rotate(180deg)';
+            } else {
+                modeDropdown.classList.add('opacity-0', 'invisible', '-translate-y-2');
+                chevronMode.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        btnModeSelector.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleDropdown(btnModeSelector.getAttribute('aria-expanded') !== 'true');
+        });
+
+        window.handleModeSelection = (mode) => {
+            currentMode = mode;
+            currentModeLabel.innerText = mode === 'dolar' ? 'Dólar Hoy' : 'Mercado';
+            toggleDropdown(false);
+            
+            // Re-render
+            tickerTrack.innerHTML = buildTickerContent(mode);
+            tickerViewport.scrollLeft = 0; // Reset posición
+        };
+
+        // Click outside
+        document.addEventListener('click', (e) => {
+            if(!modeSelectorContainer.contains(e.target)) toggleDropdown(false);
+        });
+
+        /* --- 5. INITIALIZATION --- */
+        
+        // Verificar Reduced Motion
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        
+        // Render Inicial
+        tickerTrack.innerHTML = buildTickerContent('dolar');
+        
+        if(!prefersReducedMotion) {
+            animate();
+        }
+
+        // Refresh Mock
+        document.getElementById('btnRefresh').addEventListener('click', () => {
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                overlay.classList.add('opacity-0', 'pointer-events-none');
+                tickerTrack.innerHTML = buildTickerContent(currentMode);
+            }, 1500);
+        });
+
+    </script>
+</body>
+</html>

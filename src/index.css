@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Header glassmorphism styles */
+@import './styles/header.css';
+
 @layer base {
   :root {
     --background: 0 0% 100%;

@@ -1,23 +1,36 @@
 import { Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Sidebar, SidebarProvider, useSidebar } from '@/components/layout/sidebar'
-import { Topbar } from '@/components/layout/topbar'
+import { ArgfolioHeader } from '@/components/layout/ArgfolioHeader'
 import { usePFSettlement } from '@/hooks/use-pf-settlement'
 import { usePFModelMigration } from '@/hooks/use-pf-model-migration'
+import { useScrollCondense } from '@/hooks/useScrollCondense'
 
 function LayoutContent() {
+    // Sidebar collapse is MANUAL ONLY (via Colapsar button)
     const { isCollapsed } = useSidebar()
 
+    // Header condensing based on scroll (does NOT affect sidebar)
+    const { isCondensed } = useScrollCondense()
+
     return (
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen bg-background flex">
+            {/* Sidebar (fixed, always visible on lg+) - collapses ONLY via manual button */}
             <Sidebar />
+
+            {/* Main content area (flex-1, to the right of sidebar) */}
             <div className={cn(
-                'transition-all duration-300',
-                'lg:pl-64', // Default when sidebar expanded
-                isCollapsed && 'lg:pl-16'
+                'flex-1 min-w-0 flex flex-col transition-all duration-300',
+                // Add left margin to account for fixed sidebar on lg+
+                'lg:ml-64',
+                isCollapsed && 'lg:ml-16'
             )}>
-                <Topbar />
-                <main className="p-4 md:p-6 lg:p-8">
+                {/* Header - sticky inside main area, condensed state from scroll */}
+                {/* NOTE: isCondensed affects ONLY header, NOT sidebar */}
+                <ArgfolioHeader condensed={isCondensed} />
+
+                {/* Page content */}
+                <main className="flex-1 p-4 md:p-6 lg:p-8">
                     <Outlet />
                 </main>
             </div>

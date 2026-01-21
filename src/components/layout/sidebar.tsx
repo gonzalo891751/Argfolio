@@ -14,9 +14,12 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetHeader, SheetTrigger } from '@/components/ui/sheet'
+
+import { ArgfolioLogo } from '@/components/brand/ArgfolioLogo'
 
 interface SidebarContextValue {
+    /** Manual collapse state (user toggle via Colapsar button) */
     isCollapsed: boolean
     setIsCollapsed: (collapsed: boolean) => void
     isMobileOpen: boolean
@@ -46,6 +49,7 @@ const navItems = [
 ]
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
+    // Manual collapse (user toggle via Colapsar button, persisted)
     const [isCollapsed, setIsCollapsedState] = useState(() => {
         const stored = localStorage.getItem(STORAGE_KEY)
         return stored === 'true'
@@ -57,9 +61,17 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
         setIsCollapsedState(collapsed)
     }
 
+    // NOTE: Sidebar does NOT auto-collapse on scroll.
+    // Only the top header condenses on scroll.
+
     return (
         <SidebarContext.Provider
-            value={{ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen }}
+            value={{
+                isCollapsed,
+                setIsCollapsed,
+                isMobileOpen,
+                setIsMobileOpen
+            }}
         >
             {children}
         </SidebarContext.Provider>
@@ -120,23 +132,30 @@ export function Sidebar() {
         // This effect watches for route changes
     }, [location])
 
+    // Check for reduced motion
+    const prefersReducedMotion = typeof window !== 'undefined'
+        ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        : false
+
     return (
         <aside
             className={cn(
-                'fixed left-0 top-0 z-40 h-screen bg-card border-r transition-all duration-300 hidden lg:flex flex-col',
+                'fixed left-0 top-0 z-40 h-screen bg-card border-r hidden lg:flex flex-col',
+                // Smooth transition unless reduced motion
+                !prefersReducedMotion && 'transition-all duration-300 ease-out',
                 isCollapsed ? 'w-16' : 'w-64'
             )}
         >
             {/* Logo */}
             <div className={cn(
                 'flex items-center h-16 px-4 border-b',
+                !prefersReducedMotion && 'transition-all duration-300',
                 isCollapsed ? 'justify-center' : 'gap-3'
             )}>
-                <div className="h-9 w-9 rounded-lg gradient-primary flex items-center justify-center">
-                    <span className="text-white font-bold text-lg">A</span>
-                </div>
-                {!isCollapsed && (
-                    <span className="font-semibold text-lg">Argfolio</span>
+                {isCollapsed ? (
+                    <ArgfolioLogo variant="mark" className="h-8 w-8" />
+                ) : (
+                    <ArgfolioLogo variant="full" className="h-9 w-auto" />
                 )}
             </div>
 
@@ -192,10 +211,7 @@ export function MobileNav() {
             <SheetContent side="left" className="w-72 p-0">
                 <SheetHeader className="border-b px-4 py-4">
                     <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-lg gradient-primary flex items-center justify-center">
-                            <span className="text-white font-bold text-lg">A</span>
-                        </div>
-                        <SheetTitle className="text-lg">Argfolio</SheetTitle>
+                        <ArgfolioLogo variant="full" className="h-9 w-auto" />
                     </div>
                 </SheetHeader>
                 <nav className="p-4 space-y-1">
