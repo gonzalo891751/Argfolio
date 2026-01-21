@@ -12,6 +12,19 @@ import {
     Banknote,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { Movement, Currency, FxType, MovementType, AssetCategory, Instrument, FixedDepositMeta } from '@/domain/types'
+import { AccountSelectCreatable } from './AccountSelectCreatable'
+import { useFxRates } from '@/hooks/use-fx-rates'
+import { useInstruments, useAccounts, useCreateInstrument } from '@/hooks/use-instruments'
+import { useCreateMovement, useUpdateMovement, useMovements } from '@/hooks/use-movements'
+import { useToast } from '@/components/ui/toast'
+import { listCedears } from '@/domain/cedears/master'
+import { CryptoTypeahead, type CryptoOption } from './CryptoTypeahead'
+import { FciTypeahead, generateFciSlug } from './FciTypeahead'
+import { db } from '@/db'
+import { computeTEA } from '@/domain/yield/accrual'
+
+const formatQty = (n: number) => n.toLocaleString('es-AR', { maximumFractionDigits: 8 })
 import { AssetTypeahead, type AssetOption, MOCK_ASSETS } from './AssetTypeahead'
 import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
 
@@ -58,19 +71,7 @@ function ExistingPFSelector({
     )
 }
 
-import type { Movement, Currency, FxType, MovementType, AssetCategory, Instrument } from '@/domain/types'
-import { AccountSelectCreatable } from './AccountSelectCreatable'
-import { useFxRates } from '@/hooks/use-fx-rates'
-import { useInstruments, useAccounts, useCreateInstrument } from '@/hooks/use-instruments'
-import { useCreateMovement, useUpdateMovement, useMovements } from '@/hooks/use-movements'
-import { useToast } from '@/components/ui/toast'
-import { listCedears } from '@/domain/cedears/master'
-// pfStore removed
-import { CryptoTypeahead, type CryptoOption } from './CryptoTypeahead'
-import { FciTypeahead, generateFciSlug } from './FciTypeahead'
-import { db } from '@/db'
 
-import { computeTEA } from '@/domain/yield/accrual'
 
 // Asset class type for wizard
 type AssetClass = 'cedear' | 'crypto' | 'pf' | 'fci' | 'currency' | 'wallet'
@@ -279,9 +280,10 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
         const quantities = new Map<string, number>()
         allMovements.forEach(m => {
             if (m.assetClass !== 'fci') return
-            const current = quantities.get(m.instrumentId) || 0
-            if (m.type === 'BUY' || m.type === 'DEPOSIT') quantities.set(m.instrumentId, current + m.quantity)
-            if (m.type === 'SELL' || m.type === 'WITHDRAW') quantities.set(m.instrumentId, current - m.quantity)
+            const current = quantities.get(m.instrumentId!) || 0
+            const qty = m.quantity || 0
+            if (m.type === 'BUY' || m.type === 'DEPOSIT') quantities.set(m.instrumentId!, current + qty)
+            if (m.type === 'SELL' || m.type === 'WITHDRAW') quantities.set(m.instrumentId!, current - qty)
         })
 
         return Array.from(quantities.entries())
@@ -294,14 +296,15 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
         if (!state.asset?.id || !['sell', 'sell_usd', 'redeem'].includes(state.opType) || !state.accountId) return Infinity
 
         const id = state.asset.id
-        let qty = 0
+        let val = 0
         allMovements.forEach(m => {
             if (m.instrumentId === id && m.accountId === state.accountId) { // Check Account specific balance
-                if (m.type === 'BUY' || m.type === 'DEPOSIT') qty += m.quantity
-                if (m.type === 'SELL' || m.type === 'WITHDRAW') qty -= m.quantity
+                const q = m.quantity || 0
+                if (m.type === 'BUY' || m.type === 'DEPOSIT') val += q
+                if (m.type === 'SELL' || m.type === 'WITHDRAW') val -= q
             }
         })
-        return Math.max(0, qty)
+        return Math.max(0, val)
     }, [state.asset, state.opType, state.accountId, allMovements])
 
     // Update FX rate when fxType or fxRates change
@@ -433,7 +436,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     toast({
                         title: 'Error de validación',
                         description: 'Seleccioná el banco o entidad.',
-                        variant: 'error', // Note: variant generic 'error' might need cast 'destructive' or similar if strictly typed, but keeping existing style
+                        variant: 'error',
                     })
                     return
                 }
@@ -552,7 +555,26 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     await (createInstrument as any).mutateAsync(newInstrument)
                     instrumentId = fciId
                 }
-            } else if (state.assetClass !== 'pf' && state.asset) {
+            } else if (state.assetClass === 'pf') {
+                // PF Deterministic Instrument
+                const pfSymbol = 'PF_ARS'
+                const existing = instrumentsList.find(i => i.id === 'PF_ARS_GENERIC' || i.symbol === pfSymbol)
+
+                if (existing) {
+                    instrumentId = existing.id
+                } else {
+                    const newInst: Instrument = {
+                        id: 'PF_ARS_GENERIC',
+                        symbol: pfSymbol,
+                        name: 'Plazo Fijo (Generico)',
+                        category: 'PF' as AssetCategory,
+                        nativeCurrency: 'ARS',
+                        priceKey: 'pf_ars'
+                    }
+                    await (createInstrument as any).mutateAsync(newInst)
+                    instrumentId = newInst.id
+                }
+            } else if (state.asset) {
                 const existing = instrumentsList.find(i => i.symbol === state.asset!.ticker)
 
                 if (existing) {
@@ -595,11 +617,56 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
 
             const movementId = prefillMovement?.id || crypto.randomUUID()
 
-            // Correct Payload construction
-            // PF Specific Mapping: Bank -> AccountId
-            // const accountIdToUse = state.assetClass === 'pf' ? (state.bank || 'PF_GENERIC') : state.accountId
-            // Now using state.accountId directly in payload structure below
+            // PF Pre-calculations
+            let pfGroupId: string | undefined
+            let pfCode: string | undefined
+            let pfPrincipal = 0
+            let pfInterest = 0
+            let pfTotal = 0
+            let pfDays = 30
+            let pfMaturityDate: Date | undefined
+            let pfFixedDepositMeta: any = undefined
 
+            if (state.assetClass === 'pf') {
+                pfCode = state.pfCode || state.alias
+                pfGroupId = state.opType === 'constitute' ? crypto.randomUUID() : undefined
+
+                if (state.opType === 'redeem' && state.selectedPfMovementId) {
+                    const originalPF = allMovements.find(m => m.id === state.selectedPfMovementId)
+                    if (originalPF) {
+                        pfGroupId = originalPF.meta?.pfGroupId || originalPF.meta?.fixedDeposit?.pfGroupId
+                        if (!pfGroupId) pfGroupId = crypto.randomUUID()
+                        pfCode = originalPF.meta?.pfCode || originalPF.alias || pfCode
+                    }
+                }
+
+                pfPrincipal = state.qty || 0
+                const rate = (state.tna || 0) / 100
+                pfDays = state.termDays || 30
+                pfInterest = pfPrincipal * rate * (pfDays / 365)
+                pfTotal = pfPrincipal + pfInterest
+
+                const matDate = new Date(state.datetime)
+                matDate.setDate(matDate.getDate() + pfDays)
+                pfMaturityDate = matDate
+
+                pfFixedDepositMeta = {
+                    pfGroupId,
+                    pfCode,
+                    bank: accountsList.find(a => a.id === state.accountId)?.name || 'Desconocido',
+                    principalARS: pfPrincipal,
+                    interestARS: pfInterest,
+                    totalARS: pfTotal,
+                    tna: state.tna || 0,
+                    termDays: pfDays,
+                    startDate: new Date(state.datetime).toISOString(),
+                    maturityDate: matDate.toISOString(),
+                    expectedInterestARS: pfInterest,
+                    expectedTotalARS: pfTotal,
+                    settlementMode: 'manual',
+                    ...(state.opType === 'redeem' ? { redeemedAt: new Date(state.datetime).toISOString() } : {})
+                }
+            }
 
             // Handle Yield Config Update (Wallet)
             if (state.assetClass === 'wallet' && state.accountId && state.yieldEnabled !== undefined) {
@@ -625,7 +692,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 datetimeISO: new Date(state.datetime).toISOString(),
                 type: movementType,
                 assetClass: state.assetClass as any,
-                instrumentId: instrumentId,
+                instrumentId: instrumentId!, // Asserted
                 accountId: state.accountId,
 
                 // Fallback fields always saved
@@ -646,9 +713,9 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 // Meta with FCI/PF snapshot
                 meta: {
                     ...(state.assetClass === 'pf' ? {
-                        pfGroupId: state.opType === 'constitute' ? (state.pfGroupId || `PFG-${crypto.randomUUID()}`) : undefined,
-                        pfCode: state.pfCode,
-                        fixedDeposit: undefined // Will be populated by PF logic below if needed
+                        pfGroupId,
+                        pfCode,
+                        fixedDeposit: pfFixedDepositMeta
                     } : {}),
                     ...(state.assetClass === 'fci' && state.fciData ? {
                         fci: {
@@ -694,78 +761,22 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 netAmount: totals.nativeNet,
                 totalARS: totals.netArs,
                 totalUSD: (state.assetClass === 'currency' || (state.assetClass === 'wallet' && state.currency === 'USD')) ? state.qty : totals.netUsd,
-            }
 
-
-            if (state.assetClass === 'pf') {
-                // Determine PF Group ID
-                let pfGroupId = state.opType === 'constitute' ? crypto.randomUUID() : undefined
-                let pfCode = state.pfCode || state.alias // Fallback
-
-                // If Redeem, try to get existing Group ID from selected PF
-                if (state.opType === 'redeem' && state.selectedPfMovementId) {
-                    const originalPF = allMovements.find(m => m.id === state.selectedPfMovementId)
-                    if (originalPF) {
-                        pfGroupId = originalPF.meta?.pfGroupId || originalPF.meta?.fixedDeposit?.pfGroupId || undefined
-                        // If still undefined, generate one (migration case) but we should probably try to patch the original too?
-                        // For now, let's keep it undefined or new?
-                        // User wants strict linking. If missing on original, let's generate one and we will patch original later.
-                        if (!pfGroupId) pfGroupId = crypto.randomUUID()
-
-                        pfCode = originalPF.meta?.pfCode || originalPF.alias || pfCode
-                    }
-                }
-
-                const principal = state.qty || 0
-                const rate = (state.tna || 0) / 100
-                const days = state.termDays || 30
-                const interest = principal * rate * (days / 365)
-                const total = principal + interest
-
-                const maturityDate = new Date(state.datetime)
-                maturityDate.setDate(maturityDate.getDate() + days)
-
-                // Meta Population
-                movementPayload.meta = {
-                    ...movementPayload.meta,
-                    pfCode: pfCode,
-                    pfGroupId: pfGroupId,
-
-                    fixedDeposit: {
-                        pfGroupId: pfGroupId,
-                        pfCode: pfCode,
-                        bank: accountsList.find(a => a.id === state.accountId)?.name || 'Desconocido',
-                        principalARS: principal || 0,
-                        interestARS: interest || 0,
-                        totalARS: total || 0,
-                        tna: state.tna || 0,
-                        termDays: days || 30,
-                        startDate: new Date(state.datetime).toISOString(),
-                        maturityDate: maturityDate.toISOString(),
-                        expectedInterestARS: interest || 0,
-                        expectedTotalARS: total || 0,
-
-                        // Redemption metadata
-                        settlementMode: 'manual',
-                        ...(state.opType === 'redeem' ? { redeemedAt: new Date(state.datetime).toISOString() } : {})
-                    }
-                }
-
-                // Legacy PF field population (for compatibility if needed, or remove)
-                movementPayload.pf = {
-                    kind: state.opType === 'constitute' ? 'constitute' : 'redeem', // Legacy kind
-                    pfId: pfGroupId, // Use GroupID as PF Link ID
+                // Legacy PF field population
+                pf: state.assetClass === 'pf' ? {
+                    kind: state.opType === 'constitute' ? 'constitute' : 'redeem',
+                    pfId: pfGroupId!, // Asserted
                     bank: accountsList.find(a => a.id === state.accountId)?.name || 'Desconocido',
                     alias: pfCode,
-                    capitalARS: principal,
+                    capitalARS: pfPrincipal,
                     tna: state.tna,
-                    termDays: days,
+                    termDays: pfDays,
                     startAtISO: new Date(state.datetime).toISOString(),
-                    maturityISO: maturityDate.toISOString(),
+                    maturityISO: pfMaturityDate ? pfMaturityDate.toISOString() : '',
                     fxOficialVentaHist: state.fxRate,
-                    interestARS: interest,
-                    totalToCollectARS: total
-                }
+                    interestARS: pfInterest,
+                    totalToCollectARS: pfTotal
+                } : undefined
             }
 
             if (prefillMovement?.id) {
@@ -804,17 +815,21 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         ticker: 'ARS', // It's cash
                         assetName: 'Acreditación Plazo Fijo',
 
-                        quantity: movementPayload.totalARS || state.qty, // ARS Amount
+                        quantity: movementPayload.totalARS || state.qty || 0, // ARS Amount
                         unitPrice: 1,
                         tradeCurrency: 'ARS',
 
-                        totalAmount: movementPayload.totalARS || state.qty,
-                        netAmount: movementPayload.totalARS || state.qty,
+                        totalAmount: movementPayload.totalARS || state.qty || 0,
+                        netAmount: movementPayload.totalARS || state.qty || 0,
 
                         meta: {
                             pfGroupId: movementPayload.meta.pfGroupId,
                             pfCode: movementPayload.meta.pfCode,
-                            fixedDeposit: { ...movementPayload.meta.fixedDeposit }, // Copy details
+                            // Ensure properties match
+                            fixedDeposit: movementPayload.meta.fixedDeposit ? {
+                                ...movementPayload.meta.fixedDeposit,
+                                principalARS: movementPayload.meta.fixedDeposit.principalARS || 0
+                            } : undefined,
                         },
 
                         isAuto: false, // Manual trigger
@@ -827,13 +842,42 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     // We need to fetch the original (we found it in state logic, but cleaner to just update by ID)
                     const original = allMovements.find(m => m.id === state.selectedPfMovementId)
                     if (original) {
+                        const fd = original.meta?.fixedDeposit
+                        // Construct robust FixedDepositMeta with defaults for all required fields
+                        const newFixedDeposit: FixedDepositMeta = fd ? {
+                            principalARS: fd.principalARS ?? 0,
+                            interestARS: fd.interestARS ?? 0,
+                            totalARS: fd.totalARS ?? ((fd.principalARS ?? 0) + (fd.interestARS ?? 0)),
+                            tna: fd.tna ?? 0,
+                            termDays: fd.termDays ?? 30,
+                            startDate: fd.startDate ?? original.datetimeISO,
+                            maturityDate: fd.maturityDate ?? original.pf?.maturityISO ?? original.datetimeISO,
+
+                            // Optional or preserved
+                            pfGroupId: fd.pfGroupId,
+                            pfCode: fd.pfCode,
+                            providerName: fd.providerName,
+
+                            // Update redemption status
+                            redeemedAt: movementPayload.datetimeISO,
+                            settlementMode: 'manual' as const
+                        } : {
+                            // Fallback if fixedDeposit meta is missing entirely
+                            principalARS: original.principalARS ?? 0,
+                            interestARS: original.expectedInterest ?? 0,
+                            totalARS: original.expectedTotal ?? 0,
+                            tna: original.tna ?? 0,
+                            termDays: original.termDays ?? 30,
+                            startDate: original.startDate ?? original.datetimeISO,
+                            maturityDate: original.maturityDate ?? original.datetimeISO,
+
+                            redeemedAt: movementPayload.datetimeISO,
+                            settlementMode: 'manual' as const
+                        }
+
                         const updatedMeta = {
                             ...original.meta,
-                            fixedDeposit: {
-                                ...original.meta?.fixedDeposit,
-                                redeemedAt: movementPayload.datetimeISO,
-                                settlementMode: 'manual' as const
-                            }
+                            fixedDeposit: newFixedDeposit
                         }
                         await updateMovement.mutateAsync({
                             id: original.id,
@@ -887,18 +931,6 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
 
                         await createMovement.mutateAsync(autoMovement)
 
-                        toast({
-                            title: 'Movimiento creado',
-                            description: 'Se generó también el balanceo automático de USDT.',
-                            variant: 'default',
-                        })
-                        toast({
-                            title: 'Movimiento creado',
-                            description: 'Se generó también el balanceo automático de USDT.',
-                            variant: 'default',
-                        })
-                    } else {
-                        // AutoQty 0 case (shouldn't happen if price > 0)
                         toast({
                             title: 'Movimiento creado',
                             description: 'Tu portafolio se actualizó correctamente.',

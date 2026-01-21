@@ -218,7 +218,9 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                     const metrics: AssetRowMetrics = {
                         ...metricsBase,
                         accountId,
-                        accountName
+                        accountName,
+                        openingBalanceInferred: holding.openingBalanceInferred,
+                        openingBalance: holding.openingBalance,
                     }
 
                     // Apply Filters (Category & Search)

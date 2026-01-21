@@ -11,7 +11,7 @@ import { AssetsPage } from '@/pages/assets'
 import { AssetDetailPage } from '@/pages/asset-detail'
 import { MovementsPageV2 as MovementsPage } from '@/pages/movements/index'
 import { HistoryPage } from '@/pages/history'
-import { DebtsPage } from '@/pages/debts'
+import { PersonalFinancesPage } from '@/features/personal-finances'
 import { SettingsPage } from '@/pages/settings'
 import { ImportPage } from '@/pages/import'
 import { MarketPage } from '@/pages/market'
@@ -112,13 +112,19 @@ function App() {
                                                 </ErrorBoundary>
                                             }
                                         />
+                                        {/* Personal Finances - New Module */}
                                         <Route
-                                            path="/debts"
+                                            path="/personal-finances"
                                             element={
                                                 <ErrorBoundary>
-                                                    <DebtsPage />
+                                                    <PersonalFinancesPage />
                                                 </ErrorBoundary>
                                             }
+                                        />
+                                        {/* Redirect old /debts to new module */}
+                                        <Route
+                                            path="/debts"
+                                            element={<Navigate to="/personal-finances" replace />}
                                         />
                                         <Route
                                             path="/settings"

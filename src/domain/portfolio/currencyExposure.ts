@@ -50,8 +50,9 @@ export function computeExposure(
 
     // Convert USD to ARS Eq for Percentage Calculation
     // User requested using MEP Buy for conservative estimate (or consistent conversion)
-    const usdEqArs = usdReal * fxMepBuy
-    const arsEq = arsReal
+    // Clamp negatives to avoid invalid ratios while keeping raw exposure for display.
+    const arsEq = Math.max(0, arsReal)
+    const usdEqArs = Math.max(0, usdReal) * fxMepBuy
     const totalEq = arsEq + usdEqArs
 
     const pctArs = totalEq > 0 ? (arsEq / totalEq) : 0

@@ -20,17 +20,26 @@ export function CurrencyRatioCard({
     className,
 }: CurrencyRatioCardProps) {
     // Determine total in ARS for Percentage Calculation strictly
-    const usdAsArs = exposureUsd * fxRate
-    const totalArs = exposureArs + usdAsArs
+    const clampedArs = Math.max(0, exposureArs)
+    const clampedUsd = Math.max(0, exposureUsd)
+    const usdAsArs = clampedUsd * fxRate
+    const totalArs = clampedArs + usdAsArs
 
-    const arsPct = totalArs > 0 ? exposureArs / totalArs : 0
+    const arsPct = totalArs > 0 ? clampedArs / totalArs : 0
     const usdPct = totalArs > 0 ? usdAsArs / totalArs : 0
+    const hasNegative = exposureArs < 0 || exposureUsd < 0
 
     return (
         <div className={cn("glass rounded-xl p-6 border flex flex-col justify-center", className)}>
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm text-muted-foreground uppercase tracking-wider">Relación Pesos / Dólares</h3>
             </div>
+            {hasNegative && (
+                <div className="text-[11px] text-amber-500 mb-2">
+                    Saldo negativo en {exposureArs < 0 ? 'ARS' : 'USD'}
+                </div>
+            )}
+
 
             {/* Bar */}
             <div className="h-4 w-full bg-muted rounded-full overflow-hidden flex mb-4">

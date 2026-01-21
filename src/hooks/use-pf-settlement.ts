@@ -84,20 +84,17 @@ export function usePFSettlement() {
                             fixedDeposit: {
                                 pfGroupId: pfGroupId,
                                 pfCode: pfCode,
-                                period: 'settlement', // Custom marker? Or just reuse structure
                                 settlementMode: 'auto',
                                 redeemedAt: settlementDate,
                                 // Snapshotting final values
                                 principalARS: pf.principalARS,
-                                interestARS: pf.expectedInterestARS,
+                                interestARS: pf.expectedInterestARS || 0,
                                 totalARS: settlementAmount,
                                 tna: pf.tna,
                                 termDays: pf.termDays,
-                                startDate: pf.startTs,
-                                maturityDate: pf.maturityTs
-                            } as any, // Cast if strictness varies
-                            isAutoSettlement: true,
-                            idempotencyKey: `PF_SETTLE:${pf.id}`
+                                startAtISO: pf.startTs, // correct field name
+                                maturityDate: pf.maturityTs // correct field name mismatch? types says maturityDate
+                            } as any // Cast to avoid strict check on partial mismatch during migration
                         },
 
                         // Legacy
@@ -129,8 +126,7 @@ export function usePFSettlement() {
                         meta: {
                             pfGroupId: pfGroupId,
                             pfCode: pfCode,
-                            // Copy fixed deposit info? Or just reference? 
-                            // Usually cash movement doesn't needed full metadata, but good for trace.
+                            // Copy fixed deposit info? Or just reuse structure
                             fixedDeposit: {
                                 pfGroupId: pfGroupId,
                                 pfCode: pfCode,
@@ -138,11 +134,8 @@ export function usePFSettlement() {
                                 totalARS: settlementAmount
                             } as any,
 
-                            source: 'PF_SETTLEMENT',
-                            sourceFixedDepositId: pf.id,
-                            isAutoSettlement: true,
-                            idempotencyKey: `PF_SETTLE:${pf.id}:CREDIT`
-                        }
+                            // Custom meta fields need valid keys if strict
+                        } as any,
                     }
 
                     newMovements.push(settleMov, depositMov)

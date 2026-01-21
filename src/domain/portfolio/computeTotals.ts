@@ -32,6 +32,7 @@ interface ComputeTotalsInput {
     baseFx: FxType
     stableFx: FxType
     cashBalances: Map<string, Map<string, number>>
+    openingBalances?: Map<string, Map<string, number>>
     realizedPnLArs: number
     realizedPnLUsd: number
     realizedPnLByAccount: Record<string, { ars: number; usd: number }>
@@ -45,7 +46,7 @@ import { computeExposure } from './currencyExposure'
  * Compute portfolio totals including ARS/USD values, liquidity, and category breakdown.
  */
 export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
-    const { holdings, currentPrices, priceChanges, fxRates, cashBalances, realizedPnLArs, realizedPnLUsd, realizedPnLByAccount } = input
+    const { holdings, currentPrices, priceChanges, fxRates, cashBalances, openingBalances, realizedPnLArs, realizedPnLUsd, realizedPnLByAccount } = input
 
     // Aggregate holdings by instrument
     const aggregatedMap = new Map<string, HoldingAggregated>()
@@ -88,12 +89,13 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
     // 2. Inject Cash Balances as Held Assets
     for (const [accountId, balances] of cashBalances) {
         for (const [currency, balance] of balances) {
-            if (Math.abs(balance) < 0.01) continue
+            const openingBalance = openingBalances?.get(accountId)?.get(currency as Currency) ?? 0
+            if (Math.abs(balance) < 0.01 && openingBalance <= 0) continue
 
             const isArs = currency === 'ARS'
             const category: AssetCategory = isArs ? 'ARS_CASH' : 'USD_CASH'
-            const symbol = isArs ? 'ARS' : 'USD'
-            const name = isArs ? 'Pesos Argentinos' : 'Dólar Estadounidense'
+            const symbol = isArs ? 'ARS' : currency
+            const name = isArs ? 'Pesos Argentinos' : `Saldo ${currency}`
 
             // We use a synthetic ID for aggregation. 
             // Ideally we group all ARS separate from all USD.
@@ -128,6 +130,8 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 avgCostArs: isArs ? 1 : 0,
                 avgCostUsd: isArs ? 0 : 1,
                 avgCostUsdEq: isArs ? 0 : 1,
+                openingBalanceInferred: openingBalance > 0,
+                openingBalance: openingBalance > 0 ? openingBalance : undefined,
             }
 
             const existing = aggregatedMap.get(instrumentId)
@@ -291,6 +295,19 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
         fxRates.mep.buy ?? fxRates.mep.sell ?? 0
     )
 
+    const openingBalancesByAccount: Record<string, Record<string, number>> = {}
+    if (openingBalances) {
+        for (const [accountId, balances] of openingBalances) {
+            for (const [currency, amount] of balances) {
+                if (amount <= 0) continue
+                if (!openingBalancesByAccount[accountId]) {
+                    openingBalancesByAccount[accountId] = {}
+                }
+                openingBalancesByAccount[accountId][currency] = amount
+            }
+        }
+    }
+
     return {
         totalARS,
         totalUSD,
@@ -304,5 +321,6 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
         exposure,
         categories,
         topPositions,
+        openingBalances: openingBalancesByAccount,
     }
 }

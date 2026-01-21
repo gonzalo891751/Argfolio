@@ -1,9 +1,4 @@
 import type { Movement, Instrument, Account, Holding } from '@/domain/types'
-
-
-
-
-
 import { computeAverageCost } from './average-cost'
 
 /**
@@ -74,73 +69,4 @@ export function computeHoldings(
     }
 
     return holdings
-}
-
-/**
- * Compute cash balances (ARS, USD, stablecoins) from movements.
- */
-export function computeCashBalances(
-    movements: Movement[]
-): Map<string, Map<string, number>> {
-    // Map<accountId, Map<currency, balance>>
-    const balances = new Map<string, Map<string, number>>()
-
-    const sorted = [...movements].sort(
-        (a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime()
-    )
-
-    for (const mov of sorted) {
-        if (!balances.has(mov.accountId)) {
-            balances.set(mov.accountId, new Map())
-        }
-
-        const accountBalances = balances.get(mov.accountId)!
-        const currency = mov.tradeCurrency
-        const current = accountBalances.get(currency) ?? 0
-
-        switch (mov.type) {
-            case 'DEPOSIT':
-                accountBalances.set(currency, current + mov.totalAmount)
-                break
-
-            case 'WITHDRAW':
-                accountBalances.set(currency, current - mov.totalAmount)
-                break
-
-            case 'BUY':
-                // Deduct cash when buying
-                accountBalances.set(currency, current - mov.totalAmount)
-                break
-
-            case 'SELL':
-                // Add cash when selling
-                accountBalances.set(currency, current + mov.totalAmount)
-                break
-
-            case 'FEE':
-                const feeCurrency = mov.feeCurrency ?? currency
-                const feeBalance = accountBalances.get(feeCurrency) ?? 0
-                accountBalances.set(feeCurrency, feeBalance - (mov.feeAmount ?? 0))
-                break
-
-            case 'TRANSFER_IN':
-            case 'DEBT_ADD':
-            case 'SELL_USD': // Selling USD adds ARS (if currency is ARS)
-                accountBalances.set(currency, current + mov.totalAmount)
-                break
-
-            case 'TRANSFER_OUT':
-            case 'DEBT_PAY':
-            case 'BUY_USD': // Buying USD removes ARS (if currency is ARS)
-                accountBalances.set(currency, current - mov.totalAmount)
-                break
-
-            case 'DIVIDEND':
-            case 'INTEREST':
-                accountBalances.set(currency, current + mov.totalAmount)
-                break
-        }
-    }
-
-    return balances
 }

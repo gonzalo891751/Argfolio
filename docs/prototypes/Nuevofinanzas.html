@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Finanzas Personales (Premium Prototype)</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Icons (Lucide via CDN) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Configuration -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a', // Deep Navy
+                            800: '#1e293b', // Surface
+                            700: '#334155', // Border
+                            primary: '#6366f1', // Indigo
+                            accent: '#0ea5e9', // Sky
+                        },
+                        semantic: {
+                            up: '#10b981', // Emerald
+                            down: '#f43f5e', // Rose
+                            warn: '#f59e0b', // Amber
+                            info: '#3b82f6', // Blue
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-sm': '0 0 10px -2px rgba(99, 102, 241, 0.2)',
+                        'glow-warn': '0 0 15px -3px rgba(245, 158, 11, 0.2)',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+        
+        body {
+            background-color: var(--bg-app);
+            color: #F8FAFC;
+        }
+
+        /* Glass Utility */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .glass-alert {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.05), rgba(30, 41, 59, 0.6));
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Gradient Border Trick for Alert */
+        .glass-alert::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 4px;
+            background: linear-gradient(to bottom, #F59E0B, transparent);
+        }
+
+        /* Tile Styles */
+        .insight-tile {
+            transition: all 0.3s ease;
+        }
+        .insight-tile:hover {
+            transform: translateY(-2px);
+            background: rgba(30, 41, 59, 0.6);
+            border-color: rgba(255,255,255,0.15);
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.2); }
+        ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.3); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.5); }
+
+        /* Transitions */
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Utility Helpers */
+        .hidden-item { display: none !important; }
+        
+        /* Plan vs Real Typography Emphasis */
+        .view-plan .val-real { opacity: 0.5; font-size: 0.75em; font-weight: 400; }
+        .view-plan .val-plan { opacity: 1; font-weight: 700; }
+        
+        .view-real .val-plan { opacity: 0.5; font-size: 0.75em; font-weight: 400; }
+        .view-real .val-real { opacity: 1; font-weight: 700; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans view-plan">
+
+    <!-- Top Navigation -->
+    <header class="fixed top-0 w-full z-40 bg-[#0B1121]/80 backdrop-blur-md border-b border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-brand-primary/20 text-brand-primary flex items-center justify-center">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                </div>
+                <span class="font-display font-bold text-xl tracking-tight text-white">Argfolio</span>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-white/10 text-xs text-slate-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Sistema Online
+                </div>
+                <button class="p-2 text-slate-400 hover:text-white transition rounded-full hover:bg-white/5 relative">
+                    <i data-lucide="bell" class="w-5 h-5"></i>
+                    <span class="absolute top-2 right-2 w-2 h-2 bg-brand-primary rounded-full"></span>
+                </button>
+                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-primary to-brand-accent border border-white/10"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+        
+        <!-- Header Page -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+            <div>
+                <h1 class="font-display text-3xl font-bold text-white mb-1">Finanzas Personales</h1>
+                <p class="text-slate-400 text-sm">Controlá tus ingresos, gastos y tarjetas en un solo lugar.</p>
+            </div>
+
+            <!-- Month Navigator -->
+            <div class="flex items-center gap-3 bg-slate-900/50 p-1 rounded-lg border border-white/10">
+                <button onclick="changeMonth(-1)" class="p-2 hover:bg-white/5 rounded-md text-slate-400 hover:text-white transition">
+                    <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                </button>
+                <div class="flex items-center gap-2 px-2 min-w-[140px] justify-center">
+                    <i data-lucide="calendar" class="w-4 h-4 text-brand-primary"></i>
+                    <span id="display-month" class="font-mono text-sm font-medium uppercase">ENERO 2026</span>
+                </div>
+                <button onclick="changeMonth(1)" class="p-2 hover:bg-white/5 rounded-md text-slate-400 hover:text-white transition">
+                    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <button onclick="openModal('modal-quick-add')" class="hidden md:flex items-center gap-2 bg-brand-primary hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium text-sm transition shadow-glow-sm">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Nuevo</span>
+                <span class="bg-white/20 text-[10px] px-1.5 rounded ml-1">⌘K</span>
+            </button>
+        </div>
+
+        <!-- MAIN SWITCH: Plan vs Efectivo -->
+        <div class="mb-8 flex flex-col items-center">
+            <div class="relative bg-slate-900 p-1 rounded-xl border border-white/10 inline-flex w-full md:w-auto">
+                <div id="switch-indicator" class="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] bg-brand-primary rounded-lg shadow-glow-sm transition-all duration-300 ease-out"></div>
+                <button onclick="setMode('plan')" id="btn-plan" class="relative z-10 w-full md:w-48 py-2.5 text-sm font-medium rounded-lg text-white transition-colors text-center">
+                    Plan (Estimado)
+                </button>
+                <button onclick="setMode('real')" id="btn-real" class="relative z-10 w-full md:w-48 py-2.5 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-colors text-center">
+                    Efectivo (Real)
+                </button>
+            </div>
+            <p id="mode-helper" class="mt-3 text-xs text-slate-500 font-mono text-center max-w-md transition-all">
+                Modo Plan: Proyecciones teóricas. No afecta saldos de cuentas.
+            </p>
+        </div>
+
+        <!-- KPIs Grid (Global) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <!-- KPI 1: Ingresos -->
+            <div class="glass-panel p-5 rounded-xl relative overflow-hidden group">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <i data-lucide="trending-up" class="w-12 h-12 text-semantic-up"></i>
+                </div>
+                <p class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Ingresos</p>
+                <div class="flex flex-col items-start h-12 justify-center">
+                    <h3 id="kpi-income-plan" class="val-plan font-mono text-2xl text-white transition-all">$ 0</h3>
+                    <h3 id="kpi-income-real" class="val-real font-mono text-2xl text-semantic-up transition-all">$ 0</h3>
+                </div>
+                <div class="mt-1 flex items-center gap-2 text-[10px] text-slate-500 border-t border-white/5 pt-2 w-full">
+                     <span>Total estimado del mes.</span>
+                </div>
+            </div>
+
+            <!-- KPI 2: Gastos -->
+            <div class="glass-panel p-5 rounded-xl relative overflow-hidden group">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <i data-lucide="trending-down" class="w-12 h-12 text-semantic-down"></i>
+                </div>
+                <p class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Gastos</p>
+                <div class="flex flex-col items-start h-12 justify-center">
+                    <h3 id="kpi-expenses-plan" class="val-plan font-mono text-2xl text-white transition-all">$ 0</h3>
+                    <h3 id="kpi-expenses-real" class="val-real font-mono text-2xl text-white transition-all">$ 0</h3>
+                </div>
+                <div class="mt-1 flex items-center gap-2 text-[10px] text-slate-500 border-t border-white/5 pt-2 w-full">
+                    <span>Fijos + variables (presupuesto).</span>
+                </div>
+            </div>
+
+            <!-- KPI 3: Compromisos -->
+            <div class="glass-panel p-5 rounded-xl relative overflow-hidden group">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <i data-lucide="credit-card" class="w-12 h-12 text-brand-accent"></i>
+                </div>
+                <p class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Tarjetas & Deudas</p>
+                <div class="flex flex-col items-start h-12 justify-center">
+                    <h3 id="kpi-debt-total" class="font-mono text-2xl font-bold text-white transition-all">$ 0</h3>
+                </div>
+                <div class="mt-1 flex items-center gap-2 text-[10px] text-slate-500 border-t border-white/5 pt-2 w-full">
+                    <span>Vencimientos mes + Préstamos.</span>
+                </div>
+            </div>
+
+            <!-- KPI 4: Ahorro -->
+            <div class="glass-panel p-5 rounded-xl relative overflow-hidden group border-t-2 border-t-brand-primary">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <i data-lucide="wallet" class="w-12 h-12 text-brand-primary"></i>
+                </div>
+                <p class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Capacidad Ahorro</p>
+                <div class="flex flex-col items-start h-12 justify-center">
+                    <h3 id="kpi-savings-plan" class="val-plan font-mono text-2xl text-brand-primary transition-all">$ 0</h3>
+                    <h3 id="kpi-savings-real" class="val-real font-mono text-2xl text-brand-primary transition-all">$ 0</h3>
+                </div>
+                <div class="mt-1 flex items-center gap-2 text-[10px] text-slate-500 border-t border-white/5 pt-2 w-full">
+                    <span>Lo que te queda libre (Plan/Real).</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Tabs -->
+        <div class="flex flex-col lg:flex-row gap-6">
+            
+            <!-- Tab Navigation -->
+            <nav class="lg:w-64 flex-shrink-0">
+                <div class="flex lg:flex-col overflow-x-auto lg:overflow-visible gap-2 pb-2 lg:pb-0 sticky top-24">
+                    <button onclick="setTab('resumen')" id="tab-resumen" class="tab-btn active flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-left w-full">
+                        <i data-lucide="pie-chart" class="w-4 h-4"></i>
+                        Resumen
+                    </button>
+                    <button onclick="setTab('ingresos')" id="tab-ingresos" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-left w-full text-slate-400 hover:text-white hover:bg-white/5">
+                        <i data-lucide="arrow-down-circle" class="w-4 h-4"></i>
+                        Ingresos
+                    </button>
+                    <button onclick="setTab('gastos')" id="tab-gastos" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-left w-full text-slate-400 hover:text-white hover:bg-white/5">
+                        <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
+                        Gastos Fijos
+                    </button>
+                    <button onclick="setTab('deudas')" id="tab-deudas" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-left w-full text-slate-400 hover:text-white hover:bg-white/5">
+                        <i data-lucide="credit-card" class="w-4 h-4"></i>
+                        Deudas & Tarjetas
+                    </button>
+                    <button onclick="setTab('presupuesto')" id="tab-presupuesto" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-left w-full text-slate-400 hover:text-white hover:bg-white/5">
+                        <i data-lucide="calculator" class="w-4 h-4"></i>
+                        Presupuesto
+                    </button>
+                </div>
+            </nav>
+
+            <!-- Tab Panels Container -->
+            <div id="panels-container" class="flex-1 min-h-[400px]">
+                
+                <!-- Loading Skeleton (Hidden by default) -->
+                <div id="panel-loading" class="hidden space-y-4">
+                    <div class="h-8 w-1/3 skeleton rounded-lg"></div>
+                    <div class="h-32 w-full skeleton rounded-xl"></div>
+                    <div class="h-16 w-full skeleton rounded-xl"></div>
+                    <div class="h-16 w-full skeleton rounded-xl"></div>
+                </div>
+
+                <!-- PANEL: RESUMEN -->
+                <div id="panel-resumen" class="tab-panel fade-in space-y-6">
+                    <h2 class="font-display text-lg text-white mb-4 flex items-center gap-2">
+                        <i data-lucide="activity" class="w-5 h-5 text-brand-primary"></i>
+                        Highlights del mes
+                    </h2>
+
+                    <!-- ALERT SECTION (Dynamic) -->
+                    <div id="resumen-alerts" class="mb-6">
+                        <!-- JS injects here -->
+                    </div>
+
+                    <!-- INSIGHT TILES (Replazando barras) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+                        <!-- Tile 1: Cobertura -->
+                        <div class="insight-tile glass-panel p-5 rounded-xl border-l-4" id="tile-coverage-border">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="text-sm font-medium text-slate-300">Cobertura del Plan</h4>
+                                <div class="p-1.5 rounded-full bg-white/5" id="tile-coverage-icon-bg">
+                                    <i data-lucide="shield" class="w-4 h-4 text-white"></i>
+                                </div>
+                            </div>
+                            <div class="font-display text-2xl font-bold text-white mb-1" id="tile-coverage-value">0%</div>
+                            <p class="text-xs text-slate-400 leading-relaxed">Te queda <span id="tile-coverage-free" class="text-white font-bold">0%</span> libre si se cumple el plan.</p>
+                        </div>
+
+                        <!-- Tile 2: Disponible (Surplus) -->
+                        <div class="insight-tile glass-panel p-5 rounded-xl border-l-4" id="tile-surplus-border">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="text-sm font-medium text-slate-300">Disponible para Asignar</h4>
+                                <div class="p-1.5 rounded-full bg-white/5" id="tile-surplus-icon-bg">
+                                    <i data-lucide="piggy-bank" class="w-4 h-4 text-white"></i>
+                                </div>
+                            </div>
+                            <div class="font-display text-2xl font-bold text-white mb-1" id="tile-surplus-value">$ 0</div>
+                            <p class="text-xs text-slate-400 leading-relaxed" id="tile-surplus-text">Dinero extra post-presupuesto.</p>
+                        </div>
+
+                        <!-- Tile 3: Peso Fijos -->
+                        <div class="insight-tile glass-panel p-5 rounded-xl border-l-4 border-l-brand-primary">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="text-sm font-medium text-slate-300">Peso Gastos Fijos</h4>
+                                <div class="p-1.5 rounded-full bg-white/5">
+                                    <i data-lucide="home" class="w-4 h-4 text-brand-primary"></i>
+                                </div>
+                            </div>
+                            <div class="font-display text-2xl font-bold text-white mb-1" id="tile-fixed-value">0%</div>
+                            <p class="text-xs text-slate-400 leading-relaxed">Tus gastos fijos te comen <span id="tile-fixed-pct" class="text-white">0%</span> del ingreso.</p>
+                        </div>
+
+                        <!-- Tile 4: Carga Financiera -->
+                        <div class="insight-tile glass-panel p-5 rounded-xl border-l-4 border-l-brand-accent">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="text-sm font-medium text-slate-300">Carga Financiera</h4>
+                                <div class="p-1.5 rounded-full bg-white/5">
+                                    <i data-lucide="credit-card" class="w-4 h-4 text-brand-accent"></i>
+                                </div>
+                            </div>
+                            <div class="font-display text-2xl font-bold text-white mb-1" id="tile-debt-value">0%</div>
+                            <p class="text-xs text-slate-400 leading-relaxed">Compromisos (Tarjetas + Deudas) del mes.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 p-4 rounded-lg bg-slate-900/40 border border-white/5 flex justify-between items-center">
+                         <span class="text-xs text-slate-500">
+                             <i data-lucide="info" class="w-3 h-3 inline mr-1"></i>
+                             Consumos en curso para el mes próximo (cierre siguiente)
+                         </span>
+                         <span class="text-sm font-mono text-slate-300" id="text-in-course">$ 0</span>
+                    </div>
+
+                </div>
+
+                <!-- PANEL: INGRESOS -->
+                <div id="panel-ingresos" class="tab-panel hidden-item fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="font-display text-lg text-white">Detalle de Ingresos</h2>
+                        <button class="text-xs font-medium text-brand-primary hover:text-white transition">Ver histórico</button>
+                    </div>
+                    <div id="ingresos-list" class="space-y-3">
+                        <!-- JS renders items here -->
+                    </div>
+                </div>
+
+                <!-- PANEL: GASTOS FIJOS -->
+                <div id="panel-gastos" class="tab-panel hidden-item fade-in">
+                    <h2 class="font-display text-lg text-white mb-6">Gastos Fijos</h2>
+                    <div id="gastos-list" class="space-y-2">
+                        <!-- JS renders items here -->
+                    </div>
+                </div>
+
+                <!-- PANEL: DEUDAS (PLACEHOLDER MODULE) -->
+                <div id="panel-deudas" class="tab-panel hidden-item fade-in">
+                     <h2 class="font-display text-lg text-white mb-6">Tarjetas & Deudas</h2>
+                     
+                     <!-- Anchor for auto-scroll -->
+                     <div id="deudas-tarjetas-anchor"></div>
+
+                     <!-- Existing Module Placeholder -->
+                     <div class="glass-panel p-8 rounded-xl border border-dashed border-white/20 bg-slate-900/50 flex flex-col items-center text-center">
+                        <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                            <i data-lucide="server" class="w-8 h-8 text-slate-500"></i>
+                        </div>
+                        <h3 class="text-xl font-display font-bold text-white mb-2">Módulo Existente: Deudas & Tarjetas</h3>
+                        <p class="text-slate-400 max-w-md mb-8">
+                            Esta sección renderiza el módulo legacy de Argfolio. La gestión detallada de cuotas y resúmenes se mantiene sin cambios de UI.
+                        </p>
+                        
+                        <div class="flex gap-4">
+                            <button class="px-6 py-2 bg-brand-primary hover:bg-indigo-500 text-white rounded-lg font-medium text-sm transition shadow-glow-sm">
+                                Abrir módulo actual
+                            </button>
+                            <button class="px-6 py-2 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-lg font-medium text-sm transition">
+                                <i data-lucide="file-text" class="w-4 h-4 inline mr-2"></i>
+                                Importar Resumen PDF
+                            </button>
+                        </div>
+                        <div class="mt-6 pt-6 border-t border-white/5 w-full max-w-sm">
+                            <p class="text-xs font-mono text-slate-500 uppercase tracking-widest mb-3">Datos sincronizados al dashboard</p>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-slate-400">Total Tarjetas (Venc. Mes)</span>
+                                <span class="text-white font-mono" id="placeholder-cards-due">$ 0</span>
+                            </div>
+                             <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Total Deudas (Cuotas Mes)</span>
+                                <span class="text-white font-mono" id="placeholder-debt-due">$ 0</span>
+                            </div>
+                        </div>
+                     </div>
+                </div>
+
+                 <!-- PANEL: PRESUPUESTO (REAL IMPLEMENTATION) -->
+                 <div id="panel-presupuesto" class="tab-panel hidden-item fade-in">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <h2 class="font-display text-lg text-white">Presupuesto (Variables)</h2>
+                        <div class="px-4 py-2 rounded-lg bg-slate-800 border border-white/10">
+                             <span class="text-xs text-slate-400 uppercase mr-2">Liquidez Disponible (Plan)</span>
+                             <span id="budget-liquidity" class="font-mono font-bold text-semantic-up">$ 0</span>
+                        </div>
+                    </div>
+
+                    <div id="presupuesto-list" class="space-y-4">
+                        <!-- JS renders budget items here -->
+                    </div>
+
+                    <div class="mt-6 flex justify-end">
+                        <div class="text-right">
+                             <div class="text-xs text-slate-500 uppercase">Total Presupuestado</div>
+                             <div id="budget-total-plan" class="text-xl font-mono text-white">$ 0</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- FLOATING ACTIONS (Mobile) -->
+    <div class="md:hidden fixed bottom-6 right-6 z-30">
+        <button onclick="openModal('modal-quick-add')" class="w-14 h-14 bg-brand-primary rounded-full shadow-glow flex items-center justify-center text-white">
+            <i data-lucide="plus" class="w-8 h-8"></i>
+        </button>
+    </div>
+
+    <!-- MODAL: QUICK ADD -->
+    <div id="modal-quick-add" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onclick="closeModal('modal-quick-add')"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-[#151E32] border border-white/10 rounded-2xl shadow-2xl p-6 transition-all scale-95 opacity-0 modal-anim-target">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="font-display text-xl font-bold text-white">Nuevo Movimiento</h3>
+                <span class="text-xs font-mono text-slate-500 bg-slate-900 px-2 py-1 rounded">ESC</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <button class="p-4 border border-white/10 rounded-xl hover:bg-white/5 hover:border-brand-primary/50 transition flex flex-col items-center gap-2 group">
+                    <i data-lucide="arrow-up-circle" class="w-6 h-6 text-semantic-up group-hover:scale-110 transition"></i>
+                    <span class="text-sm font-medium text-white">Ingreso</span>
+                </button>
+                <button class="p-4 border border-white/10 rounded-xl hover:bg-white/5 hover:border-brand-primary/50 transition flex flex-col items-center gap-2 group">
+                    <i data-lucide="home" class="w-6 h-6 text-brand-primary group-hover:scale-110 transition"></i>
+                    <span class="text-sm font-medium text-white">Gasto Fijo</span>
+                </button>
+                 <button class="p-4 border border-white/10 rounded-xl hover:bg-white/5 hover:border-brand-primary/50 transition flex flex-col items-center gap-2 group">
+                    <i data-lucide="calculator" class="w-6 h-6 text-brand-accent group-hover:scale-110 transition"></i>
+                    <span class="text-sm font-medium text-white">Presupuesto</span>
+                </button>
+                 <button class="p-4 border border-white/10 rounded-xl hover:bg-white/5 hover:border-brand-primary/50 transition flex flex-col items-center gap-2 group">
+                    <i data-lucide="credit-card" class="w-6 h-6 text-semantic-down group-hover:scale-110 transition"></i>
+                    <span class="text-sm font-medium text-white">Pago Tarjeta</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIC SCRIPT -->
+    <script>
+        // --- 1. CONFIG & DATA STORE ---
+        
+        // Formatter
+        const ARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+        
+        // MOCK TODAY (For "Days remaining" calculation)
+        const MOCK_TODAY = new Date(2026, 0, 5); // 5 de Enero 2026
+
+        // State
+        const state = {
+            currentDate: new Date(2026, 0, 1), // Jan 2026 start
+            mode: 'plan', // 'plan' | 'real'
+            tab: 'resumen',
+            data: {
+                incomes: [
+                    { id: 'inc1', name: 'Sueldo Relación Dep.', amount: 2100000, day: 25, isRecurring: true, paid: false, paidAt: null }
+                    // IncomeReal = 0 for demo
+                ],
+                fixedExpenses: [
+                    { id: 'fix1', name: 'Alquiler Depto', amount: 950000, day: 5, isRecurring: true, paid: false },
+                    { id: 'fix2', name: 'Fibertel / Personal', amount: 32589, day: 12, isRecurring: true, paid: false },
+                    { id: 'fix3', name: 'Edenor', amount: 18500, day: 18, isRecurring: true, paid: false },
+                    { id: 'fix4', name: 'Expensas', amount: 281500, day: 10, isRecurring: true, paid: false }
+                    // Total Fixed ~ 1.282.589
+                ],
+                budget: [
+                    { id: 'bud1', category: 'Supermercado', assigned: 200000, spent: 50000 },
+                    { id: 'bud2', category: 'Nafta / Transporte', assigned: 95000, spent: 20000 },
+                    { id: 'bud3', category: 'Ocio & Salidas', assigned: 50000, spent: 10000 }
+                    // Total Budget: 345.000
+                ],
+                loans: [
+                    { id: 'loan1', name: 'Honorarios Abogado', totalAmount: 162529, installmentAmount: 27089, day: 31, paid: false }
+                ],
+                card: {
+                    name: 'Visa Galicia',
+                    closeDay: 28, // Day of month card closes
+                    dueDay: 10,   // Day of NEXT month payment is due
+                    transactions: [
+                        // Prior month close -> Vence Jan 10
+                        { date: '2025-12-15', amount: 150000, desc: 'Regalos Navidad' },
+                        { date: '2025-12-20', amount: 300000, desc: 'Pasajes Enero' },
+                        // Current cycle -> Vence Feb
+                        { date: '2026-01-05', amount: 350500, desc: 'Electro' },
+                        { date: '2026-01-15', amount: 70000, desc: 'Super' }
+                    ],
+                    paidHistory: [] 
+                }
+            }
+        };
+
+        // --- 2. LOGIC ENGINE ---
+
+        function getMonthData(date) {
+            const year = date.getFullYear();
+            const month = date.getMonth(); // 0-11
+            
+            // A. Income Logic
+            let incomePlan = 0;
+            let incomeReal = 0;
+            state.data.incomes.forEach(inc => {
+                if (inc.isRecurring || isSameMonth(inc.dateStr, date)) {
+                    incomePlan += inc.amount;
+                    if (inc.paid) incomeReal += inc.amount;
+                }
+            });
+
+            // B. Fixed Expenses Logic
+            let fixedPlan = 0;
+            let fixedReal = 0;
+            state.data.fixedExpenses.forEach(exp => {
+                 if (exp.isRecurring || isSameMonth(exp.dateStr, date)) {
+                    fixedPlan += exp.amount;
+                    if (exp.paid) fixedReal += exp.amount;
+                }
+            });
+
+            // C. Budget Logic
+            let budgetPlan = 0;
+            let budgetReal = 0;
+            state.data.budget.forEach(b => {
+                budgetPlan += b.assigned;
+                budgetReal += b.spent;
+            });
+
+            // D. Debt Logic
+            let debtDue = 0;
+            let debtPaid = 0;
+            state.data.loans.forEach(loan => {
+                debtDue += loan.installmentAmount;
+                if (loan.paid) debtPaid += loan.installmentAmount;
+            });
+
+            // E. CARD LOGIC (Mocked for specific Jan 2026 view based on prompt)
+            let cardDueThisMonth = 0;
+            let cardInCourseNext = 0;
+
+            state.data.card.transactions.forEach(txn => {
+                // Mock Logic for simple separation: 
+                // If date is in Dec 2025 -> Due in Jan 2026
+                // If date is in Jan 2026 -> Due in Feb 2026 (In Course)
+                const tDate = new Date(txn.date);
+                if(tDate.getMonth() === 11 && tDate.getFullYear() === 2025) { // Dec
+                    if (month === 0 && year === 2026) cardDueThisMonth += txn.amount;
+                }
+                if(tDate.getMonth() === 0 && tDate.getFullYear() === 2026) { // Jan
+                     if (month === 0 && year === 2026) cardInCourseNext += txn.amount;
+                }
+            });
+
+            const isCardPaid = state.data.card.paidHistory.includes(`${year}-${month}`);
+            const cardPaidAmount = isCardPaid ? cardDueThisMonth : 0;
+
+            // F. Aggregations
+            // Plan: Income - (Fixed + Budget + DebtDue + CardDue)
+            const commitmentsPlan = fixedPlan + budgetPlan + debtDue + cardDueThisMonth;
+            const commitmentsReal = fixedReal + budgetReal + debtPaid + cardPaidAmount;
+
+            const savingsPlan = incomePlan - commitmentsPlan;
+            const savingsReal = incomeReal - commitmentsReal;
+            
+            // Surplus / Disponible for Budget (Prompt logic)
+            // incomePlan - fixedPlan - debtDue - cardDue - budgetPlan
+            // Basically same as savingsPlan because commitmentsPlan INCLUDES budgetPlan
+            const surplus = savingsPlan; 
+
+            return {
+                incomePlan, incomeReal,
+                fixedPlan, fixedReal,
+                budgetPlan, budgetReal,
+                debtDue, debtPaid,
+                cardDueThisMonth, cardInCourseNext, isCardPaid,
+                commitmentsPlan, commitmentsReal,
+                savingsPlan, savingsReal,
+                surplus
+            };
+        }
+
+        function isSameMonth(dateStr, dateObj) {
+            if (!dateStr) return false;
+            const d = new Date(dateStr);
+            return d.getMonth() === dateObj.getMonth() && d.getFullYear() === dateObj.getFullYear();
+        }
+
+        // --- 3. RENDERERS ---
+
+        function renderAll() {
+            const data = getMonthData(state.currentDate);
+            
+            // 1. Header
+            const months = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+            document.getElementById('display-month').innerText = `${months[state.currentDate.getMonth()]} ${state.currentDate.getFullYear()}`;
+
+            // 2. KPIs
+            animateValue("kpi-income-plan", data.incomePlan);
+            animateValue("kpi-income-real", data.incomeReal);
+            
+            animateValue("kpi-expenses-plan", data.commitmentsPlan);
+            animateValue("kpi-expenses-real", data.commitmentsReal);
+
+            animateValue("kpi-debt-total", data.cardDueThisMonth + data.debtDue);
+
+            animateValue("kpi-savings-plan", data.savingsPlan);
+            animateValue("kpi-savings-real", data.savingsReal);
+
+            // 3. Tab: Resumen
+            renderResumen(data);
+
+            // 4. Tab: Ingresos
+            renderIngresos();
+
+            // 5. Tab: Gastos
+            renderGastos();
+
+            // 6. Tab: Presupuesto
+            renderPresupuesto(data);
+
+            // 7. Tab: Deudas (Placeholder data)
+            document.getElementById('placeholder-cards-due').innerText = ARS.format(data.cardDueThisMonth);
+            document.getElementById('placeholder-debt-due').innerText = ARS.format(data.debtDue);
+        }
+
+        function renderResumen(data) {
+            const container = document.getElementById('resumen-alerts');
+            container.innerHTML = '';
+
+            // PREMIUM ALERT CARD
+            if (data.cardDueThisMonth > 0 && !data.isCardPaid) {
+                // Calculate days remaining
+                const dueDay = state.data.card.dueDay; // 10
+                const currentDay = MOCK_TODAY.getDate(); // 5
+                const diff = dueDay - currentDay;
+                const daysText = diff > 0 ? `Faltan ${diff} días` : (diff === 0 ? 'Vence HOY' : 'Vencida');
+
+                container.innerHTML += `
+                    <div class="glass-alert p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-glow-warn">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0 border border-amber-500/30">
+                                <i data-lucide="alert-circle" class="w-6 h-6 text-amber-500"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-white font-bold text-lg mb-1">Tenés <span class="font-mono">${ARS.format(data.cardDueThisMonth)}</span> de Visa Galicia</h4>
+                                <p class="text-sm text-slate-300">Vence el ${state.data.card.dueDay} • <span class="text-amber-400 font-bold">${daysText}</span></p>
+                            </div>
+                        </div>
+                        <button onclick="goToPay()" class="bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold px-6 py-2.5 rounded-lg shadow-lg transition transform hover:scale-105">
+                            Ir a pagar
+                        </button>
+                    </div>
+                `;
+            }
+
+            // INSIGHT TILES CALCULATIONS
+            
+            // 1. Coverage Ratio (Commitments / Income)
+            const coverageRatio = data.incomePlan > 0 ? (data.commitmentsPlan / data.incomePlan) * 100 : 0;
+            const freeRatio = 100 - coverageRatio;
+            
+            // Color Logic (Based on coverage: High Coverage = Bad)
+            let covColor = 'border-l-brand-primary';
+            let covIconBg = 'bg-brand-primary/10';
+            let covTextClass = 'text-white';
+            
+            if (coverageRatio < 60) { // Good (Green)
+                covColor = 'border-l-semantic-up';
+                covTextClass = 'text-semantic-up';
+            } else if (coverageRatio < 85) { // Warning (Amber)
+                covColor = 'border-l-semantic-warn';
+                covTextClass = 'text-semantic-warn';
+            } else { // Bad (Red)
+                covColor = 'border-l-semantic-down';
+                covTextClass = 'text-semantic-down';
+            }
+
+            document.getElementById('tile-coverage-border').className = `insight-tile glass-panel p-5 rounded-xl border-l-4 ${covColor}`;
+            document.getElementById('tile-coverage-value').innerText = `${Math.round(coverageRatio)}%`;
+            document.getElementById('tile-coverage-free').innerText = `${Math.round(freeRatio)}%`;
+            document.getElementById('tile-coverage-free').className = `font-bold ${covTextClass}`;
+
+            // 2. Surplus (Disponible)
+            // Defined as: Income - All Expenses (incl Budget)
+            // If negative -> Over budget
+            let surplusColor = 'border-l-brand-accent';
+            let surplusText = 'Disponible para asignar en variables.';
+            if (data.surplus < 0) {
+                surplusColor = 'border-l-semantic-down';
+                surplusText = `<span class="text-semantic-down font-bold">Te pasaste por ${ARS.format(Math.abs(data.surplus))}</span>`;
+            } else {
+                 surplusColor = 'border-l-brand-accent';
+                 surplusText = `Disponible para asignar en variables: <span class="text-white font-bold">${ARS.format(data.surplus)}</span>`;
+            }
+            
+            document.getElementById('tile-surplus-border').className = `insight-tile glass-panel p-5 rounded-xl border-l-4 ${surplusColor}`;
+            document.getElementById('tile-surplus-value').innerText = ARS.format(data.surplus);
+            document.getElementById('tile-surplus-text').innerHTML = surplusText;
+
+            // 3. Fixed Expenses Ratio
+            const fixedRatio = data.incomePlan > 0 ? (data.fixedPlan / data.incomePlan) * 100 : 0;
+            document.getElementById('tile-fixed-value').innerText = `${Math.round(fixedRatio)}%`;
+            document.getElementById('tile-fixed-pct').innerText = `${Math.round(fixedRatio)}%`;
+
+            // 4. Financial Load (Debt + Cards)
+            const debtLoad = data.debtDue + data.cardDueThisMonth;
+            const debtRatio = data.incomePlan > 0 ? (debtLoad / data.incomePlan) * 100 : 0;
+            document.getElementById('tile-debt-value').innerText = `${Math.round(debtRatio)}%`;
+            
+            // In Course
+            document.getElementById('text-in-course').innerText = ARS.format(data.cardInCourseNext);
+
+            lucide.createIcons();
+        }
+
+        function goToPay() {
+            setTab('deudas');
+            setTimeout(() => {
+                const el = document.getElementById('deudas-tarjetas-anchor');
+                if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+        }
+
+        function renderIngresos() {
+            const list = document.getElementById('ingresos-list');
+            list.innerHTML = '';
+            state.data.incomes.forEach(inc => {
+                const statusHtml = inc.paid 
+                    ? `<span class="text-[10px] px-1.5 py-0.5 bg-semantic-up/10 text-semantic-up border border-semantic-up/20 rounded uppercase flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Cobrado</span>`
+                    : `<span class="text-[10px] px-1.5 py-0.5 bg-slate-700 text-slate-300 rounded border border-white/5 uppercase">Planificado</span>`;
+                
+                const btnHtml = inc.paid
+                    ? ``
+                    : `<button onclick="toggleIncome('${inc.id}')" class="text-xs bg-brand-primary/10 text-brand-primary border border-brand-primary/30 px-3 py-1.5 rounded hover:bg-brand-primary hover:text-white transition">Marcar cobrado</button>`;
+
+                list.innerHTML += `
+                    <div class="glass-panel p-4 rounded-xl flex items-center justify-between group">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full bg-brand-primary/10 flex items-center justify-center shrink-0">
+                                <i data-lucide="briefcase" class="w-5 h-5 text-brand-primary"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h4 class="font-medium text-white">${inc.name}</h4>
+                                    ${statusHtml}
+                                </div>
+                                <p class="text-xs text-slate-400 mt-0.5">Día estimado: ${inc.day}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-mono text-lg font-bold text-white">${ARS.format(inc.amount)}</div>
+                            <div class="mt-2 mode-plan">${btnHtml}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            lucide.createIcons();
+        }
+
+        function renderGastos() {
+            const list = document.getElementById('gastos-list');
+            list.innerHTML = '';
+            state.data.fixedExpenses.forEach(exp => {
+                const statusIcon = exp.paid 
+                    ? `<span class="text-semantic-up text-xs font-bold">Pagado</span>`
+                    : `<span class="text-slate-500 text-xs">Pendiente</span>`;
+                const checkBtn = exp.paid
+                    ? `<button onclick="toggleExpense('${exp.id}')" class="w-6 h-6 rounded-full bg-semantic-up flex items-center justify-center text-slate-900"><i data-lucide="check" class="w-4 h-4"></i></button>`
+                    : `<button onclick="toggleExpense('${exp.id}')" class="w-6 h-6 rounded-full border border-slate-600 hover:border-brand-primary hover:bg-brand-primary/20 transition"></button>`;
+                list.innerHTML += `
+                     <div class="flex items-center justify-between p-4 border-b border-white/5 hover:bg-white/5 transition rounded-lg">
+                         <div class="flex items-center gap-4">
+                             <div class="w-8 h-8 rounded bg-slate-800 flex items-center justify-center text-slate-400">
+                                 <i data-lucide="home" class="w-4 h-4"></i>
+                             </div>
+                             <div>
+                                 <p class="text-sm font-medium text-white">${exp.name}</p>
+                                 <p class="text-xs text-slate-500">Vence día ${exp.day}</p>
+                             </div>
+                         </div>
+                         <div class="flex items-center gap-4">
+                             <div class="text-right mr-2">
+                                <span class="block font-mono text-sm text-white">${ARS.format(exp.amount)}</span>
+                                ${statusIcon}
+                             </div>
+                             ${checkBtn}
+                         </div>
+                     </div>
+                `;
+            });
+            lucide.createIcons();
+        }
+
+        function renderPresupuesto(data) {
+            const list = document.getElementById('presupuesto-list');
+            list.innerHTML = '';
+            
+            // Liquidity (Reused Surplus for consistency)
+            const liqEl = document.getElementById('budget-liquidity');
+            liqEl.innerText = ARS.format(data.surplus);
+            liqEl.className = data.surplus < 0 ? "font-mono font-bold text-semantic-down" : "font-mono font-bold text-semantic-up";
+
+            document.getElementById('budget-total-plan').innerText = ARS.format(data.budgetPlan);
+
+            state.data.budget.forEach(item => {
+                const pct = (item.spent / item.assigned) * 100;
+                let color = 'bg-brand-primary';
+                if (pct > 80) color = 'bg-semantic-warn';
+                if (pct > 100) color = 'bg-semantic-down';
+
+                list.innerHTML += `
+                    <div class="glass-panel p-4 rounded-xl">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-medium text-white">${item.category}</span>
+                            <div class="flex gap-4 text-sm">
+                                <span class="text-slate-400">Asignado: <span class="font-mono text-white">${ARS.format(item.assigned)}</span></span>
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full mb-3 overflow-hidden">
+                            <div class="${color} h-2 rounded-full" style="width: ${Math.min(100, pct)}%"></div>
+                        </div>
+                        <div class="flex justify-between items-center bg-slate-950/50 p-2 rounded-lg border border-white/5">
+                            <span class="text-xs text-slate-500 uppercase ml-2">Gastado Real</span>
+                            <div class="flex items-center gap-2">
+                                <button onclick="updateBudget('${item.id}', -1000)" class="p-1 hover:bg-white/10 rounded text-slate-400 hover:text-white"><i data-lucide="minus" class="w-3 h-3"></i></button>
+                                <input type="number" value="${item.spent}" onchange="updateBudgetAmount('${item.id}', this.value)" class="bg-transparent text-right font-mono text-sm text-white w-24 focus:outline-none border-b border-transparent focus:border-brand-primary">
+                                <button onclick="updateBudget('${item.id}', 1000)" class="p-1 hover:bg-white/10 rounded text-slate-400 hover:text-white"><i data-lucide="plus" class="w-3 h-3"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            lucide.createIcons();
+        }
+
+        function setMode(mode) {
+            state.mode = mode;
+            document.body.className = `min-h-screen flex flex-col font-sans view-${mode}`;
+            
+            const btnPlan = document.getElementById('btn-plan');
+            const btnReal = document.getElementById('btn-real');
+            const indicator = document.getElementById('switch-indicator');
+            const helper = document.getElementById('mode-helper');
+
+            if (mode === 'plan') {
+                btnPlan.className = "relative z-10 w-full md:w-48 py-2.5 text-sm font-medium rounded-lg text-white transition-colors text-center";
+                btnReal.className = "relative z-10 w-full md:w-48 py-2.5 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-colors text-center";
+                indicator.style.transform = 'translateX(0)';
+                indicator.classList.remove('bg-semantic-up');
+                indicator.classList.add('bg-brand-primary');
+                helper.innerText = "Modo Plan: Proyecciones teóricas. No afecta saldos de cuentas.";
+            } else {
+                btnPlan.className = "relative z-10 w-full md:w-48 py-2.5 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-colors text-center";
+                btnReal.className = "relative z-10 w-full md:w-48 py-2.5 text-sm font-medium rounded-lg text-white transition-colors text-center";
+                indicator.style.transform = 'translateX(100%)';
+                indicator.classList.remove('bg-brand-primary');
+                indicator.classList.add('bg-semantic-up');
+                helper.innerText = "Modo Efectivo: Refleja lo que ya impactó en tus cuentas.";
+            }
+        }
+
+        function setTab(tabId) {
+            state.tab = tabId;
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                if(btn.id === `tab-${tabId}`) {
+                    btn.classList.remove('text-slate-400', 'hover:text-white', 'hover:bg-white/5');
+                    btn.classList.add('active', 'bg-white/10', 'text-white');
+                } else {
+                    btn.classList.add('text-slate-400', 'hover:text-white', 'hover:bg-white/5');
+                    btn.classList.remove('active', 'bg-white/10', 'text-white');
+                }
+            });
+            const panels = document.getElementById('panels-container');
+            const loader = document.getElementById('panel-loading');
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden-item'));
+            loader.classList.remove('hidden');
+            setTimeout(() => {
+                loader.classList.add('hidden');
+                const target = document.getElementById(`panel-${tabId}`);
+                if(target) target.classList.remove('hidden-item');
+            }, 250);
+        }
+
+        function changeMonth(delta) {
+            const newDate = new Date(state.currentDate);
+            newDate.setMonth(newDate.getMonth() + delta);
+            state.currentDate = newDate;
+            renderAll();
+        }
+
+        function toggleIncome(id) {
+            const item = state.data.incomes.find(i => i.id === id);
+            if(item) { item.paid = !item.paid; renderAll(); }
+        }
+        function toggleExpense(id) {
+            const item = state.data.fixedExpenses.find(i => i.id === id);
+            if(item) { item.paid = !item.paid; renderAll(); }
+        }
+        function updateBudget(id, delta) {
+            const item = state.data.budget.find(i => i.id === id);
+            if(item) { item.spent = Math.max(0, item.spent + delta); renderAll(); }
+        }
+        function updateBudgetAmount(id, val) {
+             const item = state.data.budget.find(i => i.id === id);
+             if(item) { item.spent = parseFloat(val); renderAll(); }
+        }
+        function animateValue(id, value) {
+            const obj = document.getElementById(id);
+            if(!obj) return;
+            obj.innerText = ARS.format(value);
+        }
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.querySelector('.modal-anim-target').classList.remove('scale-95', 'opacity-0'); }, 10);
+        }
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            modal.querySelector('.modal-anim-target').classList.add('scale-95', 'opacity-0');
+            setTimeout(() => modal.classList.add('hidden'), 200);
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.fixed.inset-0').forEach(m => { if (!m.classList.contains('hidden')) closeModal(m.id); });
+            }
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                openModal('modal-quick-add');
+            }
+        });
+
+        // INIT
+        lucide.createIcons();
+        renderAll();
+
+    </script>
+</body>
+</html>
