@@ -21,6 +21,7 @@ interface CreditCardPanelProps {
     onEditConsumption: (consumption: PFCardConsumption) => void
     onMarkUnpaid: () => void
     onRegisterPayment: () => void
+    mepSell?: number | null
 }
 
 const arsFormatter = new Intl.NumberFormat('es-AR', {
@@ -66,12 +67,15 @@ export function CreditCardPanel({
     onEditConsumption,
     onMarkUnpaid,
     onRegisterPayment,
+    mepSell,
 }: CreditCardPanelProps) {
     const {
         card,
         closingStatement,
         closingConsumptions,
         closingTotal,
+        closingTotalArs,
+        closingTotalUsd,
         dueStatement,
         dueStatementRecord,
         dueTotal,
@@ -118,8 +122,9 @@ export function CreditCardPanel({
                         />
 
                         <CreditCardSummary
-                            arsAmount={closingTotal}
-                            usdAmount={undefined}
+                            arsAmount={closingTotalArs}
+                            usdAmount={closingTotalUsd}
+                            mepSell={mepSell}
                             closingInDays={closingInDays}
                             limitTotal={limitTotal}
                             limitUsedPercent={limitUsedPercent}
@@ -147,9 +152,9 @@ export function CreditCardPanel({
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h4 className="font-display text-lg text-white">Consumos del per??odo</h4>
+                                <h4 className="font-display text-lg text-white">Consumos del período</h4>
                                 <span className="text-xs text-slate-500">
-                                    Cierra {formatDayMonth(closingStatement.closeDate)}
+                                    Cierra {formatDayMonth(closingStatement.closeDate)} • Vence {formatDayMonth(closingStatement.dueDate)}
                                 </span>
                             </div>
                             <div className="flex items-center gap-2">
@@ -165,9 +170,8 @@ export function CreditCardPanel({
 
                         {closingConsumptions.length > 0 ? (
                             <div
-                                className={`space-y-3 overflow-hidden transition-all duration-500 ${
-                                    isExpanded ? 'max-h-[900px] opacity-100' : 'max-h-[420px] opacity-95'
-                                }`}
+                                className={`space-y-3 overflow-hidden transition-all duration-500 ${isExpanded ? 'max-h-[900px] opacity-100' : 'max-h-[420px] opacity-95'
+                                    }`}
                             >
                                 {visibleConsumptions.map((c) => (
                                     <div
@@ -221,7 +225,7 @@ export function CreditCardPanel({
                             </div>
                         ) : (
                             <div className="text-sm text-slate-500 text-center py-6 border border-white/5 rounded-lg bg-slate-900/40">
-                                Sin consumos este per??odo
+                                Sin consumos este período
                             </div>
                         )}
 
@@ -249,9 +253,9 @@ export function CreditCardPanel({
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h4 className="font-display text-lg text-white">Resumen a pagar</h4>
+                                <h4 className="font-display text-lg text-white">A pagar este mes</h4>
                                 <span className="text-xs text-slate-500">
-                                    Vence {formatDayMonth(dueStatement.dueDate)}
+                                    Cierre anterior • Vence {formatDayMonth(dueStatement.dueDate)}
                                 </span>
                             </div>
                         </div>

@@ -10,6 +10,7 @@ interface CreditCardTileProps {
     onEditConsumption: (consumption: PFCardConsumption) => void
     onMarkUnpaid: () => void
     onRegisterPayment: () => void
+    mepSell?: number | null
 }
 
 export function CreditCardTile({
@@ -20,6 +21,7 @@ export function CreditCardTile({
     onEditConsumption,
     onMarkUnpaid,
     onRegisterPayment,
+    mepSell,
 }: CreditCardTileProps) {
     return (
         <CreditCardPanel
@@ -30,6 +32,7 @@ export function CreditCardTile({
             onEditConsumption={onEditConsumption}
             onMarkUnpaid={onMarkUnpaid}
             onRegisterPayment={onRegisterPayment}
+            mepSell={mepSell}
         />
     )
 }

@@ -111,13 +111,21 @@ export function FinanceExecutionModal({
                             />
                         </div>
 
-                        <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
-                            <span className="text-muted-foreground">Crear movimiento</span>
-                            <input
-                                type="checkbox"
-                                checked={createMovement}
-                                onChange={(e) => setCreateMovement(e.target.checked)}
-                            />
+                        <div className="rounded-lg border border-border bg-muted/10 px-4 py-3">
+                            <label className="flex items-center justify-between cursor-pointer">
+                                <div>
+                                    <span className="text-sm text-foreground">¿Registrar en Movimientos?</span>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        Crea un movimiento real en tu cuenta
+                                    </p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={createMovement}
+                                    onChange={(e) => setCreateMovement(e.target.checked)}
+                                    className="w-5 h-5 rounded border-border bg-background text-primary focus:ring-primary focus:ring-offset-0"
+                                />
+                            </label>
                         </div>
 
                         <div className="space-y-1.5">

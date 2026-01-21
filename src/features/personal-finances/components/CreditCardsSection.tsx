@@ -13,6 +13,7 @@ interface CreditCardsSectionProps {
     onEditConsumption: (consumption: PFCardConsumption, card: PFCreditCard) => void
     onMarkUnpaid: (cardId: string) => void
     onRegisterPayment: (data: CardStatementData) => void
+    mepSell?: number | null
 }
 
 export function CreditCardsSection({
@@ -24,6 +25,7 @@ export function CreditCardsSection({
     onEditConsumption,
     onMarkUnpaid,
     onRegisterPayment,
+    mepSell,
 }: CreditCardsSectionProps) {
     if (cardData.length === 0) {
         return (
@@ -66,6 +68,7 @@ export function CreditCardsSection({
                         onEditConsumption={(consumption) => onEditConsumption(consumption, data.card)}
                         onMarkUnpaid={() => onMarkUnpaid(data.card.id)}
                         onRegisterPayment={() => onRegisterPayment(data)}
+                        mepSell={mepSell}
                     />
                 ))}
             </div>

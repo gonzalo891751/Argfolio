@@ -8,15 +8,14 @@ import { useToast } from '@/components/ui/toast'
 import type { PFCardConsumption, PFFixedExpense, PFIncome } from '@/db/schema'
 import { usePersonalFinancesV3 } from './hooks/usePersonalFinancesV3' // V3 Hook
 import type { CardStatementData } from './hooks/usePersonalFinancesV3'
-import { formatARS } from './models/calculations' // Keep for formatting helper
-import { useComputedPortfolio } from '@/hooks/use-computed-portfolio'
+import { formatARS, formatUSD } from './models/calculations'
+import { useFxRates } from '@/hooks/use-fx-rates'
 import { getTodayISO } from './utils/dateHelpers'
 import {
     getFixedExpenseScheduledDate,
     getIncomeScheduledDate,
 } from './models/financeHelpers'
 import {
-    KPICard,
     MonthPicker,
     OverviewTab,
     DebtsTab,
@@ -44,13 +43,12 @@ type ExecutionTarget =
     | { kind: 'card_statement'; data: CardStatementData }
 
 export function PersonalFinancesPage() {
+    // FX Rates
+    const { data: fxRates } = useFxRates()
+    const mepSell = fxRates?.mep.sell ?? null
+
     // V3 Hook
-    const pf = usePersonalFinancesV3()
-    const { data: portfolioTotals } = useComputedPortfolio()
-    const trackCashEnabled = useMemo(
-        () => localStorage.getItem('argfolio.trackCash') === 'true',
-        []
-    )
+    const pf = usePersonalFinancesV3(mepSell)
 
     // UI State
     const [activeTab, setActiveTab] = useState<TabType>('overview')
@@ -220,25 +218,21 @@ export function PersonalFinancesPage() {
 
     // Helper to convert string YYYY-MM to Date object
     const currentDate = new Date(pf.yearMonth + '-02T12:00:00')
-    const liquidityValue = trackCashEnabled
-        ? formatARS(portfolioTotals?.liquidityARS ?? 0)
-        : 'Modo simple'
-    const liquiditySubValue = trackCashEnabled
-        ? undefined
-        : 'Activa el tracking de cash en Ajustes'
 
     if (pf.loading) {
         return <div className="p-8 text-center text-slate-500 animate-pulse">Cargando Finanzas...</div>
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-8">
+            {/* Premium Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                    <h1 className="text-2xl font-display font-bold text-white">Finanzas Personales</h1>
-                    <p className="text-slate-400">Control de ingresos, gastos y tarjetas</p>
+                    <h1 className="font-display text-3xl font-bold text-white mb-1">Finanzas Personales</h1>
+                    <p className="text-slate-400 text-sm">Controlá tus ingresos, gastos y tarjetas en un solo lugar.</p>
                 </div>
+
+                {/* Month Navigator */}
                 <div className="flex items-center gap-3">
                     <MonthPicker
                         currentDate={currentDate}
@@ -247,198 +241,268 @@ export function PersonalFinancesPage() {
                     />
                     <button
                         onClick={() => openNewModal()}
-                        className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center transition shadow-lg shadow-indigo-500/20"
+                        className="hidden md:flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium text-sm transition shadow-glow-sm"
                     >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Nuevo
+                        <Plus className="w-4 h-4" />
+                        <span>Nuevo</span>
                     </button>
                 </div>
             </div>
 
-            {/* KPIs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <KPICard
-                    title="Ingresos estimados"
-                    value={formatARS(pf.kpis.incomesEstimated)}
-                    icon={Wallet}
-                    type="success"
-                    subValue={`Cobrados: ${formatARS(pf.kpis.incomesCollected)}`}
-                />
-                <KPICard
-                    title="Gastos estimados"
-                    value={formatARS(pf.kpis.expensesEstimated)}
-                    icon={TrendingDown}
-                    type="danger"
-                    subValue={`Pagados: ${formatARS(pf.kpis.expensesPaid)}`}
-                />
-                <KPICard
-                    title="Tarjetas devengado"
-                    value={formatARS(pf.kpis.cardsAccrued)}
-                    icon={CreditCard}
-                    type="primary"
-                />
-                <KPICard
-                    title="Tarjetas a pagar prox."
-                    value={formatARS(pf.kpis.cardsDueNextMonth)}
-                    icon={CreditCard}
-                    type="neutral"
-                />
-                <KPICard
-                    title="Tarjetas pagadas"
-                    value={formatARS(pf.kpis.cardsPaid)}
-                    icon={CreditCard}
-                    type="success"
-                />
-                <KPICard
-                    title="Liquidez disponible"
-                    value={liquidityValue}
-                    icon={ShoppingBag}
-                    type="primary"
-                    subValue={liquiditySubValue}
-                />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <KPICard
-                    title="Ahorro estimado del mes"
-                    value={formatARS(pf.kpis.savingsEstimated)}
-                    icon={Wallet}
-                    type={pf.kpis.savingsEstimated >= 0 ? 'success' : 'danger'}
-                />
-                <KPICard
-                    title="Ahorro real del mes"
-                    value={formatARS(pf.kpis.savingsActual)}
-                    icon={Wallet}
-                    type={pf.kpis.savingsActual >= 0 ? 'success' : 'danger'}
-                />
-            </div>
-
-            <div className="flex items-center gap-2">
-                <button
-                    onClick={() => setViewMode('plan')}
-                    className={`px-4 py-2 rounded-full text-sm border transition ${
-                        viewMode === 'plan'
-                            ? 'bg-indigo-500 text-white border-indigo-500'
-                            : 'bg-transparent border-white/10 text-slate-400 hover:text-slate-200'
-                    }`}
-                >
-                    Plan (Estimado)
-                </button>
-                <button
-                    onClick={() => setViewMode('actual')}
-                    className={`px-4 py-2 rounded-full text-sm border transition ${
-                        viewMode === 'actual'
-                            ? 'bg-emerald-500 text-white border-emerald-500'
-                            : 'bg-transparent border-white/10 text-slate-400 hover:text-slate-200'
-                    }`}
-                >
-                    Efectivo (Real)
-                </button>
-            </div>
-
-            {/* Tabs Navigation */}
-            <div className="flex gap-2 border-b border-white/10 pb-1 overflow-x-auto">
-                {(['overview', 'debts', 'expenses', 'budget', 'income'] as const).map((tab) => (
+            {/* Mode Switch: Plan vs Real */}
+            <div className="flex flex-col items-center">
+                <div className="relative bg-slate-900 p-1 rounded-xl border border-white/10 inline-flex w-full md:w-auto">
+                    <div
+                        className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-glow-sm transition-all duration-300 ease-out ${viewMode === 'plan' ? 'left-1 bg-indigo-500' : 'left-[calc(50%+2px)] bg-emerald-500'
+                            }`}
+                    />
                     <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`
-                            px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
-                            ${activeTab === tab
-                                ? 'border-indigo-500 text-indigo-400'
-                                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                            }
-                        `}
+                        onClick={() => setViewMode('plan')}
+                        className={`relative z-10 w-full md:w-48 py-2.5 text-sm font-medium rounded-lg transition-colors text-center ${viewMode === 'plan' ? 'text-white' : 'text-slate-400 hover:text-white'
+                            }`}
                     >
-                        {tab === 'overview' && 'Resumen'}
-                        {tab === 'debts' && 'Deudas & Tarjetas'}
-                        {tab === 'expenses' && 'Gastos Fijos'}
-                        {tab === 'budget' && 'Presupuesto'}
-                        {tab === 'income' && 'Ingresos'}
+                        Plan (Estimado)
                     </button>
-                ))}
+                    <button
+                        onClick={() => setViewMode('actual')}
+                        className={`relative z-10 w-full md:w-48 py-2.5 text-sm font-medium rounded-lg transition-colors text-center ${viewMode === 'actual' ? 'text-white' : 'text-slate-400 hover:text-white'
+                            }`}
+                    >
+                        Efectivo (Real)
+                    </button>
+                </div>
+                <p className="mt-3 text-xs text-slate-500 font-mono text-center max-w-md">
+                    {viewMode === 'plan'
+                        ? 'Modo Plan: Proyecciones teóricas. No afecta saldos de cuentas.'
+                        : 'Modo Efectivo: Refleja lo que ya impactó en tus cuentas.'
+                    }
+                </p>
             </div>
 
-            {/* Main Content */}
-            <div className="min-h-[400px]">
-                {activeTab === 'overview' && (
-                    <OverviewTab
-                        kpis={pf.kpis}
-                        upcomingMaturities={[]} // TODO
-                        referenceDate={currentDate}
-                    />
-                )}
-
-                {activeTab === 'debts' && (
-                    <div className="space-y-8">
-                        {/* Credit Cards Section */}
-                        <CreditCardsSection
-                            cardData={pf.cardStatementData}
-                            onManageCards={() => setIsCardManageOpen(true)}
-                            onAddConsumption={(cardId) => {
-                                const card = pf.creditCards.find(c => c.id === cardId)
-                                if (card) setConsumptionCard(card)
-                            }}
-                            onImportStatement={(cardId) => {
-                                const card = pf.creditCards.find(c => c.id === cardId)
-                                if (card) setImportCard(card)
-                            }}
-                            onDeleteConsumption={async (consumptionId) => {
-                                await pf.deleteConsumption(consumptionId)
-                                pf.refreshAll()
-                                toast({ title: 'Consumo eliminado', variant: 'success' })
-                            }}
-                            onEditConsumption={(consumption, card) => {
-                                setEditingConsumption(consumption)
-                                setEditingCard(card)
-                            }}
-                            onMarkUnpaid={(cardId) => pf.markStatementUnpaid(cardId)}
-                            onRegisterPayment={(data) => {
-                                if (data.dueTotal <= 0) return
-                                setExecutionTarget({ kind: 'card_statement', data })
-                            }}
-                        />
-
-                        {/* Traditional Debts */}
-                        <DebtsTab
-                            debts={pf.debts}
-                            yearMonth={pf.yearMonth}
-                            onEdit={(d) => openEditModal(d as any, 'debt')}
-                            onDelete={(id) => handleDelete(id, 'debt')}
-                        />
+            {/* KPIs Grid (4 cards) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* KPI 1: Ingresos */}
+                <div className="glass-panel p-5 rounded-xl relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                        <Wallet className="w-12 h-12 text-emerald-500" />
                     </div>
-                )}
+                    <p className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Ingresos</p>
+                    <div className="flex flex-col items-start h-12 justify-center">
+                        <h3 className={`font-mono text-2xl transition-all ${viewMode === 'plan' ? 'text-white font-bold' : 'text-slate-500 text-sm'}`}>
+                            {formatARS(pf.kpis.incomesEstimated)}
+                        </h3>
+                        <h3 className={`font-mono text-2xl text-emerald-400 transition-all ${viewMode === 'actual' ? 'font-bold' : 'text-sm opacity-60'}`}>
+                            {formatARS(pf.kpis.incomesCollected)}
+                        </h3>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500 border-t border-white/5 pt-2 w-full">
+                        <span>Total estimado del mes.</span>
+                    </div>
+                </div>
 
-                {activeTab === 'expenses' && (
-                    <FixedExpensesTab
-                        expenses={pf.fixedExpenses}
-                        yearMonth={pf.yearMonth}
-                        viewMode={viewMode}
-                        onEdit={(e) => openEditModal(e as any, 'expense')}
-                        onDelete={(id) => handleDelete(id, 'expense')}
-                        onExecute={(expense) => setExecutionTarget({ kind: 'expense', expense })}
-                    />
-                )}
+                {/* KPI 2: Gastos */}
+                <div className="glass-panel p-5 rounded-xl relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                        <TrendingDown className="w-12 h-12 text-rose-500" />
+                    </div>
+                    <p className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Gastos</p>
+                    <div className="flex flex-col items-start h-12 justify-center">
+                        <h3 className={`font-mono text-2xl transition-all ${viewMode === 'plan' ? 'text-white font-bold' : 'text-slate-500 text-sm'}`}>
+                            {formatARS(pf.kpis.totalExpensesPlan)}
+                        </h3>
+                        <h3 className={`font-mono text-2xl text-white transition-all ${viewMode === 'actual' ? 'font-bold' : 'text-sm opacity-60'}`}>
+                            {formatARS(pf.kpis.totalExpensesReal)}
+                        </h3>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500 border-t border-white/5 pt-2 w-full">
+                        <span>Fijos + variables (presupuesto).</span>
+                    </div>
+                </div>
 
-                {activeTab === 'income' && (
-                    <IncomeTab
-                        incomes={viewMode === 'actual' ? pf.allIncomes : pf.incomes}
-                        yearMonth={pf.yearMonth}
-                        viewMode={viewMode}
-                        onEdit={(i) => openEditModal(i as any, 'income')}
-                        onDelete={(id) => handleDelete(id, 'income')}
-                        onExecute={(income) => setExecutionTarget({ kind: 'income', income })}
-                    />
-                )}
+                {/* KPI 3: Tarjetas & Deudas */}
+                <div className="glass-panel p-5 rounded-xl relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                        <CreditCard className="w-12 h-12 text-sky-500" />
+                    </div>
+                    <p className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Tarjetas & Deudas</p>
+                    <div className="flex flex-col items-start justify-center">
+                        <h3 className="font-mono text-2xl font-bold text-white">
+                            {formatARS(pf.kpis.cardsAccrued + pf.kpis.debtInstallmentsThisMonth)}
+                        </h3>
+                    </div>
+                    <div className="mt-2 flex flex-col gap-1 text-[10px] text-slate-400 border-t border-white/5 pt-2 w-full">
+                        <div className="flex flex-wrap items-center gap-x-2">
+                            <span>Tarjetas: <span className="text-white font-mono">{formatARS(pf.kpis.cardsAccruedArs)}</span></span>
+                            {pf.kpis.cardsAccruedUsd > 0 && (
+                                <span className="flex items-center gap-1">
+                                    <span>+</span>
+                                    <span className="text-emerald-400 font-mono">{formatUSD(pf.kpis.cardsAccruedUsd)}</span>
+                                    <span className="text-slate-500">
+                                        (≈ {mepSell ? formatARS(pf.kpis.cardsAccruedUsd * mepSell) : '—'} @ MEP venta {mepSell ? formatARS(mepSell) : '—'})
+                                    </span>
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <span>Deudas: <span className="text-white font-mono">{formatARS(pf.kpis.debtInstallmentsThisMonth)}</span></span>
+                        </div>
+                    </div>
+                </div>
 
-                {activeTab === 'budget' && (
-                    <BudgetTab
-                        items={pf.budgets as any}
-                        onAdd={() => openNewModal('budget')}
-                        onEdit={(b) => openEditModal(b as any, 'budget')}
-                        onDelete={(id) => handleDelete(id, 'budget')}
-                    />
-                )}
+                {/* KPI 4: Capacidad Ahorro */}
+                <div className="glass-panel p-5 rounded-xl relative overflow-hidden group border-t-2 border-t-indigo-500">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                        <ShoppingBag className="w-12 h-12 text-indigo-500" />
+                    </div>
+                    <p className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Capacidad Ahorro</p>
+                    <div className="flex flex-col items-start h-12 justify-center">
+                        <h3 className={`font-mono text-2xl transition-all ${viewMode === 'plan' ? 'text-indigo-400 font-bold' : 'text-slate-500 text-sm'}`}>
+                            {formatARS(pf.kpis.savingsEstimated)}
+                        </h3>
+                        <h3 className={`font-mono text-2xl text-indigo-400 transition-all ${viewMode === 'actual' ? 'font-bold' : 'text-sm opacity-60'}`}>
+                            {formatARS(pf.kpis.savingsActual)}
+                        </h3>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500 border-t border-white/5 pt-2 w-full">
+                        <span>Lo que te queda libre (Plan/Real).</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Content Tabs - Lateral Layout */}
+            <div className="flex flex-col lg:flex-row gap-6">
+                {/* Tab Navigation - Sidebar (collapses on debts tab) */}
+                <nav className={`flex-shrink-0 transition-all duration-300 ease-out ${activeTab === 'debts' ? 'lg:w-16' : 'lg:w-64'
+                    }`}>
+                    <div className={`flex lg:flex-col overflow-x-auto lg:overflow-visible gap-2 pb-2 lg:pb-0 lg:sticky lg:top-24 ${activeTab === 'debts' ? 'lg:items-center' : ''
+                        }`}>
+                        {([
+                            { id: 'overview', label: 'Resumen', icon: 'pie-chart' },
+                            { id: 'income', label: 'Ingresos', icon: 'arrow-down-circle' },
+                            { id: 'expenses', label: 'Gastos Fijos', icon: 'arrow-up-circle' },
+                            { id: 'debts', label: 'Deudas & Tarjetas', icon: 'credit-card' },
+                            { id: 'budget', label: 'Presupuesto', icon: 'calculator' },
+                        ] as const).map((tab) => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                title={activeTab === 'debts' ? tab.label : undefined}
+                                className={`
+                                    flex items-center gap-3 rounded-lg text-sm font-medium transition-all text-left
+                                    ${activeTab === 'debts' ? 'lg:w-10 lg:h-10 lg:justify-center lg:p-0 px-4 py-3 w-full' : 'px-4 py-3 w-full'}
+                                    ${activeTab === tab.id
+                                        ? 'bg-white/10 text-white'
+                                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                                    }
+                                `}
+                            >
+                                {tab.id === 'overview' && <Wallet className="w-4 h-4 flex-shrink-0" />}
+                                {tab.id === 'income' && <Wallet className="w-4 h-4 flex-shrink-0" />}
+                                {tab.id === 'expenses' && <TrendingDown className="w-4 h-4 flex-shrink-0" />}
+                                {tab.id === 'debts' && <CreditCard className="w-4 h-4 flex-shrink-0" />}
+                                {tab.id === 'budget' && <ShoppingBag className="w-4 h-4 flex-shrink-0" />}
+                                <span className={`transition-all duration-300 ${activeTab === 'debts' ? 'lg:hidden' : ''}`}>
+                                    {tab.label}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </nav>
+
+                {/* Tab Panels Container */}
+                <div className="flex-1 min-h-[400px]">
+                    {activeTab === 'overview' && (
+                        <OverviewTab
+                            kpis={pf.kpis}
+                            cardStatementData={pf.cardStatementData}
+                            onGoToDebts={() => setActiveTab('debts')}
+                            referenceDate={currentDate}
+                            mepSell={mepSell}
+                        />
+                    )}
+
+                    {activeTab === 'debts' && (
+                        <div className="space-y-8">
+                            {/* Credit Cards Section - UNCHANGED per requirements */}
+                            <CreditCardsSection
+                                cardData={pf.cardStatementData}
+                                mepSell={mepSell}
+                                onManageCards={() => setIsCardManageOpen(true)}
+                                onAddConsumption={(cardId) => {
+                                    const card = pf.creditCards.find(c => c.id === cardId)
+                                    if (card) setConsumptionCard(card)
+                                }}
+                                onImportStatement={(cardId) => {
+                                    const card = pf.creditCards.find(c => c.id === cardId)
+                                    if (card) setImportCard(card)
+                                }}
+                                onDeleteConsumption={async (consumptionId) => {
+                                    await pf.deleteConsumption(consumptionId)
+                                    pf.refreshAll()
+                                    toast({ title: 'Consumo eliminado', variant: 'success' })
+                                }}
+                                onEditConsumption={(consumption, card) => {
+                                    setEditingConsumption(consumption)
+                                    setEditingCard(card)
+                                }}
+                                onMarkUnpaid={(cardId) => pf.markStatementUnpaid(cardId)}
+                                onRegisterPayment={(data) => {
+                                    if (data.dueTotal <= 0) return
+                                    setExecutionTarget({ kind: 'card_statement', data })
+                                }}
+                            />
+
+                            {/* Traditional Debts - UNCHANGED per requirements */}
+                            <DebtsTab
+                                debts={pf.debts}
+                                yearMonth={pf.yearMonth}
+                                onEdit={(d) => openEditModal(d as any, 'debt')}
+                                onDelete={(id) => handleDelete(id, 'debt')}
+                            />
+                        </div>
+                    )}
+
+                    {activeTab === 'expenses' && (
+                        <FixedExpensesTab
+                            expenses={pf.fixedExpenses}
+                            yearMonth={pf.yearMonth}
+                            viewMode={viewMode}
+                            onEdit={(e) => openEditModal(e as any, 'expense')}
+                            onDelete={(id) => handleDelete(id, 'expense')}
+                            onExecute={(expense) => setExecutionTarget({ kind: 'expense', expense })}
+                        />
+                    )}
+
+                    {activeTab === 'income' && (
+                        <IncomeTab
+                            incomes={viewMode === 'actual' ? pf.allIncomes : pf.incomes}
+                            yearMonth={pf.yearMonth}
+                            viewMode={viewMode}
+                            onEdit={(i) => openEditModal(i as any, 'income')}
+                            onDelete={(id) => handleDelete(id, 'income')}
+                            onExecute={(income) => setExecutionTarget({ kind: 'income', income })}
+                        />
+                    )}
+
+                    {activeTab === 'budget' && (
+                        <BudgetTab
+                            items={pf.budgets as any}
+                            onAdd={() => openNewModal('budget')}
+                            onEdit={(b) => openEditModal(b as any, 'budget')}
+                            onDelete={(id) => handleDelete(id, 'budget')}
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* Floating Action Button (Mobile) */}
+            <div className="md:hidden fixed bottom-6 right-6 z-30">
+                <button
+                    onClick={() => openNewModal()}
+                    className="w-14 h-14 bg-indigo-500 rounded-full shadow-glow flex items-center justify-center text-white"
+                >
+                    <Plus className="w-8 h-8" />
+                </button>
             </div>
 
             {/* Modals */}

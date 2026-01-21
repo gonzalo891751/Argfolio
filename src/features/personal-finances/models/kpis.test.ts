@@ -159,8 +159,10 @@ describe('computeMonthlyKpis', () => {
             fixedExpenses,
             consumptionsClosing,
             statementsDueNextMonth,
+            statementsDueThisMonth: statements, // Use statements that are due this month
             statements,
             debts,
+            budgets: [], // Empty budgets for this test
         })
 
         expect(kpis.incomesEstimated).toBe(1000)
@@ -170,9 +172,62 @@ describe('computeMonthlyKpis', () => {
         expect(kpis.cardsAccrued).toBe(300)
         expect(kpis.cardsDueNextMonth).toBe(400)
         expect(kpis.cardsPaid).toBe(500)
-        expect(kpis.commitmentsEstimated).toBe(600)
+        // Updated assertions: commitments now use cardsAccrued (closingTotal) + debts
+        expect(kpis.cardsDueThisMonth).toBe(500) // from statements due this month
+        expect(kpis.debtInstallmentsThisMonth).toBe(200) // debt installment
+        expect(kpis.totalCommitmentsPlan).toBe(500) // cardsAccrued (300) + debts (200)
         expect(kpis.commitmentsPaid).toBe(700)
-        expect(kpis.savingsEstimated).toBe(1000 - 500 - 600)
-        expect(kpis.savingsActual).toBe(500 - 300 - 700)
+        // Savings: income - expenses - budgets - commitments (cardsAccrued + debts)
+        expect(kpis.savingsEstimated).toBe(1000 - 500 - 500) // 0
+        expect(kpis.savingsActual).toBe(500 - 300 - 700) // -500
+    })
+
+    it('correctly calculates mixed currency totals with FX rate', () => {
+        const yearMonth = '2026-02'
+        const mepSell = 1200
+
+        const consumptions: PFCardConsumption[] = [
+            {
+                id: 'usd-1',
+                amount: 100,
+                currency: 'USD',
+                cardId: 'c1',
+                description: 'AWS',
+                closingYearMonth: yearMonth,
+                postedYearMonth: '2026-03',
+                purchaseDateISO: '2026-02-01',
+                createdAt: '2026-02-01',
+            },
+            {
+                id: 'ars-1',
+                amount: 50000,
+                currency: 'ARS',
+                cardId: 'c1',
+                description: 'MercadoLibre',
+                closingYearMonth: yearMonth,
+                postedYearMonth: '2026-03',
+                purchaseDateISO: '2026-02-02',
+                createdAt: '2026-02-02',
+            },
+        ]
+
+        const kpis = computeMonthlyKpis({
+            yearMonth,
+            incomesForMonth: [],
+            allIncomes: [],
+            fixedExpenses: [],
+            consumptionsClosing: consumptions,
+            statementsDueNextMonth: [],
+            statementsDueThisMonth: [],
+            statements: [],
+            debts: [],
+            budgets: [],
+            mepSell,
+        })
+
+        expect(kpis.cardsAccruedArs).toBe(50000)
+        expect(kpis.cardsAccruedUsd).toBe(100)
+        const expectedTotal = 50000 + (100 * 1200)
+        expect(kpis.cardsAccrued).toBe(expectedTotal)
     })
 })
