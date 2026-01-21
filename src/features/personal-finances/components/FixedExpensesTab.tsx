@@ -2,26 +2,34 @@
 // FIXED EXPENSES TAB COMPONENT
 // =============================================================================
 
-import { MoreHorizontal, CheckCircle2 } from 'lucide-react'
+import { MoreHorizontal, CheckCircle2, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatARS } from '../models/calculations'
-import type { FixedExpense, ExpenseCategory } from '../models/types'
+import type { PFFixedExpense } from '@/db/schema'
+import { getFixedExpenseExecutionForMonth } from '../models/financeHelpers'
 
 interface FixedExpensesTabProps {
-    expenses: FixedExpense[]
-    onEdit: (expense: FixedExpense) => void
+    expenses: PFFixedExpense[]
+    yearMonth: string
+    viewMode: 'plan' | 'actual'
+    onEdit: (expense: PFFixedExpense) => void
     onDelete: (id: string) => void
-    onMarkPaid: (id: string) => void
+    onExecute: (expense: PFFixedExpense) => void
 }
 
 export function FixedExpensesTab({
     expenses,
+    yearMonth,
+    viewMode,
     onEdit,
     onDelete,
-    onMarkPaid,
+    onExecute,
 }: FixedExpensesTabProps) {
-    const totalMonthly = expenses.reduce((acc, e) => acc + e.amount, 0)
-    const paidCount = expenses.filter((e) => e.status === 'paid').length
+    const plannedExpenses = expenses
+    const executedExpenses = expenses.filter((e) => !!getFixedExpenseExecutionForMonth(e, yearMonth))
+    const displayExpenses = viewMode === 'actual' ? executedExpenses : plannedExpenses
+    const totalMonthly = plannedExpenses.reduce((acc, e) => acc + e.amount, 0)
+    const paidCount = executedExpenses.length
 
     return (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -37,7 +45,7 @@ export function FixedExpensesTab({
                 </div>
             </div>
 
-            {expenses.length === 0 ? (
+            {displayExpenses.length === 0 ? (
                 <EmptyState message="No tenés gastos fijos registrados" />
             ) : (
                 <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -45,21 +53,22 @@ export function FixedExpensesTab({
                         <thead className="bg-background text-xs uppercase font-mono text-muted-foreground border-b border-border">
                             <tr>
                                 <th className="px-6 py-4 font-medium">Concepto</th>
-                                <th className="px-6 py-4 font-medium">Categoría</th>
-                                <th className="px-6 py-4 font-medium text-center">Débito Auto</th>
+                                <th className="px-6 py-4 font-medium">Categoria</th>
+                                <th className="px-6 py-4 font-medium text-center">Debito Auto</th>
                                 <th className="px-6 py-4 font-medium text-right">Monto</th>
                                 <th className="px-6 py-4 font-medium text-center">Pagado</th>
                                 <th className="px-6 py-4 font-medium"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {expenses.map((expense) => (
+                            {displayExpenses.map((expense) => (
                                 <ExpenseRow
                                     key={expense.id}
                                     expense={expense}
+                                    execution={getFixedExpenseExecutionForMonth(expense, yearMonth)}
                                     onEdit={() => onEdit(expense)}
                                     onDelete={() => onDelete(expense.id)}
-                                    onMarkPaid={() => onMarkPaid(expense.id)}
+                                    onExecute={() => onExecute(expense)}
                                 />
                             ))}
                         </tbody>
@@ -76,39 +85,50 @@ export function FixedExpensesTab({
 
 function ExpenseRow({
     expense,
+    execution,
     onEdit,
     onDelete,
-    onMarkPaid,
+    onExecute,
 }: {
-    expense: FixedExpense
+    expense: PFFixedExpense
+    execution: { movementId?: string } | undefined
     onEdit: () => void
     onDelete: () => void
-    onMarkPaid: () => void
+    onExecute: () => void
 }) {
-    const isPaid = expense.status === 'paid'
+    const isPaid = !!execution
 
     return (
         <tr className={cn('hover:bg-accent/30 transition', isPaid && 'opacity-60')}>
             <td className="px-6 py-4">
                 <div className="font-medium text-foreground">{expense.title}</div>
-                <div className="text-xs text-muted-foreground">Vence día {expense.dueDay}</div>
+                <div className="text-xs text-muted-foreground">Vence dia {expense.dueDay}</div>
             </td>
             <td className="px-6 py-4">
                 <CategoryBadge category={expense.category} />
             </td>
             <td className="px-6 py-4 text-center">
                 {expense.autoDebit ? (
-                    <span className="text-emerald-400 text-xs">Sí</span>
+                    <span className="text-emerald-400 text-xs">Si</span>
                 ) : (
                     <span className="text-muted-foreground text-xs">No</span>
                 )}
             </td>
             <td className="px-6 py-4 text-right">
                 <div className="font-mono text-foreground">{formatARS(expense.amount)}</div>
+                {execution?.movementId && (
+                    <a
+                        href="/movements"
+                        className="text-xs text-sky-400 inline-flex items-center gap-1 hover:text-sky-300"
+                    >
+                        Ver movimiento
+                        <ExternalLink size={12} />
+                    </a>
+                )}
             </td>
             <td className="px-6 py-4 text-center">
                 <button
-                    onClick={onMarkPaid}
+                    onClick={onExecute}
                     className={cn(
                         'p-2 rounded-full border transition-all',
                         isPaid
@@ -130,15 +150,15 @@ function ExpenseRow({
 // Category Badge
 // -----------------------------------------------------------------------------
 
-const categoryLabels: Record<ExpenseCategory, string> = {
+const categoryLabels: Record<string, string> = {
     service: 'Servicio',
-    subscription: 'Suscripción',
-    education: 'Educación',
+    subscription: 'Suscripcion',
+    education: 'Educacion',
     housing: 'Vivienda',
     insurance: 'Seguro',
 }
 
-function CategoryBadge({ category }: { category: ExpenseCategory }) {
+function CategoryBadge({ category }: { category: string }) {
     return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">
             {categoryLabels[category] || category}

@@ -20,6 +20,21 @@ export interface CreateMovementParams {
     }
 }
 
+export interface FinanceExecutionMovementParams {
+    kind: 'income' | 'expense' | 'credit_card_statement' | 'loan_installment'
+    accountId: string
+    date: string
+    amount: number
+    currency: Currency
+    title: string
+    notes?: string
+    link?: {
+        kind: 'income' | 'expense' | 'card' | 'debt'
+        id: string
+        statementId?: string
+    }
+}
+
 /**
  * Create a movement in the Movements system from Personal Finances
  */
@@ -49,6 +64,42 @@ export async function createMovementFromFinance(
     return movementsRepo.create(movement)
 }
 
+export async function createMovementFromFinanceExecution(
+    params: FinanceExecutionMovementParams
+): Promise<string> {
+    const movementType: MovementType = params.kind === 'income' ? 'DEPOSIT' : 'WITHDRAW'
+
+    let description = params.notes || ''
+    if (!description) {
+        if (params.kind === 'income') {
+            description = buildIncomeDescription(params.title)
+        } else if (params.kind === 'credit_card_statement') {
+            description = buildCardPaymentDescription(params.title)
+        } else if (params.kind === 'loan_installment') {
+            description = `Pago cuota - ${params.title}`
+        } else {
+            description = buildExpensePaymentDescription(params.title)
+        }
+    }
+
+    if (params.link) {
+        description += ` [${params.link.kind}:${params.link.id}]`
+    }
+
+    const movement: Movement = {
+        id: crypto.randomUUID(),
+        datetimeISO: params.date,
+        type: movementType,
+        accountId: params.accountId,
+        tradeCurrency: params.currency,
+        totalAmount: params.amount,
+        notes: description,
+        source: 'system',
+    }
+
+    return movementsRepo.create(movement)
+}
+
 /**
  * Build description for a debt payment
  */
@@ -72,4 +123,8 @@ export function buildExpensePaymentDescription(title: string): string {
  */
 export function buildIncomeDescription(title: string): string {
     return `Ingreso: ${title}`
+}
+
+export function buildCardPaymentDescription(title: string): string {
+    return `Pago tarjeta: ${title}`
 }

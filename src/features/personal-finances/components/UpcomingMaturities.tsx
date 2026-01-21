@@ -10,7 +10,7 @@ import type { UpcomingItem } from '../models/types'
 interface UpcomingMaturitiesProps {
     items: UpcomingItem[]
     referenceDate: Date
-    onMarkPaid: (id: string, type: 'debt' | 'expense' | 'card') => void
+    onMarkPaid?: (id: string, type: 'debt' | 'expense' | 'card') => void
 }
 
 export function UpcomingMaturities({
@@ -37,7 +37,7 @@ export function UpcomingMaturities({
                             key={item.id}
                             item={item}
                             referenceDate={referenceDate}
-                            onMarkPaid={() => onMarkPaid(item.id, item.type)}
+                            onMarkPaid={onMarkPaid ? () => onMarkPaid(item.id, item.type) : undefined}
                         />
                     ))
                 ) : (
@@ -55,7 +55,7 @@ export function UpcomingMaturities({
 interface UpcomingMaturityRowProps {
     item: UpcomingItem
     referenceDate: Date
-    onMarkPaid: () => void
+    onMarkPaid?: () => void
 }
 
 function UpcomingMaturityRow({ item, referenceDate, onMarkPaid }: UpcomingMaturityRowProps) {
@@ -103,7 +103,7 @@ function UpcomingMaturityRow({ item, referenceDate, onMarkPaid }: UpcomingMaturi
                         </div>
                     )}
                 </div>
-                {item.type !== 'card' && (
+                {item.type !== 'card' && onMarkPaid && (
                     <button
                         onClick={onMarkPaid}
                         className={cn(

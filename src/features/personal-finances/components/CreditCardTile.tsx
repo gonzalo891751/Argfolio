@@ -8,8 +8,8 @@ interface CreditCardTileProps {
     onImportStatement: () => void
     onDeleteConsumption: (consumptionId: string) => void
     onEditConsumption: (consumption: PFCardConsumption) => void
-    onMarkPaid: (paymentDateISO: string) => void
     onMarkUnpaid: () => void
+    onRegisterPayment: () => void
 }
 
 export function CreditCardTile({
@@ -18,8 +18,8 @@ export function CreditCardTile({
     onImportStatement,
     onDeleteConsumption,
     onEditConsumption,
-    onMarkPaid,
     onMarkUnpaid,
+    onRegisterPayment,
 }: CreditCardTileProps) {
     return (
         <CreditCardPanel
@@ -28,8 +28,8 @@ export function CreditCardTile({
             onImportStatement={onImportStatement}
             onDeleteConsumption={onDeleteConsumption}
             onEditConsumption={onEditConsumption}
-            onMarkPaid={onMarkPaid}
             onMarkUnpaid={onMarkUnpaid}
+            onRegisterPayment={onRegisterPayment}
         />
     )
 }

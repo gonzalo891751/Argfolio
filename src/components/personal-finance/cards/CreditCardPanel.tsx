@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, FileUp, Pencil, Plus, X } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, FileUp, Pencil, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import type { CardStatementData } from '@/features/personal-finances/hooks/usePersonalFinancesV3'
 import type { PFCardConsumption } from '@/db/schema'
 import {
@@ -20,8 +19,8 @@ interface CreditCardPanelProps {
     onImportStatement: () => void
     onDeleteConsumption: (consumptionId: string) => void
     onEditConsumption: (consumption: PFCardConsumption) => void
-    onMarkPaid: (paymentDateISO: string) => void
     onMarkUnpaid: () => void
+    onRegisterPayment: () => void
 }
 
 const arsFormatter = new Intl.NumberFormat('es-AR', {
@@ -65,8 +64,8 @@ export function CreditCardPanel({
     onImportStatement,
     onDeleteConsumption,
     onEditConsumption,
-    onMarkPaid,
     onMarkUnpaid,
+    onRegisterPayment,
 }: CreditCardPanelProps) {
     const {
         card,
@@ -97,15 +96,6 @@ export function CreditCardPanel({
         window.addEventListener('keydown', handleKey)
         return () => window.removeEventListener('keydown', handleKey)
     }, [consumptionToDelete])
-
-    const handlePaidToggle = (checked: boolean) => {
-        if (checked) {
-            const today = new Date().toISOString().split('T')[0]
-            onMarkPaid(today)
-        } else {
-            onMarkUnpaid()
-        }
-    }
 
     const nextCloseDateISO = getNextCloseDateISO(card.closingDay)
     const closingInDays = getDaysUntil(nextCloseDateISO)
@@ -292,21 +282,47 @@ export function CreditCardPanel({
                                     </span>
                                 </div>
 
-                                <div className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-[#0B1121]">
-                                    <div className="flex items-center gap-2">
-                                        {isPaid && <Check className="w-4 h-4 text-emerald-400" />}
-                                        <div>
-                                            <span className="text-sm font-medium text-white">
-                                                {isPaid ? 'Pagada' : 'Marcar como pagada'}
-                                            </span>
-                                            {isPaid && dueStatementRecord?.paidAt && (
-                                                <p className="text-xs text-slate-400">
-                                                    Pagado el {formatDayMonth(dueStatementRecord.paidAt)}
-                                                </p>
-                                            )}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-[#0B1121]">
+                                        <div className="flex items-center gap-2">
+                                            {isPaid && <Check className="w-4 h-4 text-emerald-400" />}
+                                            <div>
+                                                <span className="text-sm font-medium text-white">
+                                                    {isPaid ? 'Pagada' : 'Resumen pendiente'}
+                                                </span>
+                                                {isPaid && dueStatementRecord?.paidAt && (
+                                                    <p className="text-xs text-slate-400">
+                                                        Pagado el {formatDayMonth(dueStatementRecord.paidAt)}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
+                                        {isPaid ? (
+                                            <button
+                                                onClick={onMarkUnpaid}
+                                                className="text-xs text-rose-300 hover:text-rose-200"
+                                            >
+                                                Revertir
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={onRegisterPayment}
+                                                className="text-xs text-indigo-300 hover:text-indigo-200"
+                                            >
+                                                Registrar pago
+                                            </button>
+                                        )}
                                     </div>
-                                    <Switch checked={isPaid} onCheckedChange={handlePaidToggle} />
+
+                                    {isPaid && dueStatementRecord?.paymentMovementId && (
+                                        <a
+                                            href="/movements"
+                                            className="text-xs text-sky-400 inline-flex items-center gap-1 hover:text-sky-300"
+                                        >
+                                            Ver movimiento
+                                            <ExternalLink size={12} />
+                                        </a>
+                                    )}
                                 </div>
                             </>
                         ) : (

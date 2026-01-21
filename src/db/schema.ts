@@ -49,7 +49,9 @@ export interface PFStatement {
     totalAmount: number           // Cached total (can be recalculated)
     status: PFStatementStatus
     paidAt?: string               // ISO datetime when marked as paid
+    paidAmount?: number           // Actual amount paid (supports partial later)
     paymentMovementId?: string    // Link to the movement created for payment
+    paymentAccountId?: string
     createdAt: string
     updatedAt?: string
 }
@@ -92,6 +94,8 @@ export interface PFDebt {
         date: string
         amount: number
         installmentIndex?: number
+        movementId?: string
+        accountId?: string
     }>
     // Prepayment tracking
     prepayments?: Array<{
@@ -113,6 +117,13 @@ export interface PFFixedExpense {
     status: PFDebtStatus
     autoDebit: boolean
     defaultAccountId?: string
+    executions?: Array<{
+        yearMonth: string
+        effectiveDate: string
+        amount: number
+        accountId?: string
+        movementId?: string
+    }>
     createdAt: string
 }
 
@@ -125,6 +136,9 @@ export interface PFIncome {
     isGuaranteed: boolean
     status: 'pending' | 'received'
     defaultAccountId?: string
+    effectiveDate?: string
+    accountId?: string
+    movementId?: string
     createdAt: string
 }
 

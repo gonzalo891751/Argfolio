@@ -8,6 +8,7 @@ export { DebtRow } from './DebtRow'
 export { FixedExpensesTab } from './FixedExpensesTab'
 export { IncomeTab } from './IncomeTab'
 export { FinancesModal } from './FinancesModal'
+export { FinanceExecutionModal } from './FinanceExecutionModal'
 export { RegisterMovementPrompt } from './RegisterMovementPrompt'
 // V2 Components
 export { TypeSelector } from './TypeSelector'

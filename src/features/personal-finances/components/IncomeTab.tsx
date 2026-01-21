@@ -2,23 +2,29 @@
 // INCOME TAB COMPONENT
 // =============================================================================
 
-import { MoreHorizontal, CheckCircle2, TrendingUp } from 'lucide-react'
+import { MoreHorizontal, CheckCircle2, ExternalLink, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatARS } from '../models/calculations'
-import type { Income } from '../models/types'
+import type { PFIncome } from '@/db/schema'
+import { getIncomeEffectiveDate, isDateInYearMonth } from '../models/financeHelpers'
 
 interface IncomeTabProps {
-    incomes: Income[]
-    onEdit: (income: Income) => void
+    incomes: PFIncome[]
+    yearMonth: string
+    viewMode: 'plan' | 'actual'
+    onEdit: (income: PFIncome) => void
     onDelete: (id: string) => void
-    onMarkReceived: (id: string) => void
+    onExecute: (income: PFIncome) => void
 }
 
-export function IncomeTab({ incomes, onEdit, onDelete, onMarkReceived }: IncomeTabProps) {
-    const totalExpected = incomes.reduce((acc, i) => acc + i.amount, 0)
-    const totalReceived = incomes
-        .filter((i) => i.status === 'received')
-        .reduce((acc, i) => acc + i.amount, 0)
+export function IncomeTab({ incomes, yearMonth, viewMode, onEdit, onDelete, onExecute }: IncomeTabProps) {
+    const plannedIncomes = incomes.filter((i) => i.yearMonth === yearMonth)
+    const executedIncomes = incomes.filter((i) =>
+        isDateInYearMonth(getIncomeEffectiveDate(i), yearMonth)
+    )
+    const displayIncomes = viewMode === 'actual' ? executedIncomes : plannedIncomes
+    const totalExpected = plannedIncomes.reduce((acc, i) => acc + i.amount, 0)
+    const totalReceived = executedIncomes.reduce((acc, i) => acc + i.amount, 0)
 
     return (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -29,22 +35,23 @@ export function IncomeTab({ incomes, onEdit, onDelete, onMarkReceived }: IncomeT
                         Cobrado: <span className="font-mono">{formatARS(totalReceived)}</span>
                     </span>
                     <span className="px-3 py-1 bg-muted rounded-full text-muted-foreground border border-border">
-                        Esperado: <span className="font-mono">{formatARS(totalExpected)}</span>
+                        Estimado: <span className="font-mono">{formatARS(totalExpected)}</span>
                     </span>
                 </div>
             </div>
 
-            {incomes.length === 0 ? (
+            {displayIncomes.length === 0 ? (
                 <EmptyState message="No tenés ingresos registrados" />
             ) : (
                 <div className="grid gap-4">
-                    {incomes.map((income) => (
+                    {displayIncomes.map((income) => (
                         <IncomeCard
                             key={income.id}
                             income={income}
                             onEdit={() => onEdit(income)}
                             onDelete={() => onDelete(income.id)}
-                            onMarkReceived={() => onMarkReceived(income.id)}
+                            onExecute={() => onExecute(income)}
+                            isExecuted={isDateInYearMonth(getIncomeEffectiveDate(income), yearMonth)}
                         />
                     ))}
                 </div>
@@ -61,20 +68,20 @@ function IncomeCard({
     income,
     onEdit,
     onDelete,
-    onMarkReceived,
+    onExecute,
+    isExecuted,
 }: {
-    income: Income
+    income: PFIncome
     onEdit: () => void
     onDelete: () => void
-    onMarkReceived: () => void
+    onExecute: () => void
+    isExecuted: boolean
 }) {
-    const isReceived = income.status === 'received'
-
     return (
         <div
             className={cn(
                 'flex items-center justify-between p-4 rounded-xl bg-card border border-border transition hover:border-border/80',
-                isReceived && 'opacity-60'
+                isExecuted && 'opacity-60'
             )}
         >
             <div className="flex items-center gap-4">
@@ -93,7 +100,7 @@ function IncomeCard({
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span>{income.isGuaranteed ? 'Fijo' : 'Variable'}</span>
                         <span className="w-1 h-1 rounded-full bg-muted" />
-                        <span>Día {income.dateExpected}</span>
+                        <span>Dia {income.dateExpected}</span>
                     </div>
                 </div>
             </div>
@@ -101,12 +108,21 @@ function IncomeCard({
             <div className="flex items-center gap-4">
                 <div className="text-right">
                     <div className="font-mono text-lg text-emerald-400">{formatARS(income.amount)}</div>
+                    {income.movementId && (
+                        <a
+                            href="/movements"
+                            className="text-xs text-sky-400 inline-flex items-center gap-1 hover:text-sky-300"
+                        >
+                            Ver movimiento
+                            <ExternalLink size={12} />
+                        </a>
+                    )}
                 </div>
                 <button
-                    onClick={onMarkReceived}
+                    onClick={onExecute}
                     className={cn(
                         'p-2 rounded-full border transition-all',
-                        isReceived
+                        isExecuted
                             ? 'bg-emerald-500 text-white border-emerald-500'
                             : 'bg-transparent border-border text-muted-foreground hover:text-emerald-400 hover:border-emerald-400'
                     )}

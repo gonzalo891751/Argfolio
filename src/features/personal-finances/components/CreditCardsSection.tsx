@@ -11,8 +11,8 @@ interface CreditCardsSectionProps {
     onImportStatement: (cardId: string) => void
     onDeleteConsumption: (consumptionId: string) => void
     onEditConsumption: (consumption: PFCardConsumption, card: PFCreditCard) => void
-    onMarkPaid: (cardId: string, paymentDateISO: string) => void
     onMarkUnpaid: (cardId: string) => void
+    onRegisterPayment: (data: CardStatementData) => void
 }
 
 export function CreditCardsSection({
@@ -22,8 +22,8 @@ export function CreditCardsSection({
     onImportStatement,
     onDeleteConsumption,
     onEditConsumption,
-    onMarkPaid,
     onMarkUnpaid,
+    onRegisterPayment,
 }: CreditCardsSectionProps) {
     if (cardData.length === 0) {
         return (
@@ -64,8 +64,8 @@ export function CreditCardsSection({
                         onImportStatement={() => onImportStatement(data.card.id)}
                         onDeleteConsumption={onDeleteConsumption}
                         onEditConsumption={(consumption) => onEditConsumption(consumption, data.card)}
-                        onMarkPaid={(date) => onMarkPaid(data.card.id, date)}
                         onMarkUnpaid={() => onMarkUnpaid(data.card.id)}
+                        onRegisterPayment={() => onRegisterPayment(data)}
                     />
                 ))}
             </div>

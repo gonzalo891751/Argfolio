@@ -2,15 +2,21 @@
 // PERSONAL FINANCES PAGE — Main Page Component
 // =============================================================================
 
-import { useState } from 'react'
-import { Plus, Wallet, TrendingDown, ShoppingBag } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Plus, Wallet, TrendingDown, ShoppingBag, CreditCard } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
-import type { PFCardConsumption } from '@/db/schema'
+import type { PFCardConsumption, PFFixedExpense, PFIncome } from '@/db/schema'
 import { usePersonalFinancesV3 } from './hooks/usePersonalFinancesV3' // V3 Hook
+import type { CardStatementData } from './hooks/usePersonalFinancesV3'
 import { formatARS } from './models/calculations' // Keep for formatting helper
+import { useComputedPortfolio } from '@/hooks/use-computed-portfolio'
+import { getTodayISO } from './utils/dateHelpers'
+import {
+    getFixedExpenseScheduledDate,
+    getIncomeScheduledDate,
+} from './models/financeHelpers'
 import {
     KPICard,
-    CoverageRatioCard,
     MonthPicker,
     OverviewTab,
     DebtsTab,
@@ -18,27 +24,42 @@ import {
     IncomeTab,
     BudgetTab,
     FinancesModal,
+    FinanceExecutionModal,
     CreditCardsSection,
     CardManageModal,
     CardConsumptionModal,
     ImportStatementModal,
 } from './components'
+import { createMovementFromFinanceExecution } from './services/movementBridge'
 import type { PFDebt, FixedExpense, Income, BudgetCategory, NewItemType } from './models/types'
 import type { PFCreditCard } from '@/db/schema' // V3 types
 
 type TabType = 'overview' | 'debts' | 'expenses' | 'income' | 'budget'
 type ModalType = 'debt' | 'expense' | 'income' | 'budget' | 'expense-normal'
+type ViewMode = 'plan' | 'actual'
+
+type ExecutionTarget =
+    | { kind: 'income'; income: PFIncome }
+    | { kind: 'expense'; expense: PFFixedExpense }
+    | { kind: 'card_statement'; data: CardStatementData }
 
 export function PersonalFinancesPage() {
     // V3 Hook
     const pf = usePersonalFinancesV3()
+    const { data: portfolioTotals } = useComputedPortfolio()
+    const trackCashEnabled = useMemo(
+        () => localStorage.getItem('argfolio.trackCash') === 'true',
+        []
+    )
 
     // UI State
     const [activeTab, setActiveTab] = useState<TabType>('overview')
+    const [viewMode, setViewMode] = useState<ViewMode>('plan')
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [preselectedType, setPreselectedType] = useState<NewItemType | undefined>(undefined)
     const [editItem, setEditItem] = useState<PFDebt | FixedExpense | Income | BudgetCategory | null>(null)
     const [editType, setEditType] = useState<ModalType | undefined>(undefined)
+    const [executionTarget, setExecutionTarget] = useState<ExecutionTarget | null>(null)
 
     // Credit Card Modals
     const [isCardManageOpen, setIsCardManageOpen] = useState(false)
@@ -100,42 +121,111 @@ export function PersonalFinancesPage() {
         pf.refreshAll()
     }
 
-    const handleMarkPaid = async (id: string, type: 'debt' | 'expense' | 'card') => {
-        if (type === 'debt') {
-            const debt = pf.debts.find((d) => d.id === id)
-            if (debt) {
-                await pf.registerPrepayment(id, debt.monthlyValue, 'reduce_amount') // Default behavior
+    const executionDefaults = useMemo(() => {
+        if (!executionTarget) return null
+        if (executionTarget.kind === 'income') {
+            return {
+                title: executionTarget.income.title,
+                subtitle: 'Ingreso planificado',
+                amount: executionTarget.income.amount,
+                dateISO: getIncomeScheduledDate(executionTarget.income),
+                accountId: executionTarget.income.defaultAccountId || executionTarget.income.accountId,
             }
-        } else if (type === 'expense') {
-            await pf.updateFixedExpense(id, { status: 'paid' })
         }
-    }
+        if (executionTarget.kind === 'expense') {
+            return {
+                title: executionTarget.expense.title,
+                subtitle: 'Gasto fijo del mes',
+                amount: executionTarget.expense.amount,
+                dateISO: getFixedExpenseScheduledDate(executionTarget.expense, pf.yearMonth),
+                accountId: executionTarget.expense.defaultAccountId,
+            }
+        }
+        return {
+            title: executionTarget.data.card.name,
+            subtitle: `Vence ${executionTarget.data.dueStatement.dueDate}`,
+            amount: executionTarget.data.dueTotal,
+            dateISO: executionTarget.data.dueStatement.dueDate || getTodayISO(),
+            accountId: executionTarget.data.card.defaultAccountId,
+        }
+    }, [executionTarget, pf.yearMonth])
 
-    const handleMarkReceived = async (id: string) => {
-        await pf.updateIncome(id, { status: 'received' })
+    const handleExecutionConfirm = async (payload: {
+        amount: number
+        dateISO: string
+        accountId?: string
+        createMovement: boolean
+    }) => {
+        if (!executionTarget) return
+
+        try {
+            let movementId: string | undefined
+            if (payload.createMovement) {
+                if (!payload.accountId) return
+                movementId = await createMovementFromFinanceExecution({
+                    kind:
+                        executionTarget.kind === 'income'
+                            ? 'income'
+                            : executionTarget.kind === 'card_statement'
+                                ? 'credit_card_statement'
+                                : 'expense',
+                    accountId: payload.accountId,
+                    date: payload.dateISO,
+                    amount: payload.amount,
+                    currency: 'ARS',
+                    title:
+                        executionTarget.kind === 'income'
+                            ? executionTarget.income.title
+                            : executionTarget.kind === 'expense'
+                                ? executionTarget.expense.title
+                                : executionTarget.data.card.name,
+                    link: executionTarget.kind === 'card_statement'
+                        ? { kind: 'card', id: executionTarget.data.card.id }
+                        : executionTarget.kind === 'income'
+                            ? { kind: 'income', id: executionTarget.income.id }
+                            : { kind: 'expense', id: executionTarget.expense.id },
+                })
+            }
+
+            if (executionTarget.kind === 'income') {
+                await pf.executeIncome(executionTarget.income.id, {
+                    effectiveDate: payload.dateISO,
+                    accountId: payload.accountId,
+                    movementId,
+                })
+            } else if (executionTarget.kind === 'expense') {
+                await pf.executeFixedExpense(executionTarget.expense.id, {
+                    yearMonth: pf.yearMonth,
+                    effectiveDate: payload.dateISO,
+                    amount: payload.amount,
+                    accountId: payload.accountId,
+                    movementId,
+                })
+            } else {
+                await pf.markStatementPaid(
+                    executionTarget.data.card.id,
+                    payload.dateISO,
+                    movementId,
+                    payload.accountId,
+                    payload.amount
+                )
+            }
+
+            setExecutionTarget(null)
+            pf.refreshAll()
+        } catch (error) {
+            console.error('Failed to execute finance item:', error)
+        }
     }
 
     // Helper to convert string YYYY-MM to Date object
     const currentDate = new Date(pf.yearMonth + '-02T12:00:00')
-
-    // Calculated fields based on V3 totals
-    // Coverage Ratio
-    const coverageRatio = pf.totals.totalIncome > 0
-        ? (pf.totals.commitments / pf.totals.totalIncome) * 100
-        : 0
-
-    // V2 Snapshot shape helper
-    const snapshotV2 = {
-        monthKey: pf.yearMonth,
-        totalDebts: pf.totals.totalDebts,
-        totalCards: pf.totals.totalCards,
-        totalFixed: pf.totals.totalFixed, // mapped from totalFixed
-        totalBudgeted: pf.totals.totalBudgeted,
-        totalIncome: pf.totals.totalIncome,
-        available: pf.totals.available, // mapped from available
-        commitments: pf.totals.commitments, // mapped from commitments
-        coverageRatio: coverageRatio, // mapped from calculated ratio
-    }
+    const liquidityValue = trackCashEnabled
+        ? formatARS(portfolioTotals?.liquidityARS ?? 0)
+        : 'Modo simple'
+    const liquiditySubValue = trackCashEnabled
+        ? undefined
+        : 'Activa el tracking de cash en Ajustes'
 
     if (pf.loading) {
         return <div className="p-8 text-center text-slate-500 animate-pulse">Cargando Finanzas...</div>
@@ -166,29 +256,84 @@ export function PersonalFinancesPage() {
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <KPICard
-                    title="Ingresos Totales"
-                    value={formatARS(pf.totals.totalIncome)}
+                    title="Ingresos estimados"
+                    value={formatARS(pf.kpis.incomesEstimated)}
                     icon={Wallet}
+                    type="success"
+                    subValue={`Cobrados: ${formatARS(pf.kpis.incomesCollected)}`}
+                />
+                <KPICard
+                    title="Gastos estimados"
+                    value={formatARS(pf.kpis.expensesEstimated)}
+                    icon={TrendingDown}
+                    type="danger"
+                    subValue={`Pagados: ${formatARS(pf.kpis.expensesPaid)}`}
+                />
+                <KPICard
+                    title="Tarjetas devengado"
+                    value={formatARS(pf.kpis.cardsAccrued)}
+                    icon={CreditCard}
+                    type="primary"
+                />
+                <KPICard
+                    title="Tarjetas a pagar prox."
+                    value={formatARS(pf.kpis.cardsDueNextMonth)}
+                    icon={CreditCard}
+                    type="neutral"
+                />
+                <KPICard
+                    title="Tarjetas pagadas"
+                    value={formatARS(pf.kpis.cardsPaid)}
+                    icon={CreditCard}
                     type="success"
                 />
                 <KPICard
-                    title="Liquidez Disponible"
-                    value={formatARS(pf.totals.available)}
+                    title="Liquidez disponible"
+                    value={liquidityValue}
                     icon={ShoppingBag}
-                    type={pf.totals.available >= 0 ? 'primary' : 'danger'}
+                    type="primary"
+                    subValue={liquiditySubValue}
+                />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <KPICard
+                    title="Ahorro estimado del mes"
+                    value={formatARS(pf.kpis.savingsEstimated)}
+                    icon={Wallet}
+                    type={pf.kpis.savingsEstimated >= 0 ? 'success' : 'danger'}
                 />
                 <KPICard
-                    title="Total Tarjetas"
-                    value={formatARS(pf.totals.totalCardsDueUnpaid)}
-                    icon={TrendingDown}
-                    type={pf.totals.totalCardsDueUnpaid > 0 ? 'danger' : 'neutral'}
-                    subValue={pf.totals.totalCards > 0 ? `Devengado: ${formatARS(pf.totals.totalCards)}` : undefined}
+                    title="Ahorro real del mes"
+                    value={formatARS(pf.kpis.savingsActual)}
+                    icon={Wallet}
+                    type={pf.kpis.savingsActual >= 0 ? 'success' : 'danger'}
                 />
-                <CoverageRatioCard
-                    ratio={coverageRatio}
-                />
+            </div>
+
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={() => setViewMode('plan')}
+                    className={`px-4 py-2 rounded-full text-sm border transition ${
+                        viewMode === 'plan'
+                            ? 'bg-indigo-500 text-white border-indigo-500'
+                            : 'bg-transparent border-white/10 text-slate-400 hover:text-slate-200'
+                    }`}
+                >
+                    Plan (Estimado)
+                </button>
+                <button
+                    onClick={() => setViewMode('actual')}
+                    className={`px-4 py-2 rounded-full text-sm border transition ${
+                        viewMode === 'actual'
+                            ? 'bg-emerald-500 text-white border-emerald-500'
+                            : 'bg-transparent border-white/10 text-slate-400 hover:text-slate-200'
+                    }`}
+                >
+                    Efectivo (Real)
+                </button>
             </div>
 
             {/* Tabs Navigation */}
@@ -218,10 +363,9 @@ export function PersonalFinancesPage() {
             <div className="min-h-[400px]">
                 {activeTab === 'overview' && (
                     <OverviewTab
-                        totals={snapshotV2}
+                        kpis={pf.kpis}
                         upcomingMaturities={[]} // TODO
                         referenceDate={currentDate}
-                        onMarkPaid={handleMarkPaid}
                     />
                 )}
 
@@ -248,8 +392,11 @@ export function PersonalFinancesPage() {
                                 setEditingConsumption(consumption)
                                 setEditingCard(card)
                             }}
-                            onMarkPaid={(cardId, date) => pf.markStatementPaid(cardId, date)}
                             onMarkUnpaid={(cardId) => pf.markStatementUnpaid(cardId)}
+                            onRegisterPayment={(data) => {
+                                if (data.dueTotal <= 0) return
+                                setExecutionTarget({ kind: 'card_statement', data })
+                            }}
                         />
 
                         {/* Traditional Debts */}
@@ -264,19 +411,23 @@ export function PersonalFinancesPage() {
 
                 {activeTab === 'expenses' && (
                     <FixedExpensesTab
-                        expenses={pf.fixedExpenses as any}
+                        expenses={pf.fixedExpenses}
+                        yearMonth={pf.yearMonth}
+                        viewMode={viewMode}
                         onEdit={(e) => openEditModal(e as any, 'expense')}
                         onDelete={(id) => handleDelete(id, 'expense')}
-                        onMarkPaid={(id) => handleMarkPaid(id, 'expense')}
+                        onExecute={(expense) => setExecutionTarget({ kind: 'expense', expense })}
                     />
                 )}
 
                 {activeTab === 'income' && (
                     <IncomeTab
-                        incomes={pf.incomes as any}
+                        incomes={viewMode === 'actual' ? pf.allIncomes : pf.incomes}
+                        yearMonth={pf.yearMonth}
+                        viewMode={viewMode}
                         onEdit={(i) => openEditModal(i as any, 'income')}
                         onDelete={(id) => handleDelete(id, 'income')}
-                        onMarkReceived={handleMarkReceived}
+                        onExecute={(income) => setExecutionTarget({ kind: 'income', income })}
                     />
                 )}
 
@@ -298,6 +449,17 @@ export function PersonalFinancesPage() {
                 editItem={editItem}
                 onSave={handleSave}
                 preselectedType={preselectedType}
+            />
+
+            <FinanceExecutionModal
+                open={!!executionTarget && !!executionDefaults}
+                title={executionDefaults?.title || ''}
+                subtitle={executionDefaults?.subtitle}
+                defaultAmount={executionDefaults?.amount || 0}
+                defaultDateISO={executionDefaults?.dateISO || getTodayISO()}
+                defaultAccountId={executionDefaults?.accountId}
+                onClose={() => setExecutionTarget(null)}
+                onConfirm={handleExecutionConfirm}
             />
 
             <CardManageModal

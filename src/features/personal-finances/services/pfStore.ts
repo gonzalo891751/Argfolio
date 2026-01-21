@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { db, type PFCreditCard, type PFCardConsumption, type PFStatement, type PFDebt, type PFFixedExpense, type PFIncome, type PFBudgetCategory } from '@/db/schema'
+import { buildFixedExpenseExecutions, buildIncomeExecutionUpdate } from '../models/execution'
 import {
     addMonthsToYearMonth,
     getCurrentYearMonth,
@@ -526,12 +527,16 @@ export async function recalculateStatementTotal(statementId: string): Promise<nu
 export async function markStatementPaid(
     statementId: string,
     paymentDateISO: string,
-    movementId?: string
+    movementId?: string,
+    paymentAccountId?: string,
+    paidAmount?: number
 ): Promise<void> {
     await db.pfStatements.update(statementId, {
         status: 'PAID',
         paidAt: paymentDateISO,
         paymentMovementId: movementId,
+        paymentAccountId,
+        paidAmount,
         updatedAt: new Date().toISOString(),
     })
 }
@@ -754,4 +759,47 @@ export async function addBudgetSpending(id: string, amount: number): Promise<voi
     if (budget) {
         await db.pfBudgets.update(id, { spentAmount: budget.spentAmount + amount })
     }
+}
+
+// =============================================================================
+// EXECUTION OPERATIONS (Plan -> Actual)
+// =============================================================================
+
+export async function executeIncome(
+    id: string,
+    params: { effectiveDate: string; accountId?: string; movementId?: string }
+): Promise<void> {
+    await db.pfIncomes.update(id, buildIncomeExecutionUpdate(params))
+}
+
+export async function executeFixedExpense(
+    id: string,
+    params: {
+        yearMonth: string
+        effectiveDate: string
+        amount: number
+        accountId?: string
+        movementId?: string
+    }
+): Promise<void> {
+    const expense = await db.pfFixedExpenses.get(id)
+    if (!expense) return
+    const next = buildFixedExpenseExecutions(expense, params)
+    await db.pfFixedExpenses.update(id, { executions: next })
+}
+
+export async function recordDebtPayment(
+    id: string,
+    params: {
+        date: string
+        amount: number
+        installmentIndex?: number
+        accountId?: string
+        movementId?: string
+    }
+): Promise<void> {
+    const debt = await db.pfDebts.get(id)
+    if (!debt) return
+    const payments = [...(debt.payments || []), params]
+    await db.pfDebts.update(id, { payments })
 }

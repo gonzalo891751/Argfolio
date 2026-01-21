@@ -3,24 +3,23 @@
 // =============================================================================
 
 import { formatARS } from '../models/calculations'
-import type { MonthlySnapshot, UpcomingItem } from '../models/types'
+import type { UpcomingItem } from '../models/types'
+import type { MonthlyKpis } from '../models/kpis'
 import { UpcomingMaturities } from './UpcomingMaturities'
 
 interface OverviewTabProps {
-    totals: MonthlySnapshot
+    kpis: MonthlyKpis
     upcomingMaturities: UpcomingItem[]
     referenceDate: Date
-    onMarkPaid: (id: string, type: 'debt' | 'expense' | 'card') => void
 }
 
 export function OverviewTab({
-    totals,
+    kpis,
     upcomingMaturities,
     referenceDate,
-    onMarkPaid,
 }: OverviewTabProps) {
-    const savingsRate = totals.totalIncome > 0
-        ? ((totals.available / totals.totalIncome) * 100).toFixed(1)
+    const savingsRate = kpis.incomesEstimated > 0
+        ? ((kpis.savingsEstimated / kpis.incomesEstimated) * 100).toFixed(1)
         : '0.0'
 
     return (
@@ -29,7 +28,6 @@ export function OverviewTab({
             <UpcomingMaturities
                 items={upcomingMaturities}
                 referenceDate={referenceDate}
-                onMarkPaid={onMarkPaid}
             />
 
             {/* Summary Charts */}
@@ -37,14 +35,14 @@ export function OverviewTab({
                 {/* Income vs Expenses Bar */}
                 <div className="bg-card rounded-xl p-5 border border-border">
                     <h4 className="text-xs font-mono uppercase text-muted-foreground mb-4">
-                        Ingresos vs. Gastos
+                        Plan vs Real
                     </h4>
                     <div className="space-y-4">
                         <div>
                             <div className="flex justify-between text-xs mb-1">
-                                <span className="text-foreground">Ingresos</span>
+                                <span className="text-foreground">Ingresos (Plan)</span>
                                 <span className="text-emerald-400 font-mono">
-                                    {formatARS(totals.totalIncome)}
+                                    {formatARS(kpis.incomesEstimated)}
                                 </span>
                             </div>
                             <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -56,16 +54,42 @@ export function OverviewTab({
                         </div>
                         <div>
                             <div className="flex justify-between text-xs mb-1">
-                                <span className="text-foreground">Compromisos</span>
-                                <span className="text-rose-400 font-mono">
-                                    {formatARS(totals.commitments)}
-                                </span>
+                                <span className="text-foreground">Gastos (Plan)</span>
+                                <span className="text-rose-400 font-mono">{formatARS(kpis.expensesEstimated)}</span>
                             </div>
                             <div className="h-2 bg-muted rounded-full overflow-hidden">
                                 <div
                                     className="h-full bg-rose-500 rounded-full"
                                     style={{
-                                        width: `${totals.totalIncome > 0 ? (totals.commitments / totals.totalIncome) * 100 : 0}%`,
+                                        width: `${kpis.incomesEstimated > 0 ? (kpis.expensesEstimated / kpis.incomesEstimated) * 100 : 0}%`,
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <div className="flex justify-between text-xs mb-1">
+                                <span className="text-foreground">Ingresos (Real)</span>
+                                <span className="text-emerald-400 font-mono">
+                                    {formatARS(kpis.incomesCollected)}
+                                </span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-emerald-500/70 rounded-full"
+                                    style={{ width: '100%' }}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <div className="flex justify-between text-xs mb-1">
+                                <span className="text-foreground">Gastos (Real)</span>
+                                <span className="text-rose-400 font-mono">{formatARS(kpis.expensesPaid)}</span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-rose-500/70 rounded-full"
+                                    style={{
+                                        width: `${kpis.incomesCollected > 0 ? (kpis.expensesPaid / kpis.incomesCollected) * 100 : 0}%`,
                                     }}
                                 />
                             </div>
@@ -75,12 +99,15 @@ export function OverviewTab({
 
                 {/* Savings Capacity */}
                 <div className="bg-card rounded-xl p-5 border border-border flex flex-col justify-center items-center text-center">
-                    <div className="text-sm text-muted-foreground mb-2">Capacidad de Ahorro</div>
+                    <div className="text-sm text-muted-foreground mb-2">Ahorro estimado</div>
                     <div className="text-3xl font-mono font-bold text-primary mb-1">
                         {savingsRate}%
                     </div>
                     <div className="text-xs text-muted-foreground">
-                        {formatARS(totals.available)} libres
+                        {formatARS(kpis.savingsEstimated)} libres
+                    </div>
+                    <div className="mt-4 text-xs text-muted-foreground">
+                        Ahorro real: <span className="font-mono text-foreground">{formatARS(kpis.savingsActual)}</span>
                     </div>
                 </div>
             </div>

@@ -21,6 +21,51 @@ export type NewItemType = 'income' | 'debt' | 'expense-fixed' | 'budget' | 'expe
 // V2: Debt subtypes for wizard
 export type DebtSubtype = 'tarjeta' | 'prestamo' | 'personal'
 
+// =============================================================================
+// V4: Unified Finance Items (Plan vs Actual)
+// =============================================================================
+
+export type FinanceItemStatus = 'planned' | 'committed' | 'executed'
+export type FinanceItemType =
+    | 'income'
+    | 'expense'
+    | 'credit_card_statement'
+    | 'loan_installment'
+    | 'budget_allocation'
+
+export interface MoneyAmount {
+    value: number
+    currency: 'ARS' | 'USD'
+}
+
+export interface StatementPeriod {
+    from: string
+    to: string
+}
+
+export interface FinanceItem {
+    id: string
+    type: FinanceItemType
+    title: string
+    category?: string
+    amount: MoneyAmount
+    scheduledDate: string // YYYY-MM-DD
+    effectiveDate?: string // YYYY-MM-DD
+    status: FinanceItemStatus
+    accountId?: string
+    movementId?: string
+    notes?: string
+    meta?: Record<string, unknown>
+    // Credit card specifics
+    cardId?: string
+    closeDate?: string
+    dueDate?: string
+    statementPeriod?: StatementPeriod
+    statementAmount?: MoneyAmount
+    paidAmount?: MoneyAmount
+    paidAt?: string
+}
+
 export interface PFDebt {
     id: string
     name?: string
