@@ -4,6 +4,8 @@
 
 import { useState } from 'react'
 import { Plus, Wallet, TrendingDown, ShoppingBag } from 'lucide-react'
+import { useToast } from '@/components/ui/toast'
+import type { PFCardConsumption } from '@/db/schema'
 import { usePersonalFinancesV3 } from './hooks/usePersonalFinancesV3' // V3 Hook
 import { formatARS } from './models/calculations' // Keep for formatting helper
 import {
@@ -19,6 +21,7 @@ import {
     CreditCardsSection,
     CardManageModal,
     CardConsumptionModal,
+    ImportStatementModal,
 } from './components'
 import type { PFDebt, FixedExpense, Income, BudgetCategory, NewItemType } from './models/types'
 import type { PFCreditCard } from '@/db/schema' // V3 types
@@ -40,6 +43,14 @@ export function PersonalFinancesPage() {
     // Credit Card Modals
     const [isCardManageOpen, setIsCardManageOpen] = useState(false)
     const [consumptionCard, setConsumptionCard] = useState<PFCreditCard | null>(null)
+    const [editingConsumption, setEditingConsumption] = useState<PFCardConsumption | null>(null)
+    const [editingCard, setEditingCard] = useState<PFCreditCard | null>(null)
+    const [importCard, setImportCard] = useState<PFCreditCard | null>(null)
+    const { toast } = useToast()
+    const consumptionModalCard = editingCard ?? consumptionCard
+    const importConsumptions = importCard
+        ? [...pf.consumptionsClosing, ...pf.consumptions].filter(c => c.cardId === importCard.id)
+        : []
 
     // Handlers
     const openNewModal = (preselect?: NewItemType) => {
@@ -224,9 +235,18 @@ export function PersonalFinancesPage() {
                                 const card = pf.creditCards.find(c => c.id === cardId)
                                 if (card) setConsumptionCard(card)
                             }}
-                            onViewAllConsumptions={(cardId) => {
-                                // TODO: Navigate to full detail or open modal
-                                console.log('View all', cardId)
+                            onImportStatement={(cardId) => {
+                                const card = pf.creditCards.find(c => c.id === cardId)
+                                if (card) setImportCard(card)
+                            }}
+                            onDeleteConsumption={async (consumptionId) => {
+                                await pf.deleteConsumption(consumptionId)
+                                pf.refreshAll()
+                                toast({ title: 'Consumo eliminado', variant: 'success' })
+                            }}
+                            onEditConsumption={(consumption, card) => {
+                                setEditingConsumption(consumption)
+                                setEditingCard(card)
                             }}
                             onMarkPaid={(cardId, date) => pf.markStatementPaid(cardId, date)}
                             onMarkUnpaid={(cardId) => pf.markStatementUnpaid(cardId)}
@@ -235,6 +255,7 @@ export function PersonalFinancesPage() {
                         {/* Traditional Debts */}
                         <DebtsTab
                             debts={pf.debts}
+                            yearMonth={pf.yearMonth}
                             onEdit={(d) => openEditModal(d as any, 'debt')}
                             onDelete={(id) => handleDelete(id, 'debt')}
                         />
@@ -289,11 +310,36 @@ export function PersonalFinancesPage() {
             />
 
             <CardConsumptionModal
-                open={!!consumptionCard}
-                onClose={() => setConsumptionCard(null)}
-                card={consumptionCard}
+                open={!!consumptionModalCard}
+                onClose={() => {
+                    setConsumptionCard(null)
+                    setEditingConsumption(null)
+                    setEditingCard(null)
+                }}
+                card={consumptionModalCard}
                 onSave={async (input) => {
-                    await pf.createConsumption(input, consumptionCard!)
+                    await pf.createConsumption(input, consumptionModalCard!)
+                    pf.refreshAll()
+                }}
+                onUpdate={async (id, updates) => {
+                    if (!editingCard) return
+                    await pf.updateConsumption(id, updates, editingCard)
+                    pf.refreshAll()
+                    toast({ title: 'Consumo actualizado', variant: 'success' })
+                }}
+                mode={editingConsumption ? 'edit' : 'create'}
+                initialConsumption={editingConsumption}
+            />
+
+            <ImportStatementModal
+                open={!!importCard}
+                card={importCard}
+                existingConsumptions={importConsumptions}
+                onClose={() => setImportCard(null)}
+                onImport={async (transactions, card) => {
+                    for (const input of transactions) {
+                        await pf.createConsumption(input, card)
+                    }
                     pf.refreshAll()
                 }}
             />

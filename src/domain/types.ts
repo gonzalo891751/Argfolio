@@ -261,6 +261,8 @@ export interface Holding {
     avgCostArs: number
     avgCostUsd: number
     avgCostUsdEq: number // new: weighted average cost in historical USD
+    openingBalanceInferred?: boolean
+    openingBalance?: number
     currentPriceNative?: number
     currentValueNative?: number
     unrealizedPnLNative?: number
@@ -336,6 +338,7 @@ export interface PortfolioTotals {
     exposure: Exposure
     categories: CategorySummary[]
     topPositions: HoldingAggregated[]
+    openingBalances: Record<string, Record<string, number>>
 }
 
 // -----------------------------------------------------------------------------

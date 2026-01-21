@@ -371,7 +371,8 @@ export function resetMonthlyStatuses(): void {
     // Update overdue debts
     const today = new Date().getDate()
     data.debts = data.debts.map((d) => {
-        if (d.status === 'pending' && d.dueDateDay < today) {
+        const dueDay = d.dueDateDay ?? d.dueDay ?? 1
+        if (d.status === 'pending' && dueDay < today) {
             return { ...d, status: 'overdue' as const }
         }
         return d

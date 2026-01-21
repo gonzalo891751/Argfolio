@@ -5,7 +5,15 @@
 export type ItemStatus = 'active' | 'paid' | 'pending' | 'overdue'
 export type InterestMode = 'none' | 'percent' | 'fixed'
 export type ExpenseCategory = 'service' | 'subscription' | 'education' | 'housing' | 'insurance'
-export type DebtCategory = 'credit_card' | 'loan' | 'personal'
+export type DebtCategory =
+    | 'credit_card'
+    | 'loan'
+    | 'personal'
+    | 'banco'
+    | 'profesional'
+    | 'familiar'
+    | 'comercio'
+    | 'otro'
 
 // V2: New item type for modal wizard
 export type NewItemType = 'income' | 'debt' | 'expense-fixed' | 'budget' | 'expense-normal'
@@ -15,17 +23,29 @@ export type DebtSubtype = 'tarjeta' | 'prestamo' | 'personal'
 
 export interface PFDebt {
     id: string
+    name?: string
     title: string
+    description?: string
     counterparty: string
     totalAmount: number
     remainingAmount: number
     installmentsCount: number
+    installmentAmount?: number
     currentInstallment: number
     interestMode: InterestMode
     monthlyValue: number
-    dueDateDay: number
+    dueDateDay?: number
+    dueDay?: number
     status: ItemStatus
     category: DebtCategory
+    startDate?: string
+    startYearMonth?: string
+    paidInstallments?: number
+    payments?: Array<{
+        date: string
+        amount: number
+        installmentIndex?: number
+    }>
     defaultAccountId?: string
     createdAt: string
 }

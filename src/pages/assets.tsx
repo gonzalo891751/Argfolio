@@ -10,6 +10,7 @@ import { AssetDrawer } from '@/components/assets/AssetDrawer'
 import { CurrencyRatioCard } from '@/components/assets/CurrencyRatioCard'
 import { AuditModal } from '@/components/assets/AuditModal'
 import { useComputedPortfolio } from '@/hooks/use-computed-portfolio'
+import { useTrackCash } from '@/hooks/use-preferences'
 import type { AssetClass, AssetRowMetrics } from '@/domain/assets/types'
 import { AccountFixedDepositsBlock } from '@/components/assets/AccountFixedDepositsBlock'
 import { usePF } from '@/hooks/use-pf'
@@ -48,6 +49,7 @@ export function AssetsPage() {
     const [selectedAsset, setSelectedAsset] = useState<AssetRowMetrics | null>(null)
     const [showAudit, setShowAudit] = useState(false)
     const { data: rawPortfolio } = useComputedPortfolio()
+    const { trackCash } = useTrackCash()
 
     // PF Hook (Handles logic, toast, and valuation)
     const { active: activePFs, totals: pfTotals } = usePF()
@@ -74,6 +76,12 @@ export function AssetsPage() {
         const allMetrics = Object.values(groupedRows).flatMap(g => g.metrics)
         const cats = new Set(allMetrics.map(r => r.category))
         return ['all', ...Array.from(cats)] as (AssetClass | 'all')[]
+    }, [groupedRows])
+
+    const hasInferredOpeningBalances = useMemo(() => {
+        return Object.values(groupedRows).some(group =>
+            group.metrics.some(metric => metric.openingBalanceInferred)
+        )
     }, [groupedRows])
 
     const { toast } = useToast()
@@ -198,6 +206,12 @@ export function AssetsPage() {
                 </div>
             </div>
 
+            {trackCash && hasInferredOpeningBalances && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-500">
+                    Se infiriÇü un saldo inicial para evitar caja negativa. PodÇ¸s corregirlo cargando tus fondeos reales.
+                </div>
+            )}
+
             {/* Category Tabs */}
             {categories.length > 1 && (
                 <Tabs
@@ -237,6 +251,7 @@ export function AssetsPage() {
                 // Check PFs
                 const accountPFs = activePFs.filter(pf => pf.accountId === accountId)
                 const hasPFs = accountPFs.length > 0
+                const totalAssetsCount = metrics.length + accountPFs.length
 
                 // Visibility Check: Has Rows OR Has PFs
                 if (metrics.length === 0 && !hasPFs) return null
@@ -255,7 +270,7 @@ export function AssetsPage() {
                 const displayPnlUsd = groupTotals.pnlUsd + pfInterestUsd
 
                 const displayInvestedArs = (groupTotals.valArs - groupTotals.pnlArs) + pfInvestedArs
-                const displayRoiPct = displayInvestedArs !== 0 ? (displayPnlArs / displayInvestedArs) : 0
+                const displayRoiPct = Math.abs(displayInvestedArs) > 0.000001 ? (displayPnlArs / displayInvestedArs) : null
                 const groupPnlColor = displayPnlArs >= 0 ? 'text-emerald-500' : 'text-red-500'
 
                 // Count types for Chips
@@ -278,7 +293,7 @@ export function AssetsPage() {
                                 <h2 className="text-xl font-bold flex items-center gap-2">
                                     {accountName}
                                     <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
-                                        {metrics.length} activos
+                                        {totalAssetsCount} activos
                                     </Badge>
                                     {(() => {
                                         // Yield Badge moved to Summary Card
@@ -361,6 +376,46 @@ export function AssetsPage() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Cash Balances */}
+                        {(() => {
+                            if (!trackCash) return null
+                            const cashMetrics = metrics.filter(m => m.category === 'CASH_ARS' || m.category === 'CASH_USD')
+                            if (cashMetrics.length === 0) return null
+
+                            return (
+                                <div className="space-y-2">
+                                    <h3 className="text-sm font-medium text-muted-foreground px-1">Caja</h3>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        {cashMetrics.map((row) => {
+                                            const isArs = row.category === 'CASH_ARS'
+                                            const balance = isArs ? (row.valArs ?? 0) : (row.valUsdEq ?? 0)
+                                            const opening = row.openingBalance ?? 0
+                                            const label = isArs ? 'Pesos' : row.symbol
+
+                                            return (
+                                                <div
+                                                    key={`${row.accountId}-${row.instrumentId}`}
+                                                    className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/5 px-4 py-3"
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-medium">{label}</span>
+                                                        {row.openingBalanceInferred && (
+                                                            <Badge variant="outline" className="text-[10px] font-normal text-amber-500 border-amber-500/40">
+                                                                Saldo inicial inferido {isArs ? formatMoneyARS(opening) : formatMoneyUSD(opening)}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-right font-numeric text-sm">
+                                                        {isArs ? formatMoneyARS(balance) : formatMoneyUSD(balance)}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )
+                        })()}
 
                         {/* Yield Summary Card */}
                         {(() => {

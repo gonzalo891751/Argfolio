@@ -14,6 +14,27 @@ import {
 const STORAGE_KEY_V2 = 'argfolio.personalFinances.v2'
 const STORAGE_KEY_V3_MIGRATED = 'argfolio.personalFinances.v3.migrated'
 
+function normalizeDebtCategory(category?: string): PFDebt['category'] {
+    if (!category) return 'otro'
+    if (category === 'loan') return 'banco'
+    if (category === 'personal') return 'familiar'
+    return category as PFDebt['category']
+}
+
+function getInstallmentAmount(debt: {
+    installmentAmount?: number
+    monthlyValue?: number
+    totalAmount?: number
+    installmentsCount?: number
+}): number {
+    if (debt.installmentAmount && debt.installmentAmount > 0) return debt.installmentAmount
+    if (debt.monthlyValue && debt.monthlyValue > 0) return debt.monthlyValue
+    if (debt.totalAmount && debt.installmentsCount) {
+        return Math.ceil(debt.totalAmount / debt.installmentsCount)
+    }
+    return 0
+}
+
 // =============================================================================
 // MIGRATION FROM LOCALSTORAGE TO DEXIE
 // =============================================================================
@@ -96,18 +117,28 @@ export async function migrateToV3(): Promise<void> {
         // Migrate Debts
         if (legacy.debts?.length) {
             for (const debt of legacy.debts) {
+                const totalAmount = debt.totalAmount || 0
+                const installmentsCount = debt.installmentsCount || 1
+                const monthlyValue = debt.monthlyValue || Math.ceil(totalAmount / installmentsCount)
+                const dueDay = debt.dueDay || debt.dueDateDay || 1
                 const newDebt: PFDebt = {
                     id: debt.id || crypto.randomUUID(),
-                    title: debt.title || 'Deuda',
+                    name: debt.name || debt.title,
+                    title: debt.title || debt.name || 'Deuda',
+                    description: debt.description,
                     counterparty: debt.counterparty || 'Desconocido',
-                    totalAmount: debt.totalAmount || 0,
-                    remainingAmount: debt.remainingAmount || debt.totalAmount || 0,
-                    installmentsCount: debt.installmentsCount || 1,
+                    totalAmount,
+                    remainingAmount: debt.remainingAmount || totalAmount,
+                    installmentsCount,
+                    installmentAmount: debt.installmentAmount || monthlyValue,
                     currentInstallment: debt.currentInstallment || 1,
-                    monthlyValue: debt.monthlyValue || 0,
-                    dueDateDay: debt.dueDateDay || 1,
+                    monthlyValue,
+                    dueDay,
+                    dueDateDay: debt.dueDateDay || dueDay,
                     status: debt.status || 'active',
-                    startYearMonth: currentYM,
+                    category: normalizeDebtCategory(debt.category),
+                    startDate: debt.startDate,
+                    startYearMonth: debt.startYearMonth || currentYM,
                     defaultAccountId: debt.defaultAccountId,
                     createdAt: debt.createdAt || new Date().toISOString(),
                 }
@@ -204,6 +235,35 @@ export async function migrateConsumptionsToV4(): Promise<void> {
     console.log('[PF V4] Consumptions migration complete')
 }
 
+/**
+ * Backfill new debt fields for existing records.
+ */
+export async function migrateDebtsToV5(): Promise<void> {
+    const debts = await db.pfDebts.toArray()
+    if (!debts.length) return
+
+    for (const debt of debts) {
+        const updates: Partial<PFDebt> = {}
+        const dueDay = debt.dueDay || debt.dueDateDay
+
+        if (!debt.name && debt.title) updates.name = debt.title
+        if (!debt.title && debt.name) updates.title = debt.name
+        if (!debt.category) updates.category = normalizeDebtCategory(debt.category)
+        if (!debt.installmentAmount) updates.installmentAmount = getInstallmentAmount(debt)
+        if (!debt.dueDay && dueDay) updates.dueDay = dueDay
+        if (!debt.dueDateDay && dueDay) updates.dueDateDay = dueDay
+        if (!debt.startYearMonth) {
+            updates.startYearMonth = debt.startDate?.slice(0, 7) || getCurrentYearMonth()
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await db.pfDebts.update(debt.id, updates)
+        }
+    }
+
+    console.log('[PF V5] Debts migration complete')
+}
+
 // =============================================================================
 // CREDIT CARD OPERATIONS
 // =============================================================================
@@ -260,16 +320,26 @@ export interface CreateConsumptionInput {
     description: string
     amount: number
     purchaseDateISO: string
+    currency?: 'ARS' | 'USD'
     category?: string
     installmentTotal?: number
     createAllInstallments?: boolean
+}
+
+export interface UpdateConsumptionInput {
+    description: string
+    amount: number
+    purchaseDateISO: string
+    currency?: 'ARS' | 'USD'
+    category?: string
+    installmentTotal?: number
 }
 
 export async function createConsumption(
     input: CreateConsumptionInput,
     card: PFCreditCard
 ): Promise<PFCardConsumption[]> {
-    const { cardId, description, amount, purchaseDateISO, category, installmentTotal, createAllInstallments } = input
+    const { cardId, description, amount, purchaseDateISO, currency, category, installmentTotal, createAllInstallments } = input
 
     // Calculate which statement this consumption belongs to
     const baseStatement = getStatementForTransaction(card.closingDay, card.dueDay, purchaseDateISO)
@@ -291,7 +361,7 @@ export async function createConsumption(
             cardId,
             description,
             amount: amountPerInstallment,
-            currency: 'ARS',
+            currency: currency ?? 'ARS',
             purchaseDateISO,
             closingYearMonth: closingYM,
             postedYearMonth: dueYM,
@@ -309,6 +379,24 @@ export async function createConsumption(
 
 export async function deleteConsumption(id: string): Promise<void> {
     await db.pfConsumptions.delete(id)
+}
+
+export async function updateConsumption(
+    id: string,
+    updates: UpdateConsumptionInput,
+    card: PFCreditCard
+): Promise<void> {
+    const statement = getStatementForTransaction(card.closingDay, card.dueDay, updates.purchaseDateISO)
+    await db.pfConsumptions.update(id, {
+        description: updates.description,
+        amount: updates.amount,
+        purchaseDateISO: updates.purchaseDateISO,
+        currency: updates.currency ?? 'ARS',
+        category: updates.category,
+        installmentTotal: updates.installmentTotal,
+        closingYearMonth: statement.closingYearMonth,
+        postedYearMonth: statement.dueYearMonth,
+    })
 }
 
 /**
@@ -485,16 +573,26 @@ export async function getDebtsByMonth(yearMonth: string): Promise<PFDebt[]> {
     const all = await db.pfDebts.where('status').equals('active').toArray()
     return all.filter(debt => {
         // Calculate if this month falls within the debt's installment range
-        const startYM = debt.startYearMonth
+        const startYM = debt.startYearMonth || debt.startDate?.slice(0, 7) || getCurrentYearMonth()
         const endYM = addMonthsToYearMonth(startYM, debt.installmentsCount - 1)
         return yearMonth >= startYM && yearMonth <= endYM
     })
 }
 
 export async function createDebt(debt: Omit<PFDebt, 'id' | 'createdAt'>): Promise<PFDebt> {
+    const startYearMonth = debt.startYearMonth || debt.startDate?.slice(0, 7) || getCurrentYearMonth()
+    const dueDay = debt.dueDay || debt.dueDateDay || 1
+    const installmentAmount = getInstallmentAmount(debt)
     const newDebt: PFDebt = {
         ...debt,
         id: crypto.randomUUID(),
+        name: debt.name || debt.title,
+        title: debt.title || debt.name || 'Deuda',
+        category: normalizeDebtCategory(debt.category),
+        startYearMonth,
+        dueDay,
+        dueDateDay: debt.dueDateDay || dueDay,
+        installmentAmount,
         createdAt: new Date().toISOString(),
     }
     await db.pfDebts.put(newDebt)

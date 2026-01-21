@@ -24,7 +24,7 @@ export interface PFCardConsumption {
     cardId: string
     description: string
     amount: number
-    currency: 'ARS'
+    currency: 'ARS' | 'USD'
     purchaseDateISO: string       // Actual purchase date
     closingYearMonth: string      // "YYYY-MM" (month where statement closes - devengado)
     postedYearMonth: string       // "YYYY-MM" (payment month - when due)
@@ -54,24 +54,45 @@ export interface PFStatement {
     updatedAt?: string
 }
 
-export type PFDebtStatus = 'active' | 'paid' | 'pending' | 'overdue'
+export type PFDebtStatus = 'active' | 'paid' | 'pending' | 'overdue' | 'completed'
+export type PFDebtCategory =
+    | 'banco'
+    | 'profesional'
+    | 'familiar'
+    | 'comercio'
+    | 'otro'
+    | 'credit_card'
+    | 'loan'
+    | 'personal'
 export type PFRecurrence = 'ONCE' | 'MONTHLY'
 export type PFExpenseCategory = 'service' | 'subscription' | 'education' | 'housing' | 'insurance'
 
 export interface PFDebt {
     id: string
+    name?: string
     title: string
+    description?: string
     counterparty: string
     totalAmount: number
     remainingAmount: number
     installmentsCount: number
+    installmentAmount?: number
     currentInstallment: number
     monthlyValue: number
-    dueDateDay: number
+    dueDay?: number
+    dueDateDay?: number
     status: PFDebtStatus
+    category?: PFDebtCategory
+    startDate?: string          // "YYYY-MM-DD"
     startYearMonth: string       // "YYYY-MM"
     defaultAccountId?: string
     createdAt: string
+    paidInstallments?: number
+    payments?: Array<{
+        date: string
+        amount: number
+        installmentIndex?: number
+    }>
     // Prepayment tracking
     prepayments?: Array<{
         date: string

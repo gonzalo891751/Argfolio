@@ -1,13 +1,16 @@
 import { CreditCard as CreditCardIcon, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { CardStatementData } from '../hooks/usePersonalFinancesV3'
+import type { PFCardConsumption, PFCreditCard } from '@/db/schema'
 import { CreditCardTile } from './CreditCardTile'
 
 interface CreditCardsSectionProps {
     cardData: CardStatementData[]
     onManageCards: () => void
     onAddConsumption: (cardId: string) => void
-    onViewAllConsumptions: (cardId: string) => void
+    onImportStatement: (cardId: string) => void
+    onDeleteConsumption: (consumptionId: string) => void
+    onEditConsumption: (consumption: PFCardConsumption, card: PFCreditCard) => void
     onMarkPaid: (cardId: string, paymentDateISO: string) => void
     onMarkUnpaid: (cardId: string) => void
 }
@@ -16,7 +19,9 @@ export function CreditCardsSection({
     cardData,
     onManageCards,
     onAddConsumption,
-    onViewAllConsumptions,
+    onImportStatement,
+    onDeleteConsumption,
+    onEditConsumption,
     onMarkPaid,
     onMarkUnpaid,
 }: CreditCardsSectionProps) {
@@ -50,13 +55,15 @@ export function CreditCardsSection({
                     Administrar Plásticos
                 </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-6">
                 {cardData.map((data) => (
                     <CreditCardTile
                         key={data.card.id}
                         data={data}
                         onAddConsumption={() => onAddConsumption(data.card.id)}
-                        onViewAll={() => onViewAllConsumptions(data.card.id)}
+                        onImportStatement={() => onImportStatement(data.card.id)}
+                        onDeleteConsumption={onDeleteConsumption}
+                        onEditConsumption={(consumption) => onEditConsumption(consumption, data.card)}
                         onMarkPaid={(date) => onMarkPaid(data.card.id, date)}
                         onMarkUnpaid={() => onMarkUnpaid(data.card.id)}
                     />

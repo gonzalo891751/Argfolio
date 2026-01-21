@@ -258,7 +258,7 @@ export function getUpcomingMaturities(
                 type: 'debt' as const,
                 title: d.title,
                 amount: d.monthlyValue,
-                dueDay: d.dueDateDay,
+                dueDay: d.dueDateDay ?? d.dueDay ?? 1,
                 status: d.status,
                 counterparty: d.counterparty,
                 installmentInfo: `${d.currentInstallment}/${d.installmentsCount}`,

@@ -13,6 +13,24 @@ import {
     type StatementPeriod
 } from '../utils/dateHelpers'
 
+function toYearMonthIndex(yearMonth: string): number {
+    const [year, month] = yearMonth.split('-').map(Number)
+    return year * 12 + (month - 1)
+}
+
+function getDebtInstallmentForMonth(debt: PFDebt, yearMonth: string): number {
+    const startYM = debt.startYearMonth || debt.startDate?.slice(0, 7) || yearMonth
+    const startIndex = toYearMonthIndex(startYM)
+    const targetIndex = toYearMonthIndex(yearMonth)
+    const endIndex = startIndex + debt.installmentsCount - 1
+    const isInRange = targetIndex >= startIndex && targetIndex <= endIndex
+
+    if (!isInRange) return 0
+    if (debt.category === 'credit_card') return 0
+    if (debt.status === 'paid' || debt.status === 'completed') return 0
+    return debt.installmentAmount || debt.monthlyValue || 0
+}
+
 export interface MonthlyTotals {
     totalIncome: number
     totalDebts: number
@@ -59,6 +77,7 @@ export function usePersonalFinancesV3() {
             setLoading(true)
             await store.migrateToV3()
             await store.migrateConsumptionsToV4()
+            await store.migrateDebtsToV5()
             await refreshAll()
             setLoading(false)
         }
@@ -122,14 +141,14 @@ export function usePersonalFinancesV3() {
     }, [yearMonth])
 
     const refreshMonthData = useCallback(async () => {
-        const [monthDebts, monthExpenses, monthIncomes, monthBudgets] = await Promise.all([
-            store.getDebtsByMonth(yearMonth),
+        const [allDebts, monthExpenses, monthIncomes, monthBudgets] = await Promise.all([
+            store.getAllDebts(),
             store.getFixedExpensesByMonth(yearMonth),
             store.getIncomesByMonth(yearMonth),
             store.getBudgetsByMonth(yearMonth),
         ])
 
-        setDebts(monthDebts)
+        setDebts(allDebts)
         setFixedExpenses(monthExpenses)
         setIncomes(monthIncomes)
         setBudgets(monthBudgets)
@@ -190,7 +209,10 @@ export function usePersonalFinancesV3() {
             .filter(d => !d.isPaid)
             .reduce((sum, d) => sum + d.dueTotal, 0)
 
-        const totalDebts = debts.reduce((sum, d) => sum + d.monthlyValue, 0)
+        const totalDebts = debts.reduce(
+            (sum, d) => sum + getDebtInstallmentForMonth(d, yearMonth),
+            0
+        )
         const totalFixed = fixedExpenses.reduce((sum, e) => sum + e.amount, 0)
         const totalBudgeted = budgets.reduce((sum, b) => sum + b.estimatedAmount, 0)
 
@@ -209,7 +231,7 @@ export function usePersonalFinancesV3() {
             commitments,
             available,
         }
-    }, [incomes, consumptionsClosing, cardStatementData, debts, fixedExpenses, budgets])
+    }, [incomes, consumptionsClosing, cardStatementData, debts, fixedExpenses, budgets, yearMonth])
 
     // Month navigation
     const goToPrevMonth = useCallback(() => {
@@ -255,10 +277,33 @@ export function usePersonalFinancesV3() {
     }, [creditCards, refreshConsumptionsAndStatements])
 
     const deleteConsumption = useCallback(async (id: string) => {
+        const existing =
+            consumptionsClosing.find(c => c.id === id) ??
+            consumptions.find(c => c.id === id)
+
         await store.deleteConsumption(id)
+
         setConsumptions(cons => cons.filter(c => c.id !== id))
         setConsumptionsClosing(cons => cons.filter(c => c.id !== id))
-    }, [])
+
+        if (existing?.closingYearMonth) {
+            const stmt = await store.getStatementByClosingMonth(existing.cardId, existing.closingYearMonth)
+            if (stmt) {
+                await store.recalculateStatementTotal(stmt.id)
+            }
+        }
+
+        await refreshConsumptionsAndStatements(creditCards)
+    }, [consumptionsClosing, consumptions, creditCards, refreshConsumptionsAndStatements])
+
+    const updateConsumption = useCallback(async (
+        id: string,
+        updates: store.UpdateConsumptionInput,
+        card: PFCreditCard
+    ) => {
+        await store.updateConsumption(id, updates, card)
+        await refreshConsumptionsAndStatements(creditCards)
+    }, [creditCards, refreshConsumptionsAndStatements])
 
     // Statement Payment
     const markStatementPaid = useCallback(async (
@@ -413,6 +458,7 @@ export function usePersonalFinancesV3() {
         deleteCard,
         createConsumption,
         deleteConsumption,
+        updateConsumption,
         markStatementPaid,
         markStatementUnpaid,
         createDebt,

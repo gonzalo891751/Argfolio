@@ -55,6 +55,11 @@ export function DebtWizard({ onSave, onBack, initialData }: DebtWizardProps) {
                 credit_card: 'tarjeta',
                 loan: 'prestamo',
                 personal: 'personal',
+                banco: 'prestamo',
+                profesional: 'prestamo',
+                comercio: 'prestamo',
+                otro: 'prestamo',
+                familiar: 'personal',
             }
             return categoryToSubtype[initialData.category as DebtCategory] || 'tarjeta'
         }
@@ -88,6 +93,11 @@ export function DebtWizard({ onSave, onBack, initialData }: DebtWizardProps) {
                 credit_card: 'tarjeta',
                 loan: 'prestamo',
                 personal: 'personal',
+                banco: 'prestamo',
+                profesional: 'prestamo',
+                comercio: 'prestamo',
+                otro: 'prestamo',
+                familiar: 'personal',
             }
             setSelectedSubtype(categoryToSubtype[initialData.category as DebtCategory] || 'tarjeta')
         }

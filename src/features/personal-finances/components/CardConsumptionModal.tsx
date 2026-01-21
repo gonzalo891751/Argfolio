@@ -1,17 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import type { PFCreditCard } from '@/db/schema'
-import type { CreateConsumptionInput } from '../services/pfStore'
+import type { PFCreditCard, PFCardConsumption } from '@/db/schema'
+import type { CreateConsumptionInput, UpdateConsumptionInput } from '../services/pfStore'
 
 interface CardConsumptionModalProps {
     open: boolean
     onClose: () => void
     card: PFCreditCard | null
     onSave: (input: CreateConsumptionInput) => Promise<void>
+    onUpdate?: (id: string, updates: UpdateConsumptionInput) => Promise<void>
+    mode?: 'create' | 'edit'
+    initialConsumption?: PFCardConsumption | null
 }
 
 export function CardConsumptionModal({
@@ -19,15 +22,48 @@ export function CardConsumptionModal({
     onClose,
     card,
     onSave,
+    onUpdate,
+    mode = 'create',
+    initialConsumption,
 }: CardConsumptionModalProps) {
     const [description, setDescription] = useState('')
     const [amount, setAmount] = useState('')
     const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0])
+    const [currency, setCurrency] = useState<'ARS' | 'USD'>('ARS')
     const [category, setCategory] = useState('')
     const [hasInstallments, setHasInstallments] = useState(false)
     const [installmentTotal, setInstallmentTotal] = useState('1')
     const [createAllInstallments, setCreateAllInstallments] = useState(true)
     const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+        if (!open) return
+        const handleKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                onClose()
+            }
+        }
+        window.addEventListener('keydown', handleKey)
+        return () => window.removeEventListener('keydown', handleKey)
+    }, [open, onClose])
+
+    useEffect(() => {
+        if (!open) return
+        if (mode === 'edit' && initialConsumption) {
+            setDescription(initialConsumption.description)
+            setAmount(String(initialConsumption.amount))
+            setPurchaseDate(initialConsumption.purchaseDateISO)
+            setCurrency(initialConsumption.currency ?? 'ARS')
+            setCategory(initialConsumption.category ?? '')
+            if (initialConsumption.installmentTotal && initialConsumption.installmentTotal > 1) {
+                setHasInstallments(true)
+                setInstallmentTotal(String(initialConsumption.installmentTotal))
+            } else {
+                setHasInstallments(false)
+                setInstallmentTotal('1')
+            }
+        }
+    }, [open, mode, initialConsumption])
 
     if (!open || !card) return null
 
@@ -36,19 +72,32 @@ export function CardConsumptionModal({
 
         setLoading(true)
         try {
-            await onSave({
-                cardId: card.id,
-                description: description.trim(),
-                amount: Number(amount),
-                purchaseDateISO: purchaseDate,
-                category: category.trim() || undefined,
-                installmentTotal: hasInstallments ? Number(installmentTotal) : undefined,
-                createAllInstallments: hasInstallments ? createAllInstallments : undefined,
-            })
+            if (mode === 'edit' && initialConsumption && onUpdate) {
+                await onUpdate(initialConsumption.id, {
+                    description: description.trim(),
+                    amount: Number(amount),
+                    purchaseDateISO: purchaseDate,
+                    currency,
+                    category: category.trim() || undefined,
+                    installmentTotal: hasInstallments ? Number(installmentTotal) : undefined,
+                })
+            } else {
+                await onSave({
+                    cardId: card.id,
+                    description: description.trim(),
+                    amount: Number(amount),
+                    purchaseDateISO: purchaseDate,
+                    currency,
+                    category: category.trim() || undefined,
+                    installmentTotal: hasInstallments ? Number(installmentTotal) : undefined,
+                    createAllInstallments: hasInstallments ? createAllInstallments : undefined,
+                })
+            }
             // Reset form
             setDescription('')
             setAmount('')
             setPurchaseDate(new Date().toISOString().split('T')[0])
+            setCurrency('ARS')
             setCategory('')
             setHasInstallments(false)
             setInstallmentTotal('1')
@@ -71,7 +120,9 @@ export function CardConsumptionModal({
                 {/* Header */}
                 <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-[#0B1121]">
                     <div>
-                        <h2 className="text-lg font-display font-bold text-white">Agregar Consumo</h2>
+                        <h2 className="text-lg font-display font-bold text-white">
+                            {mode === 'edit' ? 'Editar Consumo' : 'Agregar Consumo'}
+                        </h2>
                         <p className="text-xs text-slate-400">{card.name} • {card.bank}</p>
                     </div>
                     <button onClick={onClose} className="text-slate-400 hover:text-white transition">
@@ -92,7 +143,7 @@ export function CardConsumptionModal({
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label>Monto Total (ARS)</Label>
+                            <Label>Monto Total</Label>
                             <Input
                                 type="number"
                                 placeholder="0"
@@ -108,6 +159,18 @@ export function CardConsumptionModal({
                                 onChange={(e) => setPurchaseDate(e.target.value)}
                             />
                         </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Moneda</Label>
+                        <select
+                            value={currency}
+                            onChange={(event) => setCurrency(event.target.value as 'ARS' | 'USD')}
+                            className="w-full h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                        >
+                            <option value="ARS">ARS</option>
+                            <option value="USD">USD</option>
+                        </select>
                     </div>
 
                     <div className="space-y-2">
@@ -145,7 +208,8 @@ export function CardConsumptionModal({
                                 <p className="text-sm text-indigo-300">
                                     {Number(installmentTotal)} cuotas de{' '}
                                     <span className="font-mono font-bold">
-                                        ${installmentAmount.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                                        {currency === 'USD' ? 'USD ' : '$ '}
+                                        {installmentAmount.toLocaleString('es-AR', { maximumFractionDigits: 2 })}
                                     </span>
                                 </p>
                             )}
@@ -165,7 +229,7 @@ export function CardConsumptionModal({
                         onClick={handleSave}
                         disabled={loading || !description.trim() || !amount || Number(amount) <= 0}
                     >
-                        {loading ? 'Guardando...' : 'Agregar Consumo'}
+                        {loading ? 'Guardando...' : mode === 'edit' ? 'Guardar cambios' : 'Agregar Consumo'}
                     </Button>
                 </div>
             </div>

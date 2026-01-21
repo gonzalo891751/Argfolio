@@ -28,6 +28,8 @@ export function getFxKeyForAsset(category: string): FxKey {
             return 'cripto'
         case 'CASH_ARS':
         case 'CASH_USD':
+        case 'ARS_CASH':
+        case 'USD_CASH':
             return 'oficial'
         default:
             return 'mep'
@@ -69,7 +71,10 @@ function computeCedearDetails(
  * Safe percentage calculation
  */
 function safePct(value: number | null, base: number | null): number | null {
-    if (value == null || base == null || base === 0 || !Number.isFinite(value) || !Number.isFinite(base)) {
+    if (value == null || base == null || !Number.isFinite(value) || !Number.isFinite(base)) {
+        return null
+    }
+    if (base <= 0 || Math.abs(base) < 1e-8) {
         return null
     }
     return value / base

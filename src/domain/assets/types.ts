@@ -83,6 +83,8 @@ export interface AssetRowMetrics extends AssetMetrics {
     // Account Info
     accountId: string
     accountName: string
+    openingBalanceInferred?: boolean
+    openingBalance?: number
 }
 
 /**

@@ -8,7 +8,7 @@ import { useCedearPrices } from './use-cedear-prices'
 import { useFciPrices } from './useFciPrices'
 import {
     computeHoldings,
-    computeCashBalances,
+    computeCashLedger,
     computeRealizedPnL,
     computeTotals,
 } from '@/domain/portfolio'
@@ -163,7 +163,7 @@ export function useComputedPortfolio() {
 
             // Compute cash balances (only if tracking cash is enabled)
             const trackCash = getUserPreferences().trackCash
-            const cashBalances = trackCash ? computeCashBalances(movements) : new Map()
+            const cashLedger = trackCash ? computeCashLedger(movements) : { balances: new Map(), openingBalances: new Map() }
 
             // Compute realized PnL
             const realizedPnLResult = computeRealizedPnL(movements, fxRates, baseFx)
@@ -176,7 +176,8 @@ export function useComputedPortfolio() {
                 fxRates,
                 baseFx,
                 stableFx,
-                cashBalances,
+                cashBalances: cashLedger.balances,
+                openingBalances: cashLedger.openingBalances,
                 realizedPnLArs: realizedPnLResult.realizedArs,
                 realizedPnLUsd: realizedPnLResult.realizedUsd,
                 realizedPnLByAccount: realizedPnLResult.byAccount,
