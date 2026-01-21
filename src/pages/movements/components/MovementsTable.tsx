@@ -1,5 +1,5 @@
 import { ChevronRight, ClipboardList } from 'lucide-react'
-import type { Movement, Instrument } from '@/domain/types'
+import type { Movement, Instrument, Account } from '@/domain/types'
 import { formatMoneyARS, formatMoneyUSD, formatQty } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { getMovementAssetDisplay } from './utils'
@@ -7,7 +7,7 @@ import { getMovementAssetDisplay } from './utils'
 interface MovementsTableProps {
     movements: Movement[]
     instruments: Map<string, Instrument>
-    accounts: Map<string, { id: string; name: string }>
+    accounts: Map<string, Account>
     isLoading?: boolean
     onRowClick: (movement: Movement) => void
     onNewClick: () => void
@@ -112,7 +112,7 @@ export function MovementsTable({
                 <tbody className="divide-y divide-white/5 text-sm">
                     {movements.map(m => {
                         const instrument = m.instrumentId ? instruments.get(m.instrumentId) : null
-                        const account = accounts.get(m.accountId)
+                        const account = m.accountId ? accounts.get(m.accountId) : undefined
                         const display = getMovementAssetDisplay(m, instrument, account)
                         const { date, time } = formatDate(m.datetimeISO)
 

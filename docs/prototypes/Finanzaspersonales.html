@@ -1,0 +1,796 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Wallet, 
+  TrendingUp, 
+  TrendingDown, 
+  Calendar, 
+  CreditCard, 
+  AlertCircle, 
+  Plus, 
+  ChevronLeft, 
+  ChevronRight, 
+  Download,
+  Filter,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowUpRight,
+  ArrowDownRight,
+  Landmark,
+  MoreHorizontal,
+  X,
+  Target
+} from 'lucide-react';
+
+/**
+ * ARGFOLIO DESIGN SYSTEM TOKENS & UTILS
+ * Copied from Brand Book context
+ */
+
+const TOKENS = {
+  colors: {
+    bgApp: '#0B1121', // Deep Navy
+    bgSurface: '#151E32', 
+    bgSurface2: '#1E293B',
+    primary: '#6366f1', // Indigo
+    accent: '#0ea5e9', // Sky
+    success: '#10b981', // Emerald
+    danger: '#f43f5e', // Rose
+    warning: '#f59e0b', // Amber
+    info: '#3b82f6', // Blue
+    border: 'rgba(255,255,255,0.08)',
+    textMain: '#F8FAFC',
+    textMuted: '#94A3B8',
+  },
+  fonts: {
+    display: 'font-sans', // Using system sans for display in this prototype if font not loaded, ideally 'Space Grotesk'
+    body: 'font-sans', // 'Inter'
+    mono: 'font-mono', // 'JetBrains Mono'
+  }
+};
+
+// Utility: Format currency ARS style
+const formatARS = (amount: number) => {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
+// Utility: Format percentage
+const formatPercent = (value: number) => {
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(1)}%`;
+};
+
+/**
+ * TYPES & MODELS
+ */
+
+type Frequency = 'monthly' | 'one-time';
+type InterestMode = 'none' | 'percent' | 'fixed';
+type ItemStatus = 'active' | 'paid' | 'pending' | 'overdue';
+
+interface Debt {
+  id: string;
+  title: string;
+  counterparty: string; // Mercado Pago, Banco Galicia, Juan Perez
+  totalAmount: number;
+  remainingAmount: number;
+  installmentsCount: number; // 1 to 12+
+  currentInstallment: number;
+  interestMode: InterestMode;
+  monthlyValue: number; // Pre-calculated for simplicity in prototype
+  dueDateDay: number; // 1-31
+  status: ItemStatus;
+  category: 'credit_card' | 'loan' | 'personal';
+}
+
+interface FixedExpense {
+  id: string;
+  title: string; // Alquiler, Internet, Gym
+  amount: number;
+  dueDay: number;
+  category: 'service' | 'subscription' | 'education' | 'housing' | 'insurance';
+  status: ItemStatus; // For the current month
+  autoDebit: boolean;
+}
+
+interface Income {
+  id: string;
+  title: string; // Sueldo Neto, Changas
+  amount: number;
+  dateExpected: number; // Day of month
+  isGuaranteed: boolean; // Fixed vs Variable
+}
+
+/**
+ * MOCK DATA GENERATORS
+ */
+
+const MOCK_DEBTS: Debt[] = [
+  {
+    id: 'd1',
+    title: 'Compra Notebook',
+    counterparty: 'Mercado Pago',
+    totalAmount: 1200000,
+    remainingAmount: 400000,
+    installmentsCount: 12,
+    currentInstallment: 9,
+    interestMode: 'fixed',
+    monthlyValue: 100000,
+    dueDateDay: 10,
+    status: 'paid',
+    category: 'credit_card'
+  },
+  {
+    id: 'd2',
+    title: 'Préstamo Personal',
+    counterparty: 'Banco Galicia',
+    totalAmount: 500000,
+    remainingAmount: 450000,
+    installmentsCount: 24,
+    currentInstallment: 2,
+    interestMode: 'percent',
+    monthlyValue: 42500,
+    dueDateDay: 5,
+    status: 'overdue',
+    category: 'loan'
+  },
+  {
+    id: 'd3',
+    title: 'Zapatillas Nike',
+    counterparty: 'Tarjeta Visa',
+    totalAmount: 180000,
+    remainingAmount: 120000,
+    installmentsCount: 3,
+    currentInstallment: 2,
+    interestMode: 'none',
+    monthlyValue: 60000,
+    dueDateDay: 28,
+    status: 'pending',
+    category: 'credit_card'
+  }
+];
+
+const MOCK_EXPENSES: FixedExpense[] = [
+  { id: 'f1', title: 'Alquiler Depto', amount: 450000, dueDay: 5, category: 'housing', status: 'paid', autoDebit: false },
+  { id: 'f2', title: 'Fibertel 300MB', amount: 35000, dueDay: 12, category: 'service', status: 'pending', autoDebit: true },
+  { id: 'f3', title: 'YouTube Premium', amount: 4500, dueDay: 15, category: 'subscription', status: 'pending', autoDebit: true },
+  { id: 'f4', title: 'Expensas', amount: 85000, dueDay: 10, category: 'housing', status: 'pending', autoDebit: false },
+  { id: 'f5', title: 'Swiss Medical', amount: 120000, dueDay: 20, category: 'insurance', status: 'pending', autoDebit: true },
+];
+
+const MOCK_INCOME: Income[] = [
+  { id: 'i1', title: 'Sueldo (Rel. Dep.)', amount: 1100000, dateExpected: 1, isGuaranteed: true },
+  { id: 'i2', title: 'Freelance Design', amount: 350000, dateExpected: 15, isGuaranteed: false },
+];
+
+/**
+ * COMPONENTS
+ */
+
+const Badge = ({ children, variant = 'default' }: { children: React.ReactNode, variant?: 'success' | 'danger' | 'warning' | 'info' | 'default' }) => {
+  const styles = {
+    success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    danger: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    warning: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    info: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    default: 'bg-slate-700/50 text-slate-300 border-slate-600/30'
+  };
+
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${styles[variant]}`}>
+      {children}
+    </span>
+  );
+};
+
+const KPICard = ({ title, value, subValue, trend, icon: Icon, type = 'neutral' }: any) => {
+  const trendColor = trend > 0 ? 'text-emerald-400' : trend < 0 ? 'text-rose-400' : 'text-slate-400';
+  const glowClass = type === 'primary' ? 'shadow-glow border-brand-primary/30' : 'border-white/10';
+  
+  return (
+    <div className={`relative p-5 rounded-xl bg-[#151E32] border ${glowClass} flex flex-col justify-between h-full group transition-all hover:bg-[#1E293B]`}>
+      <div className="flex justify-between items-start mb-2">
+        <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">{title}</span>
+        <div className={`p-2 rounded-lg bg-white/5 group-hover:bg-white/10 transition-colors ${type === 'danger' ? 'text-rose-400' : type === 'success' ? 'text-emerald-400' : 'text-brand-primary'}`}>
+          <Icon size={16} />
+        </div>
+      </div>
+      <div>
+        <div className="text-2xl font-mono font-medium text-white tracking-tight">{value}</div>
+        {subValue && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`text-xs font-mono font-medium ${trendColor}`}>
+              {trend !== 0 && (trend > 0 ? '▲' : '▼')} {formatPercent(Math.abs(trend))}
+            </span>
+            <span className="text-xs text-slate-500">{subValue}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ProgressBar = ({ value, max, colorClass = 'bg-brand-primary' }: { value: number, max: number, colorClass?: string }) => {
+  const percentage = Math.min(100, Math.max(0, (value / max) * 100));
+  return (
+    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+      <div 
+        className={`h-full ${colorClass} transition-all duration-500 ease-out`} 
+        style={{ width: `${percentage}%` }}
+      />
+    </div>
+  );
+};
+
+// Modal Component
+const Modal = ({ isOpen, onClose, title, children }: any) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-[#0B1121] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between p-6 border-b border-white/5 bg-[#151E32]">
+          <h3 className="text-lg font-display font-medium text-white">{title}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="p-6 max-h-[70vh] overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Empty State
+const EmptyState = ({ title, description, action }: any) => (
+  <div className="flex flex-col items-center justify-center py-12 px-4 border border-dashed border-white/10 rounded-xl bg-white/5">
+    <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+      <Target size={24} />
+    </div>
+    <h3 className="text-white font-medium mb-1">{title}</h3>
+    <p className="text-slate-400 text-sm text-center max-w-xs mb-6">{description}</p>
+    {action}
+  </div>
+);
+
+/**
+ * MAIN APP COMPONENT
+ */
+
+export default function PersonalFinances() {
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 20)); // Mocking Jan 20th, 2026
+  const [activeTab, setActiveTab] = useState('overview');
+  const [debts, setDebts] = useState<Debt[]>(MOCK_DEBTS);
+  const [expenses, setExpenses] = useState<FixedExpense[]>(MOCK_EXPENSES);
+  const [income, setIncome] = useState<Income[]>(MOCK_INCOME);
+  const [compareMode, setCompareMode] = useState(true);
+  
+  // Modal States
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addType, setAddType] = useState<'debt' | 'expense' | 'income'>('debt');
+
+  // Computed Values
+  const totals = useMemo(() => {
+    const totalIncome = income.reduce((acc, item) => acc + item.amount, 0);
+    const totalDebts = debts.reduce((acc, item) => acc + item.monthlyValue, 0);
+    const totalFixed = expenses.reduce((acc, item) => acc + item.amount, 0);
+    const commitments = totalDebts + totalFixed;
+    const available = totalIncome - commitments;
+    const coverageRatio = commitments > 0 ? (commitments / totalIncome) * 100 : 0;
+    
+    return { totalIncome, totalDebts, totalFixed, commitments, available, coverageRatio };
+  }, [debts, expenses, income]);
+
+  // Upcoming Maturities Logic
+  const upcomingMaturities = useMemo(() => {
+    const allItems = [
+      ...debts.map(d => ({ ...d, type: 'debt', amount: d.monthlyValue, date: d.dueDateDay })),
+      ...expenses.map(e => ({ ...e, type: 'expense', amount: e.amount, date: e.dueDay }))
+    ];
+
+    // Sort by day of month
+    return allItems
+      .filter(i => i.status !== 'paid')
+      .sort((a, b) => {
+        // Very basic proximity logic for prototype
+        let distA = a.date - currentDate.getDate();
+        let distB = b.date - currentDate.getDate();
+        if (distA < 0) distA += 30; // Next month
+        if (distB < 0) distB += 30;
+        return distA - distB;
+      })
+      .slice(0, 5); // Take top 5
+  }, [debts, expenses, currentDate]);
+
+  const handleStatusToggle = (id: string, type: 'debt' | 'expense') => {
+    // Simple toggle logic for prototype
+    if (type === 'debt') {
+      setDebts(prev => prev.map(d => d.id === id ? { ...d, status: d.status === 'paid' ? 'pending' : 'paid' } : d));
+    } else {
+      setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: e.status === 'paid' ? 'pending' : 'paid' } : e));
+    }
+  };
+
+  const getDaysMessage = (day: number) => {
+    const today = currentDate.getDate();
+    const diff = day - today;
+    if (diff === 0) return 'Vence hoy';
+    if (diff === 1) return 'Vence mañana';
+    if (diff < 0) return `Venció hace ${Math.abs(diff)} días`;
+    return `En ${diff} días`;
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0B1121] text-slate-200 font-sans selection:bg-indigo-500/30">
+      
+      {/* 1. TOPBAR SIMULATION */}
+      <nav className="border-b border-white/5 bg-[#0B1121]/80 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-brand-primary rounded-lg flex items-center justify-center text-white font-bold">A</div>
+            <span className="font-display font-bold text-xl tracking-tight text-white">Argfolio</span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/5 text-slate-400 border border-white/5">PRO</span>
+          </div>
+          
+          <div className="hidden md:flex items-center gap-6 text-xs font-mono">
+            <div className="flex items-center gap-2 text-slate-400">
+              <span>MEP</span>
+              <span className="text-white">$1.180</span>
+              <span className="text-rose-400">▼ 0.2%</span>
+            </div>
+            <div className="w-px h-4 bg-white/10"></div>
+            <div className="flex items-center gap-2 text-slate-400">
+              <span>BLUE</span>
+              <span className="text-white">$1.220</span>
+              <span className="text-emerald-400">▲ 0.5%</span>
+            </div>
+            <div className="w-px h-4 bg-white/10"></div>
+            <div className="flex items-center gap-2 text-slate-400">
+              <span>USDT</span>
+              <span className="text-white">$1.205</span>
+            </div>
+          </div>
+
+          <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/10"></div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        
+        {/* 2. HEADER & CONTROLS */}
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div>
+            <h2 className="text-sm font-mono text-brand-primary tracking-widest uppercase mb-1">Módulo Finanzas</h2>
+            <h1 className="text-3xl md:text-4xl font-display font-bold text-white tracking-tight">
+              Cashflow & Compromisos
+            </h1>
+            <p className="text-slate-400 mt-2 max-w-xl">
+              Organizá tu liquidez. Acá ves lo que entra y lo que está comprometido. Sin humo.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            {/* Month Picker */}
+            <div className="flex items-center bg-[#151E32] rounded-lg border border-white/10 p-1">
+              <button 
+                onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}
+                className="p-2 hover:bg-white/5 rounded-md text-slate-400 hover:text-white transition"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <div className="px-4 font-mono text-sm font-medium text-white min-w-[140px] text-center">
+                {currentDate.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }).toUpperCase()}
+              </div>
+              <button 
+                onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}
+                className="p-2 hover:bg-white/5 rounded-md text-slate-400 hover:text-white transition"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            <div className="w-px h-8 bg-white/10 hidden sm:block"></div>
+
+            <button 
+              onClick={() => { setAddType('debt'); setIsAddModalOpen(true); }}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-primary hover:bg-indigo-500 text-white rounded-lg font-medium text-sm transition shadow-glow-sm"
+            >
+              <Plus size={16} />
+              <span>Nuevo Movimiento</span>
+            </button>
+            
+            <button className="p-2.5 text-slate-400 hover:text-white border border-white/10 rounded-lg hover:bg-white/5 transition">
+              <Download size={18} />
+            </button>
+          </div>
+        </header>
+
+        {/* 3. KPI GRID */}
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard 
+            title="Ingresos Estimados" 
+            value={formatARS(totals.totalIncome)} 
+            subValue="vs. mes anterior"
+            trend={12.5}
+            icon={Wallet}
+            type="neutral"
+          />
+          <KPICard 
+            title="Compromisos Totales" 
+            value={formatARS(totals.commitments)} 
+            subValue="Fijos + Deudas"
+            trend={-2.4} 
+            icon={TrendingDown}
+            type="neutral"
+          />
+          <KPICard 
+            title="Liquidez Disponible" 
+            value={formatARS(totals.available)} 
+            subValue="Para ahorro/variable"
+            trend={24.0}
+            icon={TrendingUp}
+            type={totals.available > 0 ? 'success' : 'danger'}
+          />
+          <div className="relative p-5 rounded-xl bg-[#151E32] border border-white/10 flex flex-col justify-between h-full">
+            <div className="flex justify-between items-start mb-2">
+              <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Ratio de Cobertura</span>
+              <div className={`p-2 rounded-lg bg-white/5 ${totals.coverageRatio > 80 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                <AlertCircle size={16} />
+              </div>
+            </div>
+            <div>
+              <div className="text-2xl font-mono font-medium text-white tracking-tight">{totals.coverageRatio.toFixed(1)}%</div>
+              <div className="mt-3">
+                <div className="flex justify-between text-[10px] text-slate-500 font-mono mb-1">
+                  <span>SALUDABLE</span>
+                  <span>AL LÍMITE</span>
+                </div>
+                <ProgressBar value={totals.coverageRatio} max={100} colorClass={totals.coverageRatio > 80 ? 'bg-rose-500' : totals.coverageRatio > 50 ? 'bg-amber-500' : 'bg-emerald-500'} />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. MAIN CONTENT AREA */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* LEFT: TABS & LISTS (2/3 width) */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* Tabs */}
+            <div className="border-b border-white/10">
+              <div className="flex space-x-6 overflow-x-auto no-scrollbar">
+                {['overview', 'debts', 'expenses', 'income', 'history'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`pb-3 text-sm font-medium transition-colors relative whitespace-nowrap ${
+                      activeTab === tab ? 'text-white' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    {tab === 'overview' && 'Resumen'}
+                    {tab === 'debts' && 'Deudas & Cuotas'}
+                    {tab === 'expenses' && 'Gastos Fijos'}
+                    {tab === 'income' && 'Ingresos'}
+                    {tab === 'history' && 'Historial'}
+                    
+                    {activeTab === tab && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-primary shadow-[0_0_10px_rgba(99,102,241,0.5)]"></div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* TAB CONTENT */}
+            <div className="min-h-[400px]">
+              
+              {/* OVERVIEW TAB */}
+              {activeTab === 'overview' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  
+                  {/* Próximos Vencimientos Section */}
+                  <div className="bg-[#151E32]/50 border border-white/5 rounded-xl p-6 backdrop-blur-sm">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="text-brand-primary" size={18} />
+                        <h3 className="text-white font-display font-medium">Próximos Vencimientos</h3>
+                      </div>
+                      <button className="text-xs text-brand-primary hover:text-white transition">Ver calendario completo &rarr;</button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {upcomingMaturities.length > 0 ? upcomingMaturities.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-[#0B1121] border border-white/5 hover:border-white/10 transition group">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${item.type === 'debt' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-slate-700/30 border-slate-600/30 text-slate-400'}`}>
+                              {item.type === 'debt' ? <CreditCard size={18} /> : <Landmark size={18} />}
+                            </div>
+                            <div>
+                              <div className="text-sm text-white font-medium">{item.title}</div>
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <span>{item.type === 'debt' ? 'Cuota' : 'Servicio'}</span>
+                                <span className="w-1 h-1 rounded-full bg-slate-700"></span>
+                                <span className={item.date - currentDate.getDate() <= 2 ? 'text-amber-400 font-bold' : ''}>
+                                  {getDaysMessage(item.date)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <div className="font-mono text-sm text-white">{formatARS(item.amount)}</div>
+                              {item.type === 'debt' && (
+                                <div className="text-[10px] text-slate-500">
+                                  {item.currentInstallment}/{item.installmentsCount}
+                                </div>
+                              )}
+                            </div>
+                            <button 
+                              onClick={() => handleStatusToggle(item.id, item.type as any)}
+                              className={`p-2 rounded-full border transition-all ${
+                                item.status === 'paid' 
+                                  ? 'bg-emerald-500 text-white border-emerald-500' 
+                                  : 'bg-transparent border-slate-600 text-slate-600 hover:text-emerald-400 hover:border-emerald-400'
+                              }`}
+                              title="Marcar como pagado"
+                            >
+                              <CheckCircle2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      )) : (
+                        <EmptyState 
+                          title="Todo al día" 
+                          description="No tenés vencimientos próximos para este mes." 
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Summary Breakdown */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-[#151E32] rounded-xl p-5 border border-white/5">
+                      <h4 className="text-xs font-mono uppercase text-slate-500 mb-4">Ingresos vs. Gastos</h4>
+                      {/* Simple CSS Bar Chart Simulation */}
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-white">Ingresos</span>
+                            <span className="text-emerald-400 font-mono">{formatARS(totals.totalIncome)}</span>
+                          </div>
+                          <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: '100%' }}></div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-white">Compromisos</span>
+                            <span className="text-rose-400 font-mono">{formatARS(totals.commitments)}</span>
+                          </div>
+                          <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-rose-500 rounded-full" 
+                              style={{ width: `${(totals.commitments / totals.totalIncome) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#151E32] rounded-xl p-5 border border-white/5 flex flex-col justify-center items-center text-center">
+                      <div className="text-sm text-slate-400 mb-2">Capacidad de Ahorro</div>
+                      <div className="text-3xl font-mono font-bold text-brand-primary mb-1">
+                         {((totals.available / totals.totalIncome) * 100).toFixed(1)}%
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        ${formatARS(totals.available)} libres
+                      </div>
+                    </div>
+                  </div>
+                  
+                </div>
+              )}
+
+              {/* DEBTS TAB */}
+              {activeTab === 'debts' && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="flex justify-between items-center pb-4">
+                    <h3 className="text-lg text-white font-display">Tus Deudas Activas</h3>
+                    <div className="flex gap-2 text-xs">
+                      <span className="px-3 py-1 bg-slate-800 rounded-full text-slate-300 border border-white/10">Total Restante: <span className="text-white font-mono">{formatARS(debts.reduce((a,b)=>a+b.remainingAmount, 0))}</span></span>
+                    </div>
+                  </div>
+                  
+                  <div className="overflow-hidden rounded-xl border border-white/10 bg-[#151E32]">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-[#0B1121] text-xs uppercase font-mono text-slate-500 border-b border-white/10">
+                        <tr>
+                          <th className="px-6 py-4 font-medium">Concepto</th>
+                          <th className="px-6 py-4 font-medium">Estado</th>
+                          <th className="px-6 py-4 font-medium text-right">Cuota Actual</th>
+                          <th className="px-6 py-4 font-medium text-right">Progreso</th>
+                          <th className="px-6 py-4 font-medium"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {debts.map((debt) => (
+                          <tr key={debt.id} className="hover:bg-white/[0.02] transition">
+                            <td className="px-6 py-4">
+                              <div className="font-medium text-white">{debt.title}</div>
+                              <div className="text-xs text-slate-500">{debt.counterparty}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <Badge variant={debt.status === 'paid' ? 'success' : debt.status === 'overdue' ? 'danger' : 'warning'}>
+                                {debt.status === 'paid' ? 'PAGADO' : debt.status === 'overdue' ? 'VENCIDO' : 'PENDIENTE'}
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="font-mono text-white">{formatARS(debt.monthlyValue)}</div>
+                              <div className="text-[10px] text-slate-500">Vence día {debt.dueDateDay}</div>
+                            </td>
+                            <td className="px-6 py-4 text-right min-w-[150px]">
+                              <div className="flex items-center justify-end gap-2 mb-1">
+                                <span className="text-xs text-slate-400">{debt.currentInstallment}/{debt.installmentsCount}</span>
+                              </div>
+                              <ProgressBar value={debt.currentInstallment} max={debt.installmentsCount} colorClass="bg-brand-accent" />
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button className="text-slate-500 hover:text-white"><MoreHorizontal size={18} /></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+
+          {/* RIGHT: INFO PANEL / RECOMMENDATIONS (1/3 width) */}
+          <div className="space-y-6">
+            
+            {/* Quick Stats Box */}
+            <div className="bg-gradient-to-br from-[#1E293B] to-[#0f172a] border border-white/10 rounded-xl p-6 relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/10 rounded-full blur-[50px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+               
+               <h3 className="text-white font-display text-lg mb-4">Resumen {currentDate.toLocaleDateString('es-AR', { month: 'long' })}</h3>
+               
+               <div className="space-y-4 relative z-10">
+                 <div className="flex justify-between items-center py-2 border-b border-white/5">
+                   <span className="text-slate-400 text-sm">Gastos Fijos</span>
+                   <span className="text-white font-mono">{formatARS(totals.totalFixed)}</span>
+                 </div>
+                 <div className="flex justify-between items-center py-2 border-b border-white/5">
+                   <span className="text-slate-400 text-sm">Cuotas Deuda</span>
+                   <span className="text-white font-mono">{formatARS(totals.totalDebts)}</span>
+                 </div>
+                 <div className="flex justify-between items-center py-2 pt-4">
+                   <span className="text-slate-200 font-medium">Total a pagar</span>
+                   <span className="text-rose-400 font-mono font-bold text-lg">{formatARS(totals.commitments)}</span>
+                 </div>
+               </div>
+
+               <button className="w-full mt-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg text-sm font-medium transition flex items-center justify-center gap-2">
+                 <Download size={16} /> Descargar Reporte
+               </button>
+            </div>
+
+            {/* Recommendations / Alerts */}
+            <div className="border border-amber-500/20 bg-amber-500/5 rounded-xl p-5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
+                <div>
+                  <h4 className="text-amber-500 font-medium text-sm mb-1">Ojo con el préstamo</h4>
+                  <p className="text-slate-400 text-xs leading-relaxed">
+                    La cuota del préstamo "Banco Galicia" venció el día 5. Si no pagaste, pueden correr intereses punitorios diarios.
+                  </p>
+                  <button className="text-xs text-white font-medium underline mt-2">Ver detalles</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Add New Quick Actions */}
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => { setAddType('expense'); setIsAddModalOpen(true); }}
+                className="p-4 bg-[#151E32] hover:bg-[#1E293B] border border-white/10 rounded-xl text-left transition group"
+              >
+                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-white group-hover:bg-slate-700 transition mb-3">
+                  <Landmark size={16} />
+                </div>
+                <div className="text-sm font-medium text-white">Nuevo Gasto Fijo</div>
+                <div className="text-[10px] text-slate-500 mt-1">Suscripciones, Alquiler</div>
+              </button>
+              
+              <button 
+                onClick={() => { setAddType('income'); setIsAddModalOpen(true); }}
+                className="p-4 bg-[#151E32] hover:bg-[#1E293B] border border-white/10 rounded-xl text-left transition group"
+              >
+                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-white group-hover:bg-slate-700 transition mb-3">
+                  <ArrowUpRight size={16} />
+                </div>
+                <div className="text-sm font-medium text-white">Nuevo Ingreso</div>
+                <div className="text-[10px] text-slate-500 mt-1">Sueldo, Extras</div>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </main>
+
+      {/* 5. ADD ITEM MODAL */}
+      <Modal 
+        isOpen={isAddModalOpen} 
+        onClose={() => setIsAddModalOpen(false)} 
+        title={addType === 'debt' ? 'Registrar Nueva Deuda' : addType === 'expense' ? 'Registrar Gasto Fijo' : 'Registrar Ingreso'}
+      >
+        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setIsAddModalOpen(false); }}>
+          
+          <div className="space-y-1.5">
+            <label className="text-xs font-mono text-slate-400 uppercase">Título / Concepto</label>
+            <input type="text" placeholder="Ej: Compra Heladera" className="w-full bg-slate-950 border border-white/10 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-1.5">
+              <label className="text-xs font-mono text-slate-400 uppercase">Monto Total</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                <input type="number" placeholder="0.00" className="w-full bg-slate-950 border border-white/10 rounded-lg py-2.5 pl-8 px-4 text-sm text-white focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition font-mono" />
+              </div>
+            </div>
+            
+            {addType === 'debt' && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-mono text-slate-400 uppercase">Contraparte</label>
+                <input type="text" placeholder="Ej: Visa, MP" className="w-full bg-slate-950 border border-white/10 rounded-lg py-2.5 px-4 text-sm text-white focus:outline-none focus:border-brand-primary transition" />
+              </div>
+            )}
+          </div>
+
+          {addType === 'debt' && (
+            <div className="p-4 bg-slate-900/50 rounded-lg border border-white/10 space-y-4">
+              <h4 className="text-xs font-medium text-white mb-2">Plan de Cuotas</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                   <label className="text-xs text-slate-500">Cantidad Cuotas</label>
+                   <select className="w-full bg-slate-950 border border-white/10 rounded-lg py-2 px-3 text-sm text-white focus:outline-none">
+                     {[1,3,6,9,12,18,24].map(n => <option key={n} value={n}>{n} cuotas</option>)}
+                   </select>
+                </div>
+                <div className="space-y-1.5">
+                   <label className="text-xs text-slate-500">Primer Vencimiento</label>
+                   <input type="date" className="w-full bg-slate-950 border border-white/10 rounded-lg py-2 px-3 text-sm text-white focus:outline-none" />
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 pt-2">
+                 <input type="checkbox" id="calc-interest" className="rounded bg-slate-800 border-white/10 text-brand-primary focus:ring-0" />
+                 <label htmlFor="calc-interest" className="text-xs text-slate-400">Calcular interés automáticamente (CFT)</label>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-4 flex gap-3">
+            <button type="submit" className="flex-1 py-2.5 bg-brand-primary hover:bg-indigo-500 text-white rounded-lg font-medium text-sm transition shadow-glow-sm">
+              Guardar Movimiento
+            </button>
+            <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-lg font-medium text-sm transition">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+    </div>
+  );
+}

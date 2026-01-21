@@ -41,7 +41,7 @@ const navItems = [
     { path: '/assets', label: 'Mis Activos', icon: Wallet },
     { path: '/movements', label: 'Movimientos', icon: ArrowLeftRight },
     { path: '/history', label: 'Historial', icon: History },
-    { path: '/debts', label: 'Deudas', icon: CreditCard },
+    { path: '/personal-finances', label: 'Finanzas', icon: CreditCard },
     { path: '/settings', label: 'Configurar', icon: Settings },
 ]
 

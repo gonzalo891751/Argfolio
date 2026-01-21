@@ -87,13 +87,13 @@ export function DashboardPage() {
                 />
                 <KpiCard
                     title="PnL Realizado"
-                    valueArs={portfolio?.realizedPnL ?? 0}
+                    valueArs={portfolio?.realizedPnLArs ?? 0}
                     icon={TrendingUp}
                     isLoading={isLoading}
                 />
                 <KpiCard
                     title="PnL No Realizado"
-                    valueArs={portfolio?.unrealizedPnL ?? 0}
+                    valueArs={portfolio?.unrealizedPnLArs ?? 0}
                     icon={TrendingUp}
                     isLoading={isLoading}
                 />

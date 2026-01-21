@@ -154,6 +154,8 @@ export interface Movement {
         pfCode?: string // User readable ID e.g. PF-20240101-ABCD
         fixedDeposit?: FixedDepositMeta
         fci?: FciMetaSnapshot
+        isAutoSettlement?: boolean
+        source?: string
     }
 }
 

@@ -1,0 +1,855 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  Plus, 
+  Wallet, 
+  CreditCard, 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  Calendar, 
+  ChevronRight, 
+  AlertCircle, 
+  CheckCircle2, 
+  X, 
+  PieChart, 
+  Activity,
+  ArrowRight,
+  MoreVertical,
+  Trash2,
+  Landmark,
+  ShoppingBag,
+  Zap
+} from 'lucide-react';
+
+/**
+ * ARGFOLIO DESIGN SYSTEM TOKENS & UTILS
+ * ------------------------------------------------
+ */
+
+// Formatters
+const formatMoney = (amount: number, currency: 'ARS' | 'USD' = 'ARS') => {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+};
+
+const formatDate = (dateString: string) => {
+  if (!dateString) return '-';
+  const date = new Date(dateString + 'T12:00:00'); // Fix timezone offset issues for simple dates
+  return new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'short' }).format(date);
+};
+
+// Types
+type Currency = 'ARS' | 'USD';
+type TransactionType = 'income' | 'expense';
+
+interface Account {
+  id: string;
+  name: string;
+  type: 'bank' | 'wallet' | 'crypto' | 'cash';
+  currency: Currency;
+  balance: number;
+}
+
+interface Income {
+  id: string;
+  source: string; // Sueldo, Freelance, etc.
+  amount: number;
+  currency: Currency;
+  date: string;
+  isEffective: boolean; // Si ya entró o es esperado
+  category: 'fixed' | 'variable';
+}
+
+interface CreditCard {
+  id: string;
+  name: string; // Visa Galicia
+  issuer: string; // Visa
+  bank: string; // Galicia
+  closeDate: number; // Día de cierre (1-31)
+  dueDate: number; // Día de vencimiento (1-31)
+  consumptions: CardConsumption[];
+}
+
+interface CardConsumption {
+  id: string;
+  concept: string;
+  amount: number;
+  date: string;
+  installments: { current: number; total: number } | null;
+  category: string;
+}
+
+interface Loan {
+  id: string;
+  name: string; // Préstamo NaranjaX
+  entity: string;
+  totalAmount: number;
+  remainingAmount: number;
+  nextPaymentDate: string;
+  nextPaymentAmount: number;
+  installmentsTotal: number;
+  installmentsPaid: number;
+}
+
+interface FixedExpense {
+  id: string;
+  name: string; // Internet, Luz
+  amount: number;
+  dueDate: number; // Día del mes
+  isPaid: boolean;
+  isRecurrent: boolean;
+}
+
+interface BudgetCategory {
+  id: string;
+  name: string; // Supermercado, Nafta
+  estimatedAmount: number;
+  spentAmount: number; // Lo real gastado (mockeado para el ejemplo)
+}
+
+/**
+ * MOCK DATA (Contexto Argentino)
+ * ------------------------------------------------
+ */
+const MOCK_ACCOUNTS: Account[] = [
+  { id: '1', name: 'Banco Galicia', type: 'bank', currency: 'ARS', balance: 450000 },
+  { id: '2', name: 'Mercado Pago', type: 'wallet', currency: 'ARS', balance: 12500.50 },
+  { id: '3', name: 'Caja Ahorro USD', type: 'bank', currency: 'USD', balance: 200 },
+  { id: '4', name: 'Efectivo', type: 'cash', currency: 'ARS', balance: 5000 },
+];
+
+const INITIAL_INCOMES: Income[] = [
+  { id: '1', source: 'Sueldo Dev Sr', amount: 2100000, currency: 'ARS', date: '2026-05-05', isEffective: true, category: 'fixed' },
+  { id: '2', source: 'Freelance UI', amount: 350000, currency: 'ARS', date: '2026-05-15', isEffective: false, category: 'variable' },
+];
+
+const INITIAL_CARDS: CreditCard[] = [
+  { 
+    id: 'c1', name: 'Visa Galicia', issuer: 'Visa', bank: 'Galicia', closeDate: 25, dueDate: 5,
+    consumptions: [
+      { id: 't1', concept: 'Coto Supermercado', amount: 85000, date: '2026-04-28', category: 'Supermercado', installments: null },
+      { id: 't2', concept: 'Mercado Libre (Auriculares)', amount: 45000, date: '2026-04-20', category: 'Tecnología', installments: { current: 2, total: 6 } },
+    ]
+  },
+  { 
+    id: 'c2', name: 'Master Naranja', issuer: 'Mastercard', bank: 'NaranjaX', closeDate: 20, dueDate: 10,
+    consumptions: [
+      { id: 't3', concept: 'Netflix', amount: 8500, date: '2026-04-15', category: 'Servicios', installments: null },
+    ]
+  }
+];
+
+const INITIAL_LOANS: Loan[] = [
+  { id: 'l1', name: 'Préstamo Auto', entity: 'Santander', totalAmount: 5000000, remainingAmount: 2500000, nextPaymentDate: '2026-05-10', nextPaymentAmount: 180000, installmentsTotal: 24, installmentsPaid: 12 },
+];
+
+const INITIAL_FIXED: FixedExpense[] = [
+  { id: 'f1', name: 'Alquiler', amount: 450000, dueDate: 5, isPaid: true, isRecurrent: true },
+  { id: 'f2', name: 'Expensas', amount: 120000, dueDate: 10, isPaid: false, isRecurrent: true },
+  { id: 'f3', name: 'Fibertel / Personal', amount: 35000, dueDate: 12, isPaid: false, isRecurrent: true },
+  { id: 'f4', name: 'Spotify', amount: 4500, dueDate: 20, isPaid: false, isRecurrent: true },
+];
+
+const INITIAL_BUDGET: BudgetCategory[] = [
+  { id: 'b1', name: 'Supermercado', estimatedAmount: 300000, spentAmount: 120000 },
+  { id: 'b2', name: 'Nafta / Transporte', estimatedAmount: 150000, spentAmount: 45000 },
+  { id: 'b3', name: 'Salidas / Ocio', estimatedAmount: 100000, spentAmount: 85000 },
+  { id: 'b4', name: 'Farmacia', estimatedAmount: 40000, spentAmount: 5000 },
+];
+
+/**
+ * UI COMPONENTS
+ * ------------------------------------------------
+ */
+
+const Card = ({ children, className = '', title, action }: any) => (
+  <div className={`bg-[#151E32] border border-white/10 rounded-xl overflow-hidden shadow-sm ${className}`}>
+    {(title || action) && (
+      <div className="px-5 py-4 border-b border-white/5 flex justify-between items-center">
+        {title && <h3 className="font-display font-medium text-white text-lg">{title}</h3>}
+        {action && <div>{action}</div>}
+      </div>
+    )}
+    <div className="p-5">{children}</div>
+  </div>
+);
+
+const Badge = ({ children, type = 'info', className = '' }: { children: React.ReactNode, type?: 'success' | 'error' | 'warning' | 'info' | 'neutral', className?: string }) => {
+  const styles = {
+    success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    error: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    warning: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    info: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+    neutral: 'bg-slate-700/30 text-slate-400 border-white/10',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium border ${styles[type]} ${className}`}>
+      {children}
+    </span>
+  );
+};
+
+const Button = ({ children, variant = 'primary', className = '', ...props }: any) => {
+  const base = "inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0B1121] disabled:opacity-50 disabled:cursor-not-allowed";
+  const variants = {
+    primary: "bg-[#6366f1] hover:bg-indigo-500 text-white shadow-glow-sm focus:ring-[#6366f1]",
+    secondary: "bg-white/10 hover:bg-white/15 text-white border border-white/10 focus:ring-white/20",
+    ghost: "text-slate-400 hover:text-white hover:bg-white/5 focus:ring-white/10",
+    danger: "bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 focus:ring-rose-500",
+  };
+  return (
+    <button className={`${base} ${variants[variant as keyof typeof variants]} ${className}`} {...props}>
+      {children}
+    </button>
+  );
+};
+
+const Input = ({ label, error, className = '', ...props }: any) => (
+  <div className={`space-y-1.5 ${className}`}>
+    {label && <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">{label}</label>}
+    <input 
+      className={`w-full bg-[#0B1121] border ${error ? 'border-rose-500' : 'border-white/10'} rounded-lg px-3 py-2 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1] transition-colors`}
+      {...props}
+    />
+    {error && <p className="text-xs text-rose-400">{error}</p>}
+  </div>
+);
+
+const Select = ({ label, options, className = '', ...props }: any) => (
+  <div className={`space-y-1.5 ${className}`}>
+    {label && <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide">{label}</label>}
+    <div className="relative">
+      <select 
+        className="w-full bg-[#0B1121] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1] appearance-none"
+        {...props}
+      >
+        {options.map((opt: any) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+        <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+      </div>
+    </div>
+  </div>
+);
+
+/**
+ * MAIN APP COMPONENT
+ * ------------------------------------------------
+ */
+export default function PersonalFinances() {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [modalStep, setModalStep] = useState<'type' | 'form' | 'confirm-movement'>('type');
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+  
+  // Data State
+  const [incomes, setIncomes] = useState<Income[]>(INITIAL_INCOMES);
+  const [cards, setCards] = useState<CreditCard[]>(INITIAL_CARDS);
+  const [loans, setLoans] = useState<Loan[]>(INITIAL_LOANS);
+  const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>(INITIAL_FIXED);
+  const [budgetItems, setBudgetItems] = useState<BudgetCategory[]>(INITIAL_BUDGET);
+  
+  // Temp form state
+  const [formData, setFormData] = useState<any>({});
+  const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+
+  // Computed KPIs
+  const totalIncome = incomes.reduce((acc, curr) => acc + curr.amount, 0);
+  const totalCards = cards.reduce((acc, card) => acc + card.consumptions.reduce((sum, t) => sum + t.amount, 0), 0);
+  const totalLoans = loans.reduce((acc, loan) => acc + loan.nextPaymentAmount, 0);
+  const totalFixed = fixedExpenses.reduce((acc, fix) => acc + fix.amount, 0);
+  const totalBudgeted = budgetItems.reduce((acc, item) => acc + item.estimatedAmount, 0);
+  
+  // Disponible Real = Ingresos Efectivos - (Deudas + Fijos + Presupuestado Variable)
+  // Nota: En un sistema real esto es más complejo (si ya pagué algo, no lo resto dos veces).
+  // Para prototipo simplificamos: Ingresos Totales - Compromisos Totales
+  const totalCommitments = totalCards + totalLoans + totalFixed;
+  const available = totalIncome - totalCommitments - totalBudgeted;
+
+  // Show Toast Helper
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  /**
+   * HANDLERS FOR NEW ITEM FLOW
+   */
+  const handleTypeSelect = (type: string) => {
+    setSelectedType(type);
+    setFormData({}); // Reset form
+    setModalStep('form');
+  };
+
+  const handleSaveItem = () => {
+    // Logic to save specific types based on selectedType
+    // This mocks the backend call
+    const id = Math.random().toString(36).substr(2, 9);
+    
+    if (selectedType === 'income') {
+      const newIncome: Income = {
+        id,
+        source: formData.source || 'Ingreso manual',
+        amount: Number(formData.amount) || 0,
+        currency: 'ARS',
+        date: formData.date || new Date().toISOString().split('T')[0],
+        isEffective: formData.isEffective || false,
+        category: 'variable'
+      };
+      setIncomes([...incomes, newIncome]);
+      
+      if (newIncome.isEffective) {
+        setFormData({ ...formData, amount: newIncome.amount, concept: newIncome.source });
+        setModalStep('confirm-movement');
+        return;
+      }
+    } else if (selectedType === 'expense-fixed') {
+      const newFixed: FixedExpense = {
+        id,
+        name: formData.name || 'Gasto Fijo',
+        amount: Number(formData.amount) || 0,
+        dueDate: Number(formData.dueDate) || 1,
+        isPaid: false,
+        isRecurrent: true
+      };
+      setFixedExpenses([...fixedExpenses, newFixed]);
+    } else if (selectedType === 'budget') {
+      const newBudget: BudgetCategory = {
+        id,
+        name: formData.name || 'Categoría',
+        estimatedAmount: Number(formData.amount) || 0,
+        spentAmount: 0
+      };
+      setBudgetItems([...budgetItems, newBudget]);
+    }
+    
+    closeModal();
+    showToast('Guardado correctamente');
+  };
+
+  const handleConfirmMovement = () => {
+    // Simula registro en DB de Movimientos
+    showToast(`Movimiento registrado en ${MOCK_ACCOUNTS.find(a => a.id === formData.accountId)?.name || 'Cuenta'}`, 'success');
+    closeModal();
+  };
+
+  const closeModal = () => {
+    setShowNewModal(false);
+    setModalStep('type');
+    setSelectedType(null);
+  };
+
+  /**
+   * RENDERERS
+   */
+  
+  // 1. Selector Modal Content
+  const renderTypeSelector = () => (
+    <div className="grid grid-cols-2 gap-4">
+      {[
+        { id: 'income', icon: TrendingUp, label: 'Nuevo Ingreso', desc: 'Sueldo, freelance, ventas', color: 'text-emerald-400' },
+        { id: 'debt', icon: CreditCard, label: 'Nueva Deuda', desc: 'Tarjeta, préstamo, personal', color: 'text-rose-400' },
+        { id: 'expense-fixed', icon: Zap, label: 'Gasto Fijo', desc: 'Recurrente mensual', color: 'text-amber-400' },
+        { id: 'budget', icon: PieChart, label: 'Presupuesto', desc: 'Estimación variable (super, nafta)', color: 'text-indigo-400' },
+        { id: 'expense-normal', icon: ShoppingBag, label: 'Gasto Puntual', desc: 'Registro rápido del mes', color: 'text-slate-400' },
+      ].map((item) => (
+        <button
+          key={item.id}
+          onClick={() => handleTypeSelect(item.id)}
+          className="flex flex-col items-start p-4 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-left group"
+        >
+          <div className={`mb-3 p-2 rounded-lg bg-[#0B1121] border border-white/10 ${item.color}`}>
+            <item.icon size={20} />
+          </div>
+          <span className="font-display font-medium text-white mb-1 group-hover:text-indigo-400 transition-colors">{item.label}</span>
+          <span className="text-xs text-slate-400 leading-relaxed">{item.desc}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  // 2. Specific Forms
+  const renderForm = () => {
+    if (selectedType === 'income') {
+      return (
+        <div className="space-y-4">
+          <Input label="Fuente" placeholder="Ej: Sueldo, Cliente X" value={formData.source || ''} onChange={(e:any) => setFormData({...formData, source: e.target.value})} />
+          <div className="grid grid-cols-2 gap-4">
+             <Input label="Monto (ARS)" type="number" placeholder="0.00" value={formData.amount || ''} onChange={(e:any) => setFormData({...formData, amount: e.target.value})} />
+             <Input label="Fecha" type="date" value={formData.date || ''} onChange={(e:any) => setFormData({...formData, date: e.target.value})} />
+          </div>
+          
+          <div className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-[#0B1121]">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-white">¿Ya lo cobraste?</span>
+              <span className="text-xs text-slate-400">Si marcás efectivo, te pediremos registrar el movimiento.</span>
+            </div>
+            <div 
+              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${formData.isEffective ? 'bg-emerald-500' : 'bg-slate-700'}`}
+              onClick={() => setFormData({...formData, isEffective: !formData.isEffective})}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${formData.isEffective ? 'translate-x-6' : 'translate-x-0'}`} />
+            </div>
+          </div>
+          
+          <Button className="w-full mt-4" onClick={handleSaveItem}>Guardar Ingreso</Button>
+        </div>
+      );
+    }
+    
+    if (selectedType === 'debt') {
+      return (
+         <div className="space-y-4">
+            <p className="text-sm text-slate-400 mb-4">Primero, ¿qué tipo de deuda estás sumando?</p>
+            <div className="grid grid-cols-1 gap-2">
+              <button className="p-3 text-left border border-white/10 rounded-lg hover:bg-white/5 text-sm text-white">💳 &nbsp; Tarjeta de Crédito (Resumen)</button>
+              <button className="p-3 text-left border border-white/10 rounded-lg hover:bg-white/5 text-sm text-white">🏦 &nbsp; Préstamo / Entidad</button>
+              <button className="p-3 text-left border border-white/10 rounded-lg hover:bg-white/5 text-sm text-white">🤝 &nbsp; Deuda Personal (Amigo/Familiar)</button>
+            </div>
+            <Button variant="ghost" className="w-full mt-2" onClick={() => setModalStep('type')}>Volver</Button>
+         </div>
+      );
+    }
+
+    if (selectedType === 'budget') {
+      return (
+        <div className="space-y-4">
+           <Input label="Categoría" placeholder="Ej: Supermercado" value={formData.name || ''} onChange={(e:any) => setFormData({...formData, name: e.target.value})} />
+           <Input label="Presupuesto Mensual Estimado" type="number" placeholder="0.00" value={formData.amount || ''} onChange={(e:any) => setFormData({...formData, amount: e.target.value})} />
+           <Button className="w-full mt-4" onClick={handleSaveItem}>Definir Presupuesto</Button>
+        </div>
+      );
+    }
+
+    // Default fallback
+    return (
+       <div className="space-y-4">
+          <Input label="Nombre / Concepto" value={formData.name || ''} onChange={(e:any) => setFormData({...formData, name: e.target.value})} />
+          <Input label="Monto" type="number" value={formData.amount || ''} onChange={(e:any) => setFormData({...formData, amount: e.target.value})} />
+          <Button className="w-full mt-4" onClick={handleSaveItem}>Guardar</Button>
+       </div>
+    );
+  };
+
+  // 3. Movement Registration (The "Effective" Logic)
+  const renderMovementPrompt = () => (
+    <div className="space-y-4">
+      <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex gap-3">
+        <Activity className="text-indigo-400 flex-shrink-0" size={20} />
+        <div className="text-sm">
+          <p className="text-white font-medium">Registrar movimiento real</p>
+          <p className="text-indigo-300/80 mt-1">Como indicaste que esto es efectivo, ¿querés impactarlo en el saldo de tus cuentas?</p>
+        </div>
+      </div>
+
+      <Select 
+        label="Cuenta Destino" 
+        options={MOCK_ACCOUNTS.map(a => ({ value: a.id, label: `${a.name} (${formatMoney(a.balance, a.currency)})` }))}
+        value={formData.accountId}
+        onChange={(e:any) => setFormData({...formData, accountId: e.target.value})}
+      />
+      
+      <div className="flex gap-3 pt-2">
+        <Button variant="ghost" className="flex-1" onClick={closeModal}>No, solo registrar</Button>
+        <Button className="flex-1" onClick={handleConfirmMovement}>Sí, impactar saldo</Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#0B1121] text-slate-200 font-sans selection:bg-indigo-500/30 pb-20">
+      
+      {/* HEADER */}
+      <header className="sticky top-0 z-30 bg-[#0B1121]/80 backdrop-blur-md border-b border-white/5 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+           <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-glow">
+             <DollarSign className="text-white" size={20} />
+           </div>
+           <div>
+             <h1 className="font-display font-bold text-xl text-white leading-none">Finanzas Personales</h1>
+             <p className="text-xs text-slate-400 font-mono mt-1 flex items-center gap-2">
+               MAYO 2026 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+             </p>
+           </div>
+        </div>
+        <Button onClick={() => setShowNewModal(true)} className="hidden md:flex gap-2">
+          <Plus size={16} /> Nuevo
+        </Button>
+        <button onClick={() => setShowNewModal(true)} className="md:hidden w-10 h-10 bg-[#6366f1] rounded-full flex items-center justify-center text-white shadow-glow">
+           <Plus size={20} />
+        </button>
+      </header>
+
+      {/* DASHBOARD KPIs */}
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <Card className="relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <TrendingUp size={48} className="text-emerald-500" />
+            </div>
+            <div className="text-slate-400 text-xs font-mono mb-1 uppercase tracking-wider">Ingresos Estimados</div>
+            <div className="text-2xl md:text-3xl font-mono text-white font-medium">{formatMoney(totalIncome)}</div>
+            <div className="mt-2 text-xs flex items-center gap-1 text-emerald-400">
+               <CheckCircle2 size={12} /> {formatMoney(incomes.filter(i => i.isEffective).reduce((a,b)=>a+b.amount,0))} cobrado
+            </div>
+          </Card>
+
+          <Card className="relative overflow-hidden group">
+             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <Calendar size={48} className="text-rose-500" />
+            </div>
+            <div className="text-slate-400 text-xs font-mono mb-1 uppercase tracking-wider">Compromisos Fijos</div>
+            <div className="text-2xl md:text-3xl font-mono text-white font-medium">{formatMoney(totalCommitments)}</div>
+            <div className="mt-2 text-xs flex items-center gap-1 text-slate-400">
+               Tarjetas + Préstamos + Fijos
+            </div>
+          </Card>
+
+          <Card className="relative overflow-hidden group">
+             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <PieChart size={48} className="text-indigo-500" />
+            </div>
+            <div className="text-slate-400 text-xs font-mono mb-1 uppercase tracking-wider">Presupuesto Var.</div>
+            <div className="text-2xl md:text-3xl font-mono text-white font-medium">{formatMoney(totalBudgeted)}</div>
+            <div className="mt-2 text-xs flex items-center gap-1 text-indigo-400">
+               Te quedan {formatMoney(totalBudgeted - budgetItems.reduce((a,b)=>a+b.spentAmount,0))}
+            </div>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-[#151E32] to-[#0f172a] border-indigo-500/30 shadow-glow-sm relative">
+             <div className="absolute inset-0 bg-indigo-500/5 pointer-events-none"></div>
+             <div className="text-indigo-300 text-xs font-mono mb-1 uppercase tracking-wider font-bold">Disponible Real</div>
+             <div className={`text-2xl md:text-3xl font-mono font-bold ${available >= 0 ? 'text-white' : 'text-rose-400'}`}>
+               {formatMoney(available)}
+             </div>
+             <div className="mt-2 text-xs text-slate-400">
+               Después de pagar todo
+             </div>
+          </Card>
+        </div>
+
+        {/* TABS NAVIGATION */}
+        <div className="border-b border-white/10 mb-6 flex overflow-x-auto no-scrollbar">
+          {[
+            { id: 'overview', label: 'Resumen' },
+            { id: 'incomes', label: 'Ingresos' },
+            { id: 'debts', label: 'Deudas & Tarjetas' },
+            { id: 'fixed', label: 'Gastos Fijos' },
+            { id: 'budget', label: 'Presupuesto' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'border-[#6366f1] text-white'
+                  : 'border-transparent text-slate-400 hover:text-white hover:border-white/20'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* TAB CONTENT */}
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+          
+          {/* 1. OVERVIEW */}
+          {activeTab === 'overview' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-6">
+                 {/* Upcoming */}
+                 <Card title="Próximos Vencimientos">
+                   <div className="space-y-4">
+                     {[...loans, ...fixedExpenses].sort((a:any,b:any) => (a.dueDate || 0) - (b.dueDate || 0)).slice(0, 3).map((item:any) => (
+                       <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center font-bold text-xs">
+                              {new Date().getDate() > (item.dueDate || 5) ? 'HOY' : `${item.dueDate || 5} MAY`}
+                            </div>
+                            <div>
+                              <div className="text-white font-medium text-sm">{item.name}</div>
+                              <div className="text-xs text-slate-400">Vence pronto</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                             <div className="font-mono text-white">{formatMoney(item.amount || item.nextPaymentAmount)}</div>
+                             <button className="text-xs text-indigo-400 hover:text-indigo-300 font-medium">Pagar</button>
+                          </div>
+                       </div>
+                     ))}
+                   </div>
+                 </Card>
+
+                 {/* Budget Status */}
+                 <Card title="Estado del Presupuesto">
+                    <div className="space-y-5">
+                      {budgetItems.map(item => {
+                        const pct = (item.spentAmount / item.estimatedAmount) * 100;
+                        return (
+                          <div key={item.id}>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-slate-300">{item.name}</span>
+                              <span className="font-mono text-slate-400">
+                                {formatMoney(item.spentAmount)} / <span className="text-white">{formatMoney(item.estimatedAmount)}</span>
+                              </span>
+                            </div>
+                            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full ${pct > 100 ? 'bg-rose-500' : pct > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                                style={{ width: `${Math.min(pct, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                 </Card>
+              </div>
+
+              <div className="space-y-6">
+                 {/* Credit Card Alerts */}
+                 <Card title="Cierres de Tarjeta" className="border-indigo-500/20">
+                    <div className="space-y-3">
+                       {cards.map(card => {
+                         const daysToClose = card.closeDate - new Date().getDate(); // Simplified logic
+                         return (
+                           <div key={card.id} className="flex items-center gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0">
+                             <CreditCard size={18} className="text-slate-400" />
+                             <div className="flex-1">
+                               <div className="text-sm text-white">{card.name}</div>
+                               <div className="text-xs text-amber-400">
+                                 {daysToClose > 0 ? `Cierra en ${daysToClose} días` : 'Ya cerró'}
+                               </div>
+                             </div>
+                             <div className="text-right">
+                               <div className="text-xs text-slate-500">Estimado</div>
+                               <div className="font-mono text-white text-sm">
+                                 {formatMoney(card.consumptions.reduce((acc, t) => acc + t.amount, 0))}
+                               </div>
+                             </div>
+                           </div>
+                         )
+                       })}
+                    </div>
+                 </Card>
+
+                 {/* Quick Actions */}
+                 <div className="grid grid-cols-2 gap-3">
+                   <button className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition text-emerald-400 text-sm font-medium flex flex-col items-center gap-2">
+                      <TrendingUp size={20} />
+                      Ingreso Rápido
+                   </button>
+                   <button className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 transition text-rose-400 text-sm font-medium flex flex-col items-center gap-2">
+                      <ShoppingBag size={20} />
+                      Gasto Rápido
+                   </button>
+                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. INCOMES */}
+          {activeTab === 'incomes' && (
+            <Card title="Fuentes de Ingreso" action={<Button variant="ghost" size="sm">Historial</Button>}>
+               <table className="w-full text-left border-collapse">
+                 <thead>
+                   <tr className="text-xs text-slate-500 uppercase border-b border-white/10">
+                     <th className="pb-3 font-medium">Concepto</th>
+                     <th className="pb-3 font-medium">Fecha</th>
+                     <th className="pb-3 font-medium">Estado</th>
+                     <th className="pb-3 font-medium text-right">Monto</th>
+                     <th className="pb-3 font-medium"></th>
+                   </tr>
+                 </thead>
+                 <tbody className="text-sm">
+                   {incomes.map(inc => (
+                     <tr key={inc.id} className="group border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                       <td className="py-4 text-white font-medium">
+                         {inc.source}
+                         {inc.category === 'fixed' && <span className="ml-2 text-xs text-slate-500 font-normal px-1.5 py-0.5 rounded bg-slate-800">Fijo</span>}
+                       </td>
+                       <td className="py-4 text-slate-400">{formatDate(inc.date)}</td>
+                       <td className="py-4">
+                         <Badge type={inc.isEffective ? 'success' : 'neutral'}>
+                           {inc.isEffective ? 'Cobrado' : 'Esperado'}
+                         </Badge>
+                       </td>
+                       <td className="py-4 text-right font-mono text-emerald-400 font-medium">
+                         + {formatMoney(inc.amount, inc.currency)}
+                       </td>
+                       <td className="py-4 text-right">
+                         <button className="p-1.5 text-slate-500 hover:text-white rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                           <MoreVertical size={16} />
+                         </button>
+                       </td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+            </Card>
+          )}
+
+          {/* 3. DEBTS & CARDS */}
+          {activeTab === 'debts' && (
+            <div className="space-y-8">
+               {/* Cards Section */}
+               <section>
+                 <div className="flex items-center justify-between mb-4">
+                   <h3 className="font-display text-xl text-white">Tarjetas de Crédito</h3>
+                   <Button variant="secondary" className="text-xs py-1.5">Administrar Plásticos</Button>
+                 </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {cards.map(card => {
+                      const total = card.consumptions.reduce((sum, t) => sum + t.amount, 0);
+                      return (
+                        <div key={card.id} className="bg-[#151E32] rounded-xl border border-white/10 overflow-hidden">
+                           <div className="p-5 bg-gradient-to-r from-slate-900 to-[#151E32] border-b border-white/5 flex justify-between items-start">
+                             <div>
+                               <div className="text-slate-400 text-xs uppercase tracking-wider mb-1">{card.bank}</div>
+                               <div className="text-white font-medium text-lg">{card.name}</div>
+                               <div className="text-xs text-slate-500 mt-1 font-mono">**** **** **** 4509</div>
+                             </div>
+                             <div className="text-right">
+                               <div className="text-xs text-slate-400">Total a Pagar</div>
+                               <div className="text-xl font-mono text-white font-bold">{formatMoney(total)}</div>
+                             </div>
+                           </div>
+                           
+                           <div className="p-4 space-y-3">
+                             <div className="flex justify-between text-xs text-slate-400 bg-slate-900/50 p-2 rounded">
+                               <span>Cierre: <span className="text-white">{card.closeDate}/05</span></span>
+                               <span>Vence: <span className="text-white">{card.dueDate}/06</span></span>
+                             </div>
+                             
+                             {/* Consumos Preview */}
+                             <div className="space-y-2 pt-2">
+                               {card.consumptions.map(t => (
+                                 <div key={t.id} className="flex justify-between text-sm">
+                                   <span className="text-slate-300 truncate pr-4">{t.concept}</span>
+                                   <div className="flex flex-col items-end">
+                                      <span className="font-mono text-slate-200">{formatMoney(t.amount)}</span>
+                                      {t.installments && (
+                                        <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-1 rounded">
+                                          Cuota {t.installments.current}/{t.installments.total}
+                                        </span>
+                                      )}
+                                   </div>
+                                 </div>
+                               ))}
+                             </div>
+                           </div>
+                           <div className="p-3 border-t border-white/5 bg-slate-900/30 text-center">
+                             <button className="text-xs text-indigo-400 font-medium hover:text-white transition">Ver todos los consumos</button>
+                           </div>
+                        </div>
+                      )
+                    })}
+                 </div>
+               </section>
+
+               {/* Loans Section */}
+               <section>
+                 <h3 className="font-display text-xl text-white mb-4">Préstamos y Deudas</h3>
+                 <Card>
+                    <table className="w-full text-left">
+                       <thead>
+                         <tr className="text-xs text-slate-500 uppercase border-b border-white/10">
+                           <th className="pb-3 pl-2">Entidad / Concepto</th>
+                           <th className="pb-3 text-right">Próxima Cuota</th>
+                           <th className="pb-3 text-right">Restante</th>
+                           <th className="pb-3 text-center">Progreso</th>
+                           <th className="pb-3"></th>
+                         </tr>
+                       </thead>
+                       <tbody className="text-sm">
+                          {loans.map(loan => {
+                            const progress = (loan.installmentsPaid / loan.installmentsTotal) * 100;
+                            return (
+                              <tr key={loan.id} className="border-b border-white/5 last:border-0 hover:bg-white/5">
+                                <td className="py-4 pl-2">
+                                  <div className="text-white font-medium">{loan.name}</div>
+                                  <div className="text-xs text-slate-400">{loan.entity}</div>
+                                </td>
+                                <td className="py-4 text-right">
+                                  <div className="font-mono text-white">{formatMoney(loan.nextPaymentAmount)}</div>
+                                  <div className="text-xs text-rose-400">Vence {formatDate(loan.nextPaymentDate)}</div>
+                                </td>
+                                <td className="py-4 text-right font-mono text-slate-400">
+                                  {formatMoney(loan.remainingAmount)}
+                                </td>
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                       <div className="h-full bg-indigo-500" style={{ width: `${progress}%` }}></div>
+                                    </div>
+                                    <span className="text-xs font-mono text-slate-500">{loan.installmentsPaid}/{loan.installmentsTotal}</span>
+                                  </div>
+                                </td>
+                                <td className="py-4 text-right pr-2">
+                                  <button className="text-xs px-2 py-1 bg-white/5 hover:bg-white/10 rounded text-slate-300">Detalles</button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                       </tbody>
+                    </table>
+                 </Card>
+               </section>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* NEW ITEM MODAL */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={closeModal} />
+          
+          <div className="relative w-full max-w-lg bg-[#151E32] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-[#0B1121]">
+               <div>
+                 <h2 className="text-lg font-display font-bold text-white">
+                   {modalStep === 'type' ? '¿Qué querés agregar?' : modalStep === 'form' ? 'Detalles' : 'Confirmación'}
+                 </h2>
+                 <p className="text-xs text-slate-400">
+                   {modalStep === 'type' ? 'Seleccioná el tipo de registro' : selectedType === 'income' ? 'Registrando ingreso' : 'Completá los datos'}
+                 </p>
+               </div>
+               <button onClick={closeModal} className="text-slate-400 hover:text-white transition"><X size={20}/></button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+               {modalStep === 'type' && renderTypeSelector()}
+               {modalStep === 'form' && renderForm()}
+               {modalStep === 'confirm-movement' && renderMovementPrompt()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST NOTIFICATION */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-right-10 duration-300">
+           <div className={`px-4 py-3 rounded-lg shadow-lg border flex items-center gap-3 ${
+             toast.type === 'success' 
+              ? 'bg-[#0B1121] border-emerald-500/30 text-emerald-400' 
+              : 'bg-[#0B1121] border-rose-500/30 text-rose-400'
+           }`}>
+             {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+             <span className="text-sm font-medium text-white">{toast.msg}</span>
+           </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
