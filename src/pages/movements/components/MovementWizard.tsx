@@ -380,7 +380,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
         let fxType: FxType = 'MEP'
         let opType: OpType = 'buy'
         let asset: AssetOption | null = null
-        let coingeckoId: string | undefined = undefined
+        const coingeckoId: string | undefined = undefined
 
         if (cls === 'crypto') {
             currency = 'USD'

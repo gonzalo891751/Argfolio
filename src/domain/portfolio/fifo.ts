@@ -62,7 +62,7 @@ export function buildFifoLots(
             case 'TRANSFER_IN':
             case 'DIVIDEND':
             case 'INTEREST':
-            case 'DEBT_ADD': // Assuming gaining asset via debt? Rarely used for assets.
+            case 'DEBT_ADD': { // Assuming gaining asset via debt? Rarely used for assets.
                 // Create Lot
                 // Calculate unit costs
                 let unitCostArs = 0
@@ -99,10 +99,11 @@ export function buildFifoLots(
                     fxType: 'implied'
                 })
                 break
+            }
 
             case 'SELL':
             case 'TRANSFER_OUT':
-            case 'DEBT_PAY':
+            case 'DEBT_PAY': {
                 // Consume Lots (FIFO)
                 let qtyToRemove = qty
 
@@ -122,6 +123,7 @@ export function buildFifoLots(
                     }
                 }
                 break
+            }
         }
     }
 

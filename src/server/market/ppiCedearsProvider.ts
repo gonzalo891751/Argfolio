@@ -115,7 +115,7 @@ async function fetchAllCedearsFromPpi(): Promise<CedearQuote[]> {
             if (!raw.ticker) continue
 
             const lastPriceArs = raw.lastPrice || null
-            let changePct1d = raw.variation !== undefined ? raw.variation : null
+            const changePct1d = raw.variation !== undefined ? raw.variation : null
             // If variation is 0 but we have prevClose, maybe calculate it? 
             // Often if variation is 0 it means no change or no data.
             // PPI usually sends the variation field correctly.
@@ -182,7 +182,7 @@ export async function fetchPpiCedears(options: CedearOptions = {}): Promise<Cede
     } = options
 
     const allItems = await fetchAllCedearsFromPpi()
-    let processed = [...allItems]
+    const processed = [...allItems]
 
     // Sort
     processed.sort((a, b) => {

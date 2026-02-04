@@ -57,7 +57,7 @@ export function computeAverageCost(
             case 'TRANSFER_IN':
             case 'DEBT_ADD':
             case 'DEPOSIT':
-            case 'BUY_USD': // USD Purchase
+            case 'BUY_USD': { // USD Purchase
                 const addedQty = qty
                 if (addedQty <= 0) break
 
@@ -90,6 +90,7 @@ export function computeAverageCost(
                 costBasisArs += tradeAmtArs
                 costBasisUsd += tradeAmtUsd
                 break
+            }
 
             case 'DIVIDEND':
             case 'INTEREST':
@@ -101,7 +102,7 @@ export function computeAverageCost(
             case 'TRANSFER_OUT':
             case 'DEBT_PAY':
             case 'WITHDRAW':
-            case 'SELL_USD': // USD Sale
+            case 'SELL_USD': { // USD Sale
                 const removedQty = qty
                 if (removedQty <= 0) break
                 if (quantity === 0) break
@@ -123,6 +124,7 @@ export function computeAverageCost(
                     costBasisUsd = 0
                 }
                 break
+            }
         }
     }
 

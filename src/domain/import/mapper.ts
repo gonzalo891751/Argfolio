@@ -129,7 +129,7 @@ export function parseDate(value: string, timeValue?: string): string {
     }
 
     // DD/MM/YYYY or DD-MM-YYYY
-    const dmyMatch = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/)
+    const dmyMatch = cleaned.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/)
     if (dmyMatch) {
         const [, day, month, year] = dmyMatch
         let timeStr = '12:00:00'
@@ -144,7 +144,7 @@ export function parseDate(value: string, timeValue?: string): string {
     }
 
     // MM/DD/YYYY
-    const mdyMatch = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/)
+    const mdyMatch = cleaned.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/)
     if (mdyMatch) {
         const [, first, second, year] = mdyMatch
         // Assume DD/MM if first > 12

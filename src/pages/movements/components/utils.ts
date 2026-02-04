@@ -68,7 +68,7 @@ export function getMovementAssetDisplay(
     }
 
     const symbol = instrument?.symbol || movement.ticker || '—'
-    let name = instrument?.name || movement.assetName || '—'
+    const name = instrument?.name || movement.assetName || '—'
     const category = instrument?.category || movement.assetClass || 'CASH'
 
     return {
