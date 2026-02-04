@@ -10,7 +10,7 @@
  * - No flickering (accrual moved to global scheduler)
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
 import { usePortfolioV2, type RubroV2, type ProviderV2, type ItemV2 } from '@/features/portfolioV2'
@@ -29,6 +29,8 @@ import {
     X,
     RefreshCw,
     AlertTriangle,
+    LayoutGrid,
+    List,
 } from 'lucide-react'
 
 // =============================================================================
@@ -58,6 +60,7 @@ export function AssetsPageV2() {
     const [selectedItem, setSelectedItem] = useState<ItemV2 | null>(null)
     const [selectedProvider, setSelectedProvider] = useState<ProviderV2 | null>(null)
     const [showCalcPanel, setShowCalcPanel] = useState(false)
+    const [grouping, setGrouping] = useState<'rubros' | 'cuentas'>('rubros')
     const [showSettingsModal, setShowSettingsModal] = useState(false)
     const [settingsProviderId, setSettingsProviderId] = useState<string | null>(null)
 
@@ -94,6 +97,14 @@ export function AssetsPageV2() {
         setSettingsProviderId(providerId)
         setShowSettingsModal(true)
     }
+
+    // Flatten providers for "Cuentas" view
+    const allProviders = useMemo(() => {
+        if (!portfolio) return []
+        return portfolio.rubros
+            .flatMap(r => r.providers)
+            .sort((a, b) => b.totals.ars - a.totals.ars)
+    }, [portfolio])
 
     // Loading state
     if (!portfolio || portfolio.isLoading) {
@@ -141,22 +152,64 @@ export function AssetsPageV2() {
             {/* KPI Dashboard */}
             <KPIDashboard portfolio={portfolio} />
 
-            {/* Rubros List */}
-            <div className="space-y-4">
-                {portfolio.rubros.map(rubro => (
-                    <RubroCard
-                        key={rubro.id}
-                        rubro={rubro}
-                        isExpanded={expandedRubros.has(rubro.id)}
-                        onToggle={() => toggleRubro(rubro.id)}
-                        expandedProviders={expandedProviders}
-                        onToggleProvider={toggleProvider}
-                        onItemClick={openItemDetail}
-                        onProviderSettings={openProviderSettings}
-                        calculateVNR={calculateVNR}
-                    />
-                ))}
+            {/* View Toggle */}
+            <div className="flex bg-muted/30 p-1 rounded-lg border border-border/50 self-start w-fit">
+                <button
+                    onClick={() => setGrouping('rubros')}
+                    className={cn(
+                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
+                        grouping === 'rubros' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50"
+                    )}
+                >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Rubros
+                </button>
+                <button
+                    onClick={() => setGrouping('cuentas')}
+                    className={cn(
+                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
+                        grouping === 'cuentas' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50"
+                    )}
+                >
+                    <List className="h-3.5 w-3.5" />
+                    Cuentas
+                </button>
             </div>
+
+            {/* Content List */}
+            {grouping === 'rubros' ? (
+                /* Rubros View */
+                <div className="space-y-4">
+                    {portfolio.rubros.map(rubro => (
+                        <RubroCard
+                            key={rubro.id}
+                            rubro={rubro}
+                            isExpanded={expandedRubros.has(rubro.id)}
+                            onToggle={() => toggleRubro(rubro.id)}
+                            expandedProviders={expandedProviders}
+                            onToggleProvider={toggleProvider}
+                            onItemClick={openItemDetail}
+                            onProviderSettings={openProviderSettings}
+                            calculateVNR={calculateVNR}
+                        />
+                    ))}
+                </div>
+            ) : (
+                /* Cuentas View (Flat List) */
+                <div className="space-y-4">
+                    {allProviders.map(provider => (
+                        <div key={provider.id} className="border border-border rounded-xl overflow-hidden bg-card">
+                            <ProviderSection
+                                provider={provider}
+                                isExpanded={expandedProviders.has(provider.id)}
+                                onToggle={() => toggleProvider(provider.id)}
+                                onItemClick={(item) => openItemDetail(item, provider)}
+                                onSettings={() => openProviderSettings(provider.id)}
+                            />
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Empty State */}
             {portfolio.rubros.length === 0 && (

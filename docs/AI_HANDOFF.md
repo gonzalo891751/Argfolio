@@ -43,6 +43,23 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-04 — Antigravity — Phase 1: Classification & Core Logic Fixes
+**Goal:** Fix classification (Frascos vs Billeteras), implement stable naming, and filter zero balances.
+**Scope touched:** `src/db/schema.ts`, `src/features/portfolioV2/builder.ts`, `src/hooks/useAccountSettings.ts`, `src/features/portfolioV2/usePortfolioV2.ts`.
+**Key Changes:**
+1.  **DB Schema:** Added `AccountSettings` table (v6) for `rubroOverride` and `displayNameOverride`.
+2.  **Classification:**
+    -   **Frascos:** Now STRICTLY defined by `rubroOverride === 'frascos'`. No longer auto-assigns based on `cashYield.enabled`.
+    -   **Billeteras:** Includes all `WALLET`/`BANK` unless manually overridden or is Exchange/Broker. Yield-enabled wallets (e.g., Fiwind) now correctly stay in Billeteras.
+3.  **Naming:** `getDisplayName` now tries: Override → Account Name → Humanized ID. No more `Cuenta #...` unless absolutely necessary.
+4.  **Zero Filter:** Added `hasSignificantValue` check (`abs(valArs) >= 1` or `qty > 0`) to `buildRubros`.
+**Checklists:**
+- [x] `npm run build` PASS
+- [x] `npm test` 49/49 PASS
+**Next steps:**
+- Implement "Agrupar: Rubros | Cuentas" toggle in UI.
+- Create detail pages (Phase 2).
+
 ### 2026-02-04 — Antigravity — Mis Activos V2 Classification & Details
 **Goal:** Fix Billeteras/Frascos classification and enhance detail overlays.
 **Scope touched:** portfolioV2 builder, assets-v2.tsx page.

@@ -11,6 +11,7 @@ import { useAccounts } from '@/hooks/use-instruments'
 import { useFxRates } from '@/hooks/use-fx-rates'
 import { useMovements } from '@/hooks/use-movements'
 import { usePF } from '@/hooks/use-pf'
+import { useAccountSettings } from '@/hooks/useAccountSettings'
 import { buildPortfolioV2, type PFData } from './builder'
 import type { PortfolioV2 } from './types'
 
@@ -37,6 +38,7 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
     const { data: accounts = [] } = useAccounts()
     const { data: fxRates } = useFxRates()
     const { data: movements = [] } = useMovements()
+    const { settings: accountSettings } = useAccountSettings()
 
     // PF data from usePF hook
     const pfRaw = usePF()
@@ -126,8 +128,9 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
             fxRates,
             movements,
             pfData,
+            accountSettings,
         })
-    }, [groupedRows, accounts, fxRates, movements, pfData, assetsLoading, assetsError])
+    }, [groupedRows, accounts, fxRates, movements, pfData, accountSettings, assetsLoading, assetsError])
 
     return portfolioV2
 }

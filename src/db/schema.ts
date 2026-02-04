@@ -169,6 +169,18 @@ export interface ProviderSettings {
     updatedAt: string       // ISO datetime
 }
 
+// Account Settings (for V2 classification overrides and display names)
+export type RubroOverride = 'billeteras' | 'frascos' | 'plazos' | 'cedears' | 'cripto'
+
+export interface AccountSettings {
+    id: string                      // = accountId
+    displayNameOverride?: string    // Human-readable name override
+    rubroOverride?: RubroOverride   // Manual rubro classification
+    tnaOverride?: number            // Override TNA for yield calculation
+    hidden?: boolean                // Hide from all views
+    updatedAt: string               // ISO datetime
+}
+
 // =============================================================================
 // Dexie Database Schema
 // =============================================================================
@@ -192,6 +204,9 @@ export class ArgfolioDatabase extends Dexie {
 
     // Provider Commission Settings
     providerSettings!: Table<ProviderSettings, string>
+
+    // Account Settings (display names, rubro overrides)
+    accountSettings!: Table<AccountSettings, string>
 
     constructor() {
         super('argfolio-db')
@@ -227,6 +242,11 @@ export class ArgfolioDatabase extends Dexie {
         // V5: Provider Commission Settings for VNR calculation
         this.version(5).stores({
             providerSettings: 'id',
+        })
+
+        // V6: Account Settings for display names and rubro overrides
+        this.version(6).stores({
+            accountSettings: 'id',
         })
     }
 }

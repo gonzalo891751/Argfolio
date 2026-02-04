@@ -22,6 +22,7 @@ import type {
 import type { Account, Movement, FxRates } from '@/domain/types'
 import type { AssetRowMetrics } from '@/domain/assets/types'
 import type { PFPosition } from '@/domain/pf/types'
+import type { AccountSettings, RubroOverride } from '@/db/schema'
 
 // =============================================================================
 // Rubro Configuration
@@ -103,21 +104,64 @@ function isBroker(account: Account | undefined): boolean {
     return account ? BROKER_KINDS.includes(account.kind) : false
 }
 
-/** Check if account qualifies for Billeteras (not exchange, not broker, not yield-enabled) */
-function isWalletForBilleteras(account: Account | undefined): boolean {
+/** Check if account qualifies for Billeteras (WALLET/BANK, not exchange/broker) */
+function isWalletForBilleteras(account: Account | undefined, rubroOverride?: RubroOverride): boolean {
     if (!account) return false
-    if (isExchange(account) || isBroker(account)) return false
-    if (account.cashYield?.enabled) return false // Goes to Frascos
+    // If manually overridden to a different rubro, don't include in Billeteras
+    if (rubroOverride && rubroOverride !== 'billeteras') return false
+    // If manually set to Billeteras, include it
+    if (rubroOverride === 'billeteras') return true
+    // Exchanges go to Cripto
+    if (isExchange(account)) return false
+    // Brokers go to CEDEARs
+    if (isBroker(account)) return false
+    // All WALLET/BANK (even with yield) stay in Billeteras by default
     return WALLET_KINDS.includes(account.kind) || account.kind === 'OTHER'
 }
 
-/** Get proper display name, avoiding "Account" */
-function getDisplayName(accountName: string, accountId: string): string {
+/** Check if account is explicitly a Frasco (via rubroOverride only) */
+function isFrasco(rubroOverride?: RubroOverride): boolean {
+    return rubroOverride === 'frascos'
+}
+
+/** Get proper display name using account settings and fallbacks */
+function getDisplayName(
+    accountId: string,
+    accountName: string | undefined,
+    settingsMap: Map<string, AccountSettings>
+): string {
+    // 1. Check for override in settings
+    const override = settingsMap.get(accountId)?.displayNameOverride
+    if (override?.trim()) return override.trim()
+
+    // 2. Check account name
     const name = accountName?.trim()
-    if (!name || name === 'Account' || name === 'account' || name.length === 0) {
-        return `Cuenta #${accountId.slice(0, 6).toUpperCase()}`
+    if (name && name !== 'Account' && name !== 'account' && name.length > 0) {
+        return name
     }
-    return name
+
+    // 3. Humanize account ID (e.g., "binance" -> "Binance")
+    const humanized = accountId
+        .split(/[-_]/)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ')
+
+    // If ID looks like a UUID or hash, use generic fallback
+    if (accountId.length > 20 || /^[a-f0-9-]{20,}$/i.test(accountId)) {
+        return 'Cuenta sin nombre'
+    }
+
+    return humanized
+}
+
+/** Filter threshold for zero balances (ARS) */
+const ZERO_BALANCE_THRESHOLD = 1
+
+/** Check if item has significant value (not near zero) */
+function hasSignificantValue(valArs: number, qty?: number): boolean {
+    // If qty > 0, always show (for crypto/cedears with tiny ARS value)
+    if (qty && qty > 0) return true
+    return Math.abs(valArs) >= ZERO_BALANCE_THRESHOLD
 }
 
 // =============================================================================
@@ -180,10 +224,20 @@ function buildProviderFromGroup(
     accountId: string,
     accountName: string,
     metrics: AssetRowMetrics[],
-    totals: { valArs: number; valUsd: number; pnlArs: number; pnlUsd: number }
+    settingsMap: Map<string, AccountSettings>
 ): ProviderV2 {
-    const items: ItemV2[] = metrics.map(m => buildItemFromMetrics(m, accountId))
-    const displayName = getDisplayName(accountName, accountId)
+    // Filter out zero-balance items
+    const filteredMetrics = metrics.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity))
+    const items: ItemV2[] = filteredMetrics.map(m => buildItemFromMetrics(m, accountId))
+    const displayName = getDisplayName(accountId, accountName, settingsMap)
+
+    // Calculate totals from filtered items
+    const totals = {
+        valArs: filteredMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
+        valUsd: filteredMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
+        pnlArs: filteredMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
+        pnlUsd: filteredMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
+    }
 
     return {
         id: accountId,
@@ -217,10 +271,12 @@ export function buildRubros(
     groupedRows: Record<string, GroupedRowEntry>,
     accounts: Account[],
     pfData?: PFData,
-    fxSnapshot?: FxRatesSnapshot
+    fxSnapshot?: FxRatesSnapshot,
+    accountSettings: AccountSettings[] = []
 ): RubroV2[] {
     const rubros: RubroV2[] = []
     const accountMap = new Map(accounts.map(a => [a.id, a]))
+    const settingsMap = new Map(accountSettings.map(s => [s.id, s]))
     const oficialSell = fxSnapshot?.officialSell ?? 1
 
     for (const config of RUBRO_CONFIGS) {
@@ -228,30 +284,35 @@ export function buildRubros(
         const rubroTotals: MoneyPair = { ars: 0, usd: 0 }
         const rubroPnl: MoneyPair = { ars: 0, usd: 0 }
 
-        // Special handling for Frascos (yield-enabled wallets)
+        // Special handling for Frascos (only accounts with rubroOverride='frascos')
         if (config.id === 'frascos') {
             for (const [accountId, group] of Object.entries(groupedRows)) {
                 const account = accountMap.get(accountId)
-                if (!account?.cashYield?.enabled) continue
+                const rubroOverride = settingsMap.get(accountId)?.rubroOverride
+
+                // Only include if explicitly marked as Frasco via settings
+                if (!isFrasco(rubroOverride)) continue
 
                 // Get cash items from this account
                 const cashItems = group.metrics.filter(
                     m => m.category === 'CASH_ARS' || m.category === 'CASH_USD'
                 )
-                if (cashItems.length === 0) continue
+                // Filter out zero balances
+                const filteredCashItems = cashItems.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity))
+                if (filteredCashItems.length === 0) continue
 
                 const itemsTotals = {
-                    valArs: cashItems.reduce((s, m) => s + (m.valArs ?? 0), 0),
-                    valUsd: cashItems.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-                    pnlArs: cashItems.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-                    pnlUsd: cashItems.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
+                    valArs: filteredCashItems.reduce((s, m) => s + (m.valArs ?? 0), 0),
+                    valUsd: filteredCashItems.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
+                    pnlArs: filteredCashItems.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
+                    pnlUsd: filteredCashItems.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
                 }
 
                 // Convert to wallet_yield items
-                const yieldItems: ItemV2[] = cashItems.map(m => ({
+                const yieldItems: ItemV2[] = filteredCashItems.map(m => ({
                     ...buildItemFromMetrics(m, accountId),
                     kind: 'wallet_yield' as ItemKind,
-                    yieldMeta: account.cashYield ? {
+                    yieldMeta: account?.cashYield ? {
                         tna: account.cashYield.tna,
                         tea: computeTEA(account.cashYield.tna),
                         lastAccruedISO: account.cashYield.lastAccruedDate,
@@ -260,7 +321,7 @@ export function buildRubros(
 
                 const provider: ProviderV2 = {
                     id: accountId,
-                    name: getDisplayName(account.name, accountId),
+                    name: getDisplayName(accountId, account?.name, settingsMap),
                     totals: { ars: itemsTotals.valArs, usd: itemsTotals.valUsd },
                     pnl: { ars: itemsTotals.pnlArs, usd: itemsTotals.pnlUsd },
                     items: yieldItems,
@@ -330,11 +391,12 @@ export function buildRubros(
                 const account = accountMap.get(accountId)
 
                 // ==========================================================
-                // BILLETERAS: Only WALLET/BANK kinds (not yield-enabled)
+                // BILLETERAS: Only WALLET/BANK kinds (not exchange/broker)
                 // ==========================================================
                 if (config.id === 'wallets') {
+                    const rubroOverride = settingsMap.get(accountId)?.rubroOverride
                     // Skip if not a wallet-type account
-                    if (!isWalletForBilleteras(account)) continue
+                    if (!isWalletForBilleteras(account, rubroOverride)) continue
 
                     // Only include cash categories
                     const matchingMetrics = group.metrics.filter(m =>
@@ -353,7 +415,7 @@ export function buildRubros(
                         accountId,
                         group.accountName,
                         matchingMetrics,
-                        itemsTotals
+                        settingsMap
                     )
 
                     providers.push(provider)
@@ -385,7 +447,7 @@ export function buildRubros(
                             accountId,
                             group.accountName,
                             allMetrics,
-                            itemsTotals
+                            settingsMap
                         )
 
                         providers.push(provider)
@@ -411,7 +473,7 @@ export function buildRubros(
                             accountId,
                             group.accountName,
                             matchingMetrics,
-                            itemsTotals
+                            settingsMap
                         )
 
                         providers.push(provider)
@@ -443,7 +505,7 @@ export function buildRubros(
                             accountId,
                             group.accountName,
                             allMetrics,
-                            itemsTotals
+                            settingsMap
                         )
 
                         providers.push(provider)
@@ -469,7 +531,7 @@ export function buildRubros(
                             accountId,
                             group.accountName,
                             matchingMetrics,
-                            itemsTotals
+                            settingsMap
                         )
 
                         providers.push(provider)
@@ -501,7 +563,7 @@ export function buildRubros(
                     accountId,
                     group.accountName,
                     matchingMetrics,
-                    itemsTotals
+                    settingsMap
                 )
 
                 providers.push(provider)
@@ -607,13 +669,14 @@ export interface BuildPortfolioV2Input {
     fxRates: FxRates
     movements: Movement[]
     pfData?: PFData
+    accountSettings?: AccountSettings[]
 }
 
 export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
-    const { groupedRows, accounts, fxRates, movements, pfData } = input
+    const { groupedRows, accounts, fxRates, movements, pfData, accountSettings = [] } = input
 
     const fxSnapshot = buildFxSnapshot(fxRates)
-    const rubros = buildRubros(groupedRows, accounts, pfData, fxSnapshot)
+    const rubros = buildRubros(groupedRows, accounts, pfData, fxSnapshot, accountSettings)
     const kpis = buildKPIs(rubros, accounts, fxSnapshot)
 
     // Count inferred balances
