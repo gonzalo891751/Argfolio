@@ -159,6 +159,16 @@ export interface PFBudgetCategory {
     createdAt: string
 }
 
+// Provider Commission Settings (for V2 VNR calculation)
+export interface ProviderSettings {
+    id: string              // = accountId (provider)
+    buyPct: number          // e.g. 0.5 for 0.5%
+    sellPct: number         // e.g. 0.5 for 0.5%
+    fixedArs?: number       // Fixed ARS commission
+    fixedUsd?: number       // Fixed USD commission
+    updatedAt: string       // ISO datetime
+}
+
 // =============================================================================
 // Dexie Database Schema
 // =============================================================================
@@ -179,6 +189,9 @@ export class ArgfolioDatabase extends Dexie {
     pfFixedExpenses!: Table<PFFixedExpense, string>
     pfIncomes!: Table<PFIncome, string>
     pfBudgets!: Table<PFBudgetCategory, string>
+
+    // Provider Commission Settings
+    providerSettings!: Table<ProviderSettings, string>
 
     constructor() {
         super('argfolio-db')
@@ -209,6 +222,11 @@ export class ArgfolioDatabase extends Dexie {
         this.version(4).stores({
             pfConsumptions: 'id, cardId, postedYearMonth, closingYearMonth, purchaseDateISO',
             pfStatements: 'id, cardId, closingYearMonth, dueYearMonth, status',
+        })
+
+        // V5: Provider Commission Settings for VNR calculation
+        this.version(5).stores({
+            providerSettings: 'id',
         })
     }
 }

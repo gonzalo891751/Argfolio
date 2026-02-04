@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { AppLayout } from '@/components/layout/app-layout'
 import { DashboardPage } from '@/pages/dashboard'
 import { AssetsPage } from '@/pages/assets'
+import { AssetsPageV2 } from '@/pages/assets-v2'
 import { AssetDetailPage } from '@/pages/asset-detail'
 import { MovementsPageV2 as MovementsPage } from '@/pages/movements/index'
 import { HistoryPage } from '@/pages/history'
@@ -16,6 +17,7 @@ import { SettingsPage } from '@/pages/settings'
 import { ImportPage } from '@/pages/import'
 import { MarketPage } from '@/pages/market'
 import { ToastProvider } from '@/components/ui/toast'
+import { GlobalDataHandler } from '@/components/GlobalDataHandler'
 import { seedDatabase } from '@/db'
 
 const queryClient = new QueryClient({
@@ -61,89 +63,100 @@ function App() {
                     <RefreshProvider>
                         <TooltipProvider>
                             <BrowserRouter>
-                                <Routes>
-                                    <Route element={<AppLayout />}>
-                                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                                        <Route
-                                            path="/dashboard"
-                                            element={
-                                                <ErrorBoundary>
-                                                    <DashboardPage />
-                                                </ErrorBoundary>
-                                            }
-                                        />
-                                        <Route
-                                            path="/market"
-                                            element={
-                                                <ErrorBoundary>
-                                                    <MarketPage />
-                                                </ErrorBoundary>
-                                            }
-                                        />
-                                        <Route
-                                            path="/assets"
-                                            element={
-                                                <ErrorBoundary>
-                                                    <AssetsPage />
-                                                </ErrorBoundary>
-                                            }
-                                        />
-                                        <Route
-                                            path="/assets/:instrumentId"
-                                            element={
-                                                <ErrorBoundary>
-                                                    <AssetDetailPage />
-                                                </ErrorBoundary>
-                                            }
-                                        />
-                                        <Route
-                                            path="/movements"
-                                            element={
-                                                <ErrorBoundary>
-                                                    <MovementsPage />
-                                                </ErrorBoundary>
-                                            }
-                                        />
-                                        <Route
-                                            path="/history"
-                                            element={
-                                                <ErrorBoundary>
-                                                    <HistoryPage />
-                                                </ErrorBoundary>
-                                            }
-                                        />
-                                        {/* Personal Finances - New Module */}
-                                        <Route
-                                            path="/personal-finances"
-                                            element={
-                                                <ErrorBoundary>
-                                                    <PersonalFinancesPage />
-                                                </ErrorBoundary>
-                                            }
-                                        />
-                                        {/* Redirect old /debts to new module */}
-                                        <Route
-                                            path="/debts"
-                                            element={<Navigate to="/personal-finances" replace />}
-                                        />
-                                        <Route
-                                            path="/settings"
-                                            element={
-                                                <ErrorBoundary>
-                                                    <SettingsPage />
-                                                </ErrorBoundary>
-                                            }
-                                        />
-                                        <Route
-                                            path="/import"
-                                            element={
-                                                <ErrorBoundary>
-                                                    <ImportPage />
-                                                </ErrorBoundary>
-                                            }
-                                        />
-                                    </Route>
-                                </Routes>
+                                <GlobalDataHandler>
+                                    <Routes>
+                                        <Route element={<AppLayout />}>
+                                            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                                            <Route
+                                                path="/dashboard"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <DashboardPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            <Route
+                                                path="/market"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <MarketPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            <Route
+                                                path="/assets"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <AssetsPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            <Route
+                                                path="/assets/:instrumentId"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <AssetDetailPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* Mis Activos V2 - New Implementation */}
+                                            <Route
+                                                path="/mis-activos-v2"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <AssetsPageV2 />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            <Route
+                                                path="/movements"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <MovementsPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            <Route
+                                                path="/history"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <HistoryPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* Personal Finances - New Module */}
+                                            <Route
+                                                path="/personal-finances"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <PersonalFinancesPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* Redirect old /debts to new module */}
+                                            <Route
+                                                path="/debts"
+                                                element={<Navigate to="/personal-finances" replace />}
+                                            />
+                                            <Route
+                                                path="/settings"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <SettingsPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            <Route
+                                                path="/import"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <ImportPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                        </Route>
+                                    </Routes>
+                                </GlobalDataHandler>
                             </BrowserRouter>
                         </TooltipProvider>
                     </RefreshProvider>

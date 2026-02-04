@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD, formatQty, formatPercent, formatDeltaMoneyARS, formatDeltaMoneyUSD } from '@/lib/format'
@@ -14,14 +14,10 @@ import { useTrackCash } from '@/hooks/use-preferences'
 import type { AssetClass, AssetRowMetrics } from '@/domain/assets/types'
 import { AccountFixedDepositsBlock } from '@/components/assets/AccountFixedDepositsBlock'
 import { usePF } from '@/hooks/use-pf'
-import { generateAccrualMovements } from '@/domain/yield/accrual'
 import { useAccounts } from '@/hooks/use-instruments'
 import { useFxRates } from '@/hooks/use-fx-rates'
-import type { Movement } from '@/domain/types'
 import { useAccountMigration } from '@/hooks/use-account-dedupe'
 import { YieldSummaryCard } from '@/components/assets/YieldSummaryCard'
-import { db } from '@/db'
-import { useToast } from '@/components/ui/toast'
 import { FciHoldingsTable } from '@/components/assets/FciHoldingsTable'
 import { useFciPrices } from '@/hooks/useFciPrices'
 
@@ -84,8 +80,6 @@ export function AssetsPage() {
         )
     }, [groupedRows])
 
-    const { toast } = useToast()
-
     // ------------------------------------------------------------------------
     // COMPOSITION BUCKETS (ARS vs USD)
     // ------------------------------------------------------------------------
@@ -93,58 +87,8 @@ export function AssetsPage() {
     const exposureUsd = (rawPortfolio?.exposure?.usdReal || 0)
     const fxRate = fxRates?.mep?.buy ?? fxRates?.mep?.sell ?? 0
 
-    // ------------------------------------------------------------------------
-    // YIELD ACCRUAL ENGINE TRIGGER
-    // ------------------------------------------------------------------------
-    useEffect(() => {
-        const runAccrual = async () => {
-            if (!accounts || !groupedRows) return
-
-            let anyUpdates = false
-            const allMovs: Movement[] = []
-            // Use UTC Date for consistency, assuming midnight UTC cutoff
-            const todayStr = new Date().toISOString().slice(0, 10)
-
-            for (const acc of accounts) {
-                if (acc.cashYield?.enabled) {
-                    const group = groupedRows[acc.id]
-                    if (!group) continue
-
-                    // Calculate Cash Balance (ARS)
-                    const cashArsParams = group.metrics.filter(m => m.category === 'CASH_ARS')
-                    const cashBalance = cashArsParams.reduce((sum, m) => sum + (m.valArs || 0), 0)
-
-                    if (cashBalance > 0) {
-                        const { movements, newLastAccrued } = generateAccrualMovements(acc, cashBalance, todayStr)
-
-                        if (movements.length > 0) {
-                            allMovs.push(...movements)
-                            await db.accounts.update(acc.id, {
-                                cashYield: {
-                                    ...acc.cashYield,
-                                    lastAccruedDate: newLastAccrued
-                                }
-                            })
-
-                            // Optimization: Check for dups before push? generateAccrual uses ID.
-                            allMovs.push(...movements)
-                            anyUpdates = true
-                        }
-                    }
-                }
-            }
-
-            if (anyUpdates && allMovs.length > 0) {
-                await db.movements.bulkPut(allMovs)
-                toast({
-                    title: 'Rendimiento Acreditado',
-                    description: `Se han generado ${allMovs.length} movimientos de interés.`,
-                })
-            }
-        }
-
-        runAccrual()
-    }, [accounts, groupedRows, toast])
+    // NOTE: Accrual logic moved to global scheduler in App.tsx (useAccrualScheduler)
+    // This prevents render-loop flickering caused by DB writes during page render
 
     // Derive USD Interest for PF
     const pfActiveInterestUSD = useMemo(() => {

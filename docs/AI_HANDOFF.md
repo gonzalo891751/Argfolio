@@ -43,6 +43,31 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-04 — Antigravity — Mis Activos V2 Classification & Details
+**Goal:** Fix Billeteras/Frascos classification and enhance detail overlays.
+**Scope touched:** portfolioV2 builder, assets-v2.tsx page.
+**Changes (files):**
+- `src/features/portfolioV2/builder.ts` — Added `isExchange()`, `isBroker()`, `isWalletForBilleteras()`, `getDisplayName()` helpers. Rewrote `buildRubros()` to route accounts by `account.kind`: Exchanges→Cripto, Brokers→CEDEARs, WALLET/BANK→Billeteras (if not yield-enabled).
+- `src/pages/assets-v2.tsx` — Enhanced `DetailOverlay`: Billeteras/Frascos now show capital ARS + USD (Oficial Venta), TNA/TEA, interest tomorrow, 30d/1y projections. Plazo Fijo shows plazo, vencimiento, interés pactado.
+**Classification Rules Applied:**
+| Account.kind | Rubro |
+|-------------|-------|
+| EXCHANGE | Cripto (incl. cash) |
+| BROKER | CEDEARs (incl. cash) |
+| WALLET/BANK (no yield) | Billeteras |
+| With cashYield.enabled | Frascos |
+**Checklists:**
+- [x] `npm run build` PASS
+- [x] `npm test` 49/49 PASS
+- [ ] Manual QA: /mis-activos-v2, verify Billeteras no tiene Binance/InvertirOnline
+**Notes / Decisions:**
+- Used `account.kind` field (BROKER/EXCHANGE/WALLET/BANK/OTHER) as primary classifier.
+- Cash from exchanges/brokers kept with their parent rubro to avoid Billeteras pollution.
+- ARS→USD conversions use Oficial Venta for Billeteras/Frascos as per requirements.
+**Next steps:**
+- Manual QA verification.
+- Consider adding "Editar tasa" button in wallet overlay.
+
 ### 2026-02-04 — Antigravity — Build & Lint Fixes
 **Goal:** Dejar el proyecto compilando ("Green Build") y sin errores de lint.
 **Scope touched:** Project config, Types, Utils.
