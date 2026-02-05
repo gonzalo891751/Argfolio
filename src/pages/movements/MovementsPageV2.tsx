@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useMemo, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, Upload } from 'lucide-react'
 import { useMovements, useDeleteMovement } from '@/hooks/use-movements'
 import { useInstruments, useAccounts } from '@/hooks/use-instruments'
@@ -17,6 +17,7 @@ type FilterType = 'all' | 'buy' | 'sell' | 'pf'
 
 export function MovementsPageV2() {
     const navigate = useNavigate()
+    const location = useLocation()
     const { data: movements = [], isLoading } = useMovements()
     const { data: instrumentsList = [] } = useInstruments()
     const { data: accountsList = [] } = useAccounts()
@@ -30,6 +31,17 @@ export function MovementsPageV2() {
     const [selectedMovement, setSelectedMovement] = useState<Movement | null>(null)
     const [editingMovement, setEditingMovement] = useState<Movement | null>(null)
     const deleteMovement = useDeleteMovement()
+
+    // Handle incoming prefill from navigation state (e.g. from crypto detail sell button)
+    useEffect(() => {
+        const state = location.state as { prefillMovement?: Movement } | null
+        if (state?.prefillMovement) {
+            setEditingMovement(state.prefillMovement as Movement)
+            setIsWizardOpen(true)
+            // Clear the state to avoid re-opening on back navigation
+            navigate(location.pathname, { replace: true, state: {} })
+        }
+    }, [location.state, location.pathname, navigate])
 
     // Maps for lookup
     const instruments = useMemo(

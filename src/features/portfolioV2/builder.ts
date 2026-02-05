@@ -16,6 +16,8 @@ import type {
     FxRatesSnapshot,
     WalletDetail,
     FixedDepositDetail,
+    CryptoDetail,
+    LotDetail,
     ItemKind,
     MoneyPair,
     FxMeta,
@@ -25,6 +27,7 @@ import type { AssetRowMetrics } from '@/domain/assets/types'
 import type { PFPosition } from '@/domain/pf/types'
 import type { AccountSettings, RubroOverride } from '@/db/schema'
 import type { FxOverride, FxOverridesMap } from './fxOverrides'
+import { buildFifoLots } from '@/domain/portfolio/fifo'
 
 // =============================================================================
 // Rubro Configuration
@@ -1096,6 +1099,84 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
         }
     }
 
+    // Build crypto details from movements + FIFO lots
+    const cryptoDetails = new Map<string, CryptoDetail>()
+    const cryptoRubro = rubros.find(r => r.id === 'crypto')
+    if (cryptoRubro) {
+        const criptoSellRate = fxSnapshot.cryptoSell || 1
+
+        for (const provider of cryptoRubro.providers) {
+            for (const item of provider.items) {
+                // Only build details for volatile crypto (not stablecoins)
+                if (item.kind !== 'crypto') continue
+                if (!item.instrumentId && !item.symbol) continue
+
+                // Filter movements for this instrument+account
+                const assetMovements = movements.filter(m =>
+                    m.accountId === item.accountId &&
+                    (m.instrumentId === item.instrumentId ||
+                        (!m.instrumentId && m.ticker === item.symbol)) &&
+                    (m.assetClass === 'crypto')
+                )
+
+                if (assetMovements.length === 0) continue
+
+                // Build FIFO lots
+                const fifoResult = buildFifoLots(assetMovements)
+
+                // Current price: derive from item value / qty
+                const currentPriceUsd = (item.qty && item.qty > 0)
+                    ? item.valUsd / item.qty
+                    : 0
+
+                // Map FIFO lots to LotDetail
+                const lots: LotDetail[] = fifoResult.lots.map((lot, idx) => {
+                    const currentVal = lot.quantity * currentPriceUsd
+                    const costVal = lot.quantity * lot.unitCostUsd
+                    const pnl = currentVal - costVal
+                    const pnlPct = costVal > 0 ? pnl / costVal : 0
+
+                    return {
+                        id: `${item.id}-lot-${idx}`,
+                        dateISO: lot.date,
+                        qty: lot.quantity,
+                        unitCostNative: lot.unitCostUsd,
+                        totalCostNative: costVal,
+                        currentValueNative: currentVal,
+                        pnlNative: pnl,
+                        pnlPct,
+                    }
+                })
+
+                const totalQty = fifoResult.totalQuantity
+                const totalCostUsd = fifoResult.totalCostUsd
+                const avgCostUsd = totalQty > 0 ? totalCostUsd / totalQty : 0
+                const currentValueUsd = totalQty * currentPriceUsd
+                const currentValueArs = currentValueUsd * criptoSellRate
+                const pnlUsd = currentValueUsd - totalCostUsd
+                const pnlArs = pnlUsd * criptoSellRate
+                const pnlPct = totalCostUsd > 0 ? pnlUsd / totalCostUsd : 0
+
+                cryptoDetails.set(item.id, {
+                    instrumentId: item.instrumentId || item.symbol,
+                    symbol: item.symbol,
+                    name: item.label,
+                    totalQty,
+                    totalCostUsd,
+                    avgCostUsd,
+                    currentPriceUsd,
+                    currentValueUsd,
+                    currentValueArs,
+                    pnlUsd,
+                    pnlArs,
+                    pnlPct,
+                    lots,
+                    fxUsed: 'Cripto',
+                })
+            }
+        }
+    }
+
     return {
         isLoading: false,
         asOfISO: fxRates.updatedAtISO,
@@ -1111,6 +1192,6 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
         walletDetails,
         fixedDepositDetails,
         cedearDetails: new Map(),
-        cryptoDetails: new Map(),
+        cryptoDetails,
     }
 }

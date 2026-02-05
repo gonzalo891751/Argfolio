@@ -234,6 +234,12 @@ export function AssetsPageV2() {
             navigate(`/mis-activos-v2/plazos-fijos/${item.id}`)
             return
         }
+        // For crypto items (volatile), navigate to crypto detail subpage
+        if (item.kind === 'crypto') {
+            const accountId = item.accountId || provider.id
+            navigate(`/mis-activos-v2/cripto/${accountId}/${item.symbol}`)
+            return
+        }
         // For other items, use overlay
         setSelectedItem(item)
         setSelectedProvider(provider)
@@ -781,19 +787,76 @@ function ProviderSection({
             </div>
 
             {/* Items List */}
-            {isExpanded && (
-                <div className="divide-y divide-border/50">
-                    {provider.items.map(item => (
-                        <ItemRow
-                            key={item.id}
-                            item={item}
-                            onClick={() => onItemClick(item)}
-                            onOpenFxOverride={onOpenFxOverride}
-                            providerName={provider.name}
-                        />
-                    ))}
-                </div>
-            )}
+            {isExpanded && (() => {
+                // Separate stablecoins from volatile crypto for visual grouping
+                const stableItems = provider.items.filter(it => it.kind === 'stable')
+                const volatileItems = provider.items.filter(it => it.kind !== 'stable')
+                const hasStables = stableItems.length > 0
+                const hasVolatiles = volatileItems.length > 0
+
+                return (
+                    <div>
+                        {/* Volatile assets */}
+                        {hasVolatiles && (
+                            <div className="divide-y divide-border/50">
+                                {volatileItems.map(item => (
+                                    <ItemRow
+                                        key={item.id}
+                                        item={item}
+                                        onClick={() => onItemClick(item)}
+                                        onOpenFxOverride={onOpenFxOverride}
+                                        providerName={provider.name}
+                                    />
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Stablecoin liquidity section */}
+                        {hasStables && (
+                            <>
+                                <div className="flex justify-between items-center px-4 pt-4 pb-2">
+                                    <span className="text-[11px] font-mono text-sky-400 uppercase tracking-widest">
+                                        Liquidez (Stable)
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground hidden md:inline-block">
+                                        USDT se considera dólar cripto
+                                    </span>
+                                </div>
+                                <div className="divide-y divide-border/50">
+                                    {stableItems.map(item => (
+                                        <div
+                                            key={item.id}
+                                            className="border-l-4 border-l-sky-500/50 bg-gradient-to-r from-sky-500/5 to-transparent"
+                                        >
+                                            <ItemRow
+                                                item={item}
+                                                onClick={() => onItemClick(item)}
+                                                onOpenFxOverride={onOpenFxOverride}
+                                                providerName={provider.name}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+
+                        {/* Fallback: no special grouping needed */}
+                        {!hasStables && !hasVolatiles && (
+                            <div className="divide-y divide-border/50">
+                                {provider.items.map(item => (
+                                    <ItemRow
+                                        key={item.id}
+                                        item={item}
+                                        onClick={() => onItemClick(item)}
+                                        onOpenFxOverride={onOpenFxOverride}
+                                        providerName={provider.name}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )
+            })()}
         </div>
     )
 }

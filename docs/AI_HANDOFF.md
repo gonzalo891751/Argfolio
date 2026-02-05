@@ -45,6 +45,75 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-05 — Claude Opus 4.5 — Feat: Cripto Detalle Subpágina + Stablecoins como Liquidez
+**Goal:** Implementar detalle de cripto como subpágina (NO modal) siguiendo prototipo `Cripto.html`, con cálculos reales FIFO lots desde movements, reclasificar USDT/stablecoins como liquidez visual del exchange, y CTA "Vender" que prellena movimiento.
+
+**Scope touched:** `src/pages/crypto-detail.tsx` (NEW), `src/App.tsx`, `src/pages/assets-v2.tsx`, `src/features/portfolioV2/builder.ts`, `src/pages/movements/MovementsPageV2.tsx`.
+
+**Key Changes:**
+
+1. **Nueva subpágina de detalle Cripto (`/mis-activos-v2/cripto/:accountId/:symbol`):**
+   - Breadcrumb: Mis Activos / Cripto / {Nombre del Activo}
+   - Hero card con Valor de Mercado (USD principal + ARS secundaria con TC Cripto Venta)
+   - KPI cards: Tenencia (qty), Precio Promedio, Precio Actual, Invertido, Ganancia Total (USD + %)
+   - Tabs: "Compras (Lotes)" y "Cómo se calcula"
+   - Tabla de lotes FIFO con PnL puntual por compra y CTA "Vender" (hover)
+   - Info tab explica PPP, FIFO, LIFO y valuación ARS
+
+2. **CryptoDetails map ahora se puebla (builder):**
+   - `buildPortfolioV2()` ahora construye `cryptoDetails` usando `buildFifoLots()` del engine FIFO existente
+   - Filtra movements por `accountId + instrumentId + assetClass='crypto'`
+   - Calcula: totalQty, totalCostUsd, avgCostUsd, currentPriceUsd, PnL, lots (LotDetail[])
+   - Cada lot tiene: dateISO, qty (remaining), unitCost, totalCost, currentValue, pnlNative, pnlPct
+
+3. **Navegación crypto → subpágina (ya no modal):**
+   - `openItemDetail()` en assets-v2.tsx: items con `kind === 'crypto'` ahora navegan a `/mis-activos-v2/cripto/:accountId/:symbol`
+   - Items `stable` siguen usando overlay (no navegan, son liquidez)
+
+4. **CTA "Vender" → Prefill Movimiento:**
+   - Botón "Vender" por lote construye un `prefillMovement` con: type SELL, accountId, instrumentId, qty (lote), price (actual), fxAtTrade (criptoSell)
+   - Navega a `/movements` con `state: { prefillMovement }`
+   - MovementsPageV2 lee `location.state.prefillMovement` y abre MovementWizard con datos prellenados
+
+5. **Stablecoins como Liquidez visual:**
+   - En ProviderSection de assets-v2.tsx: items se separan en "volátiles" (`kind !== 'stable'`) y "stables" (`kind === 'stable'`)
+   - Stables se renderizan bajo sub-header "Liquidez (Stable)" con estilo diferenciado: borde izquierdo sky-500, gradiente, nota "USDT se considera dólar cripto"
+   - Stables siguen sumando a totales del rubro Cripto (no se mueven de rubro)
+
+**Files Changed:**
+- `src/pages/crypto-detail.tsx` — NEW: Subpágina de detalle de activo cripto
+- `src/App.tsx` — Nueva ruta `/mis-activos-v2/cripto/:accountId/:symbol`
+- `src/pages/assets-v2.tsx` — Navigate para crypto + visual split stables/volatiles
+- `src/features/portfolioV2/builder.ts` — Import buildFifoLots + populate cryptoDetails map
+- `src/pages/movements/MovementsPageV2.tsx` — Handle prefill from navigation state
+
+**Decisions:**
+- **FIFO para lotes**: Se usa `buildFifoLots()` existente que ya implementa consumo FIFO en ventas. Los lotes mostrados son los remanentes post-venta.
+- **Stablecoins UI-only split**: No se mueven de rubro; siguen en Cripto pero se renderizan en sección visual separada. Esto evita romper totales y KPIs.
+- **Sell → navigate**: En lugar de embeber MovementWizard en la subpágina, se navega a `/movements` con state prefill. Reutiliza 100% del flujo existente sin duplicar lógica.
+- **CurrentPrice derivado**: Se calcula como `item.valUsd / item.qty` (no hardcoded), usando el precio de mercado real del engine existente.
+
+**Validación:**
+- `npm test` ✅ (49/49)
+- `npm run build` ✅
+- `npm run lint` ✅ (0 errors)
+
+**Checklist de aceptación:**
+- [x] Click en BTC/BNB abre subpágina (NO modal)
+- [x] Subpágina muestra: tenencia, invertido, valor mercado, PnL total y %, precio promedio, cotización, tabla de lotes con PnL puntual
+- [x] Cripto en USD principal + ARS secundaria con TC Cripto Venta
+- [x] USDT/stablecoins aparecen como "Liquidez (Stable)" con estilo diferenciado
+- [x] Botón "Vender" prellena movimiento de venta cripto
+- [x] Build y tests pasan
+
+**Pendientes (nice-to-have):**
+- [ ] Gráfico línea evolución precio (requiere data histórica)
+- [ ] Toggle PPP/FIFO/LIFO como vista interactiva (PPP funcional, toggle UI sin efecto aún)
+- [ ] Tooltips "Cómo se calcula" específicos inline en KPIs
+- [ ] Qty=0 edge: si el usuario navega por URL a un activo sin tenencia, mostrar "Sin tenencia" (ya implementado como "not found" fallback)
+
+---
+
 ### 2026-02-05 — Claude Opus 4.5 — Feat: Extrapolación FX/TC + TNA/TEA a todos los rubros
 **Goal:** Extrapolar la valuación secundaria (USD/ARS) + chip TC clickeable + chips TNA/TEA a TODOS los rubros de `/mis-activos-v2` (no solo Billeteras). Reemplazar el badge de % change en CEDEARs/Cripto por valuación secundaria.
 

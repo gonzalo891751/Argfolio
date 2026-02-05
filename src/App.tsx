@@ -11,6 +11,7 @@ import { AssetsPage } from '@/pages/assets'
 import { AssetsPageV2 } from '@/pages/assets-v2'
 import { WalletDetailPage } from '@/pages/wallet-detail'
 import { PFDetailPage } from '@/pages/pf-detail'
+import { CryptoDetailPage } from '@/pages/crypto-detail'
 import { AssetDetailPage } from '@/pages/asset-detail'
 import { MovementsPageV2 as MovementsPage } from '@/pages/movements/index'
 import { HistoryPage } from '@/pages/history'
@@ -125,6 +126,15 @@ function App() {
                                                 element={
                                                     <ErrorBoundary>
                                                         <PFDetailPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* Crypto Detail - Subpage */}
+                                            <Route
+                                                path="/mis-activos-v2/cripto/:accountId/:symbol"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <CryptoDetailPage />
                                                     </ErrorBoundary>
                                                 }
                                             />
