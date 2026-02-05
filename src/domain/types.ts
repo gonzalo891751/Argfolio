@@ -160,6 +160,19 @@ export interface Movement {
         allocations?: Array<{ lotId: string; qty: number; costUsd: number }>
         /** Costing method used for the sale */
         costingMethod?: string
+        /**
+         * Settlement currency for SELL movements of stablecoins.
+         * When selling USDT/USDC in Argentina, proceeds are typically in ARS not USD fiat.
+         * If set to 'ARS', cash-ledger will credit CASH_ARS instead of CASH_USD.
+         * If undefined, defaults to tradeCurrency (backwards compatible).
+         */
+        settlementCurrency?: Currency
+        /**
+         * Settlement amount in ARS for SELL movements of stablecoins.
+         * Used when settlementCurrency='ARS' to capture actual ARS received.
+         * If undefined, will use tradeCurrency amount converted via FX.
+         */
+        settlementArs?: number
     }
 }
 

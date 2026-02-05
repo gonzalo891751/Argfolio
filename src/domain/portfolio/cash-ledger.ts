@@ -106,8 +106,23 @@ function getMovementCashDeltas(mov: Movement): CashDelta[] {
         }
         case 'SELL': {
             if (skipPfSellCash) break
-            const amount = resolveNetAmount(mov, tradeCurrency, false)
-            deltas.push({ currency: tradeCurrency, amount })
+
+            // Settlement currency override for stablecoin sales (USDT → ARS)
+            // When selling stables in Argentina, proceeds are typically ARS not USD fiat.
+            const settlementCurrency = mov.meta?.settlementCurrency
+            const settlementArs = mov.meta?.settlementArs
+
+            if (settlementCurrency && settlementCurrency !== tradeCurrency) {
+                // Use explicit settlement currency and amount
+                const amount = (settlementCurrency === 'ARS' && settlementArs != null && Number.isFinite(settlementArs))
+                    ? settlementArs
+                    : resolveNetAmount(mov, settlementCurrency, false)
+                deltas.push({ currency: settlementCurrency, amount })
+            } else {
+                // Default behavior: credit tradeCurrency (backwards compatible)
+                const amount = resolveNetAmount(mov, tradeCurrency, false)
+                deltas.push({ currency: tradeCurrency, amount })
+            }
             break
         }
         case 'TRANSFER_IN':

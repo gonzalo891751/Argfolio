@@ -45,6 +45,143 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-05 — Claude Opus 4.5 — Automatizaciones Configurables + UX Expand/Collapse
+
+**Goal:** Implementar automatizaciones configurables (intereses diarios en billeteras remuneradas + liquidación de plazos fijos al vencimiento), botones "Expandir/Colapsar todo" para Rubros/Cuentas, y un panel de preferencias para configurar estas automatizaciones.
+
+**Scope touched:** `src/hooks/use-preferences.ts`, `src/features/yield/useAccrualScheduler.ts`, `src/hooks/use-pf-settlement.ts`, `src/hooks/use-automation-trigger.ts` (nuevo), `src/components/PreferencesSheet.tsx` (nuevo), `src/pages/assets-v2.tsx`, `src/features/yield/index.ts`.
+
+**Key Changes:**
+
+1. **Preferencias de Automatización:**
+   - `src/hooks/use-preferences.ts`: Agregados hooks `useAutoAccrueWalletInterest()` (default OFF) y `useAutoSettleFixedTerms()` (default ON)
+   - Persistencia en localStorage: `argfolio.autoAccrueWalletInterest`, `argfolio.autoSettleFixedTerms`
+   - Helper `getAutomationPreferences()` para contextos no-React
+
+2. **Motor de Intereses Diarios (ya existía, ahora configurable):**
+   - `src/features/yield/useAccrualScheduler.ts`: Refactorizado para exponer `runAccrualNow()` para trigger manual
+   - Respeta `autoAccrueEnabled` para auto-run al inicio
+   - Devuelve `{ runAccrualNow, isRunning, lastResult }`
+
+3. **Auto-Liquidación de PF (ya existía, ahora configurable):**
+   - `src/hooks/use-pf-settlement.ts`: Refactorizado para exponer `runSettlementNow()` y `getPendingMatured()`
+   - Respeta `autoSettleEnabled` para auto-run
+   - Devuelve `{ runSettlementNow, isRunning, getPendingMatured }`
+
+4. **Hook Combinado para Trigger Manual:**
+   - `src/hooks/use-automation-trigger.ts` (NUEVO): Combina accrual + PF settlement en un solo trigger
+   - `runAutomationsNow()` ejecuta ambas automatizaciones en paralelo
+   - Muestra toast consolidado con resumen de acciones
+
+5. **Botones Expand/Collapse All:**
+   - `src/pages/assets-v2.tsx`: Funciones `expandAll()` y `collapseAll()` para Rubros y Cuentas
+   - Botones en toolbar junto al toggle Rubros/Cuentas
+   - Estado `hasExpandedItems` para deshabilitar "Colapsar" cuando no hay nada expandido
+
+6. **Botón "Actualizar ahora":**
+   - `src/pages/assets-v2.tsx`: Botón prominente en toolbar que ejecuta `runAutomationsNow()`
+   - Muestra estado de loading mientras procesa
+   - Tooltip: "Ejecuta intereses pendientes y liquida PFs vencidos"
+
+7. **Panel de Preferencias:**
+   - `src/components/PreferencesSheet.tsx` (NUEVO): Sheet lateral con toggles para configurar automatizaciones
+   - Accesible desde botón "Preferencias" en header de Mis Activos
+   - Incluye nota explicativa sobre cuándo corren las automatizaciones
+
+**Files Changed:**
+- `src/hooks/use-preferences.ts` — EXTEND: hooks para automation prefs
+- `src/features/yield/useAccrualScheduler.ts` — REFACTOR: manual trigger, respeta pref
+- `src/features/yield/index.ts` — EXTEND: export types
+- `src/hooks/use-pf-settlement.ts` — REFACTOR: manual trigger, respeta pref
+- `src/hooks/use-automation-trigger.ts` — NEW: combined trigger hook
+- `src/components/PreferencesSheet.tsx` — NEW: preferences UI
+- `src/pages/assets-v2.tsx` — EXTEND: expand/collapse, actualizar ahora, preferences button
+
+**Decisions:**
+- **autoAccrueWalletInterest default OFF**: Opt-in para evitar generar movimientos automáticos sin consentimiento
+- **autoSettleFixedTerms default ON**: Mayoría de usuarios espera auto-liquidación
+- **Sin background tasks**: Todo corre al abrir la app o al tocar "Actualizar ahora" (sin timers de fondo)
+- **Idempotencia**: `hasRunToday()` + `lastAccruedDate` previenen duplicados
+
+**Validación:**
+- `npm test` ✅ (75/75)
+- `npm run build` ✅
+
+**QA Manual:**
+1. Toggle `autoAccrueWalletInterest` OFF → no se crean intereses solos
+2. Toggle ON + "Actualizar ahora" → se crean intereses, aparece movimiento INTEREST
+3. PF vencido con `autoSettleFixedTerms` ON → se liquida automáticamente
+4. PF vencido con OFF → queda pendiente (no auto-liquidación)
+5. Botones Expandir/Colapsar funcionan en ambas vistas
+
+---
+
+### 2026-02-05 — Claude Opus 4.5 — Fix: USD Fiat Fantasma por Venta USDT + UX Mis Activos V2
+
+**Goal:** Resolver el bug donde una venta de USDT (que en realidad liquida en ARS) generaba "Saldo USD" fantasma en Mis Activos V2. Además, mejorar UX de vista Cuentas (sin duplicados), Billeteras (chips TNA/TEA visibles directo) y desambiguar USD fiat vs stablecoins.
+
+**Scope touched:** `src/domain/types.ts`, `src/domain/portfolio/cash-ledger.ts`, `src/domain/portfolio/computeTotals.ts`, `src/pages/movements/components/MovementWizard.tsx`, `src/pages/assets-v2.tsx`, `src/domain/portfolio/computeCashBalances.test.ts`.
+
+**Key Changes:**
+
+1. **Settlement Currency para Ventas de Stablecoins:**
+   - `src/domain/types.ts`: Agregado `meta.settlementCurrency` y `meta.settlementArs` al tipo Movement
+   - `src/domain/portfolio/cash-ledger.ts`: SELL ahora usa `settlementCurrency` si existe; si es ARS, acredita CASH_ARS en lugar de CASH_USD
+   - `src/pages/movements/components/MovementWizard.tsx`: UI selector "Cobro en: ARS / USD" para ventas de USDT/USDC/DAI, con input opcional de "ARS recibidos"
+   - Default: ARS (comportamiento típico en Argentina)
+   - Backwards compatible: movimientos sin `settlementCurrency` mantienen comportamiento anterior
+
+2. **Vista Cuentas sin Duplicados:**
+   - `src/pages/assets-v2.tsx`: `allProviders` ahora agrupa por `baseAccountId` (removiendo `-cash`), fusiona items y recalcula totals desde items
+   - Binance, IOL, etc. aparecen una sola vez en vista Cuentas
+   - `toggleProvider()` ahora sincroniza expansión por `baseAccountId` (expande/colapsa ambos variants)
+
+3. **UX Billeteras — Fila Directa con Chips:**
+   - `ProviderSection` detecta billeteras con exactamente 1 item ARS (`cash_ars` o `wallet_yield`)
+   - Renderiza como fila clickeable directa (sin expand), con chips TNA/TEA visibles
+   - Click abre detalle, no toggle de expansión
+
+4. **Desambiguación USD Fiat vs Stablecoins:**
+   - `src/domain/portfolio/computeTotals.ts`: Label cambiado de "Saldo USD" → "Saldo Fiat USD"
+   - Tooltip implícito: USDT/USDC siguen en Cripto → Liquidez (Stable)
+
+5. **Tests:**
+   - `src/domain/portfolio/computeCashBalances.test.ts`: 3 nuevos tests para settlement currency (ARS, USD explícito, backwards compatible)
+
+**Files Changed:**
+- `src/domain/types.ts` — EXTEND: meta.settlementCurrency, meta.settlementArs
+- `src/domain/portfolio/cash-ledger.ts` — MODIFY: SELL case uses settlementCurrency
+- `src/domain/portfolio/computeTotals.ts` — MODIFY: "Saldo Fiat USD" label
+- `src/pages/movements/components/MovementWizard.tsx` — EXTEND: UI for settlement, state fields
+- `src/pages/assets-v2.tsx` — MODIFY: merge providers, sync toggle, wallet direct row
+- `src/domain/portfolio/computeCashBalances.test.ts` — EXTEND: 3 new tests
+
+**Decisions:**
+- **Default ARS para ventas de STABLE**: En Argentina, USDT típicamente se vende por pesos, no por dólares físicos
+- **settlementArs opcional**: Permite capturar monto exacto ARS recibido; si no se provee, usa tradeCurrency amount
+- **Backwards compatible**: Movimientos históricos sin meta siguen funcionando igual
+- **Merge solo en vista Cuentas**: En Rubros, los providers split siguen separados (Activos vs Liquidez)
+
+**Validación:**
+- `npm test` ✅ (75/75 — 3 nuevos)
+- `npm run build` ✅
+
+**Checklist de aceptación:**
+- [x] Venta USDT con settlement=ARS no genera CASH_USD
+- [x] UI selector "Cobro en" aparece para venta de USDT/USDC/DAI
+- [x] Vista Cuentas: Binance/IOL no duplicados
+- [x] Toggle Rubros/Cuentas: expansión coherente
+- [x] Billeteras con 1 item ARS: fila directa con chips TNA/TEA
+- [x] Label "Saldo Fiat USD" para desambiguar
+- [x] Build y tests pasan
+
+**Pendientes (nice-to-have):**
+- [ ] Tooltip explícito en UI para "Saldo Fiat USD" explicando la diferencia con stablecoins
+- [ ] Persistir preferencia "Cobro en" por accountId para futuras ventas
+- [ ] Migración/UI para corregir ventas USDT históricas incorrectas
+
+---
+
 ### 2026-02-05 — Codex — Fix P0: FCI duplicado en CEDEARs + auditoría de Patrimonio total (USD)
 **Bug:** En `/mis-activos-v2` un FCI (ej: “Premier Capital - Clase D”) aparecía duplicado: dentro de **CEDEARs** y dentro de **Fondos (FCI)**, inflando métricas/totales y abriendo la puerta a valuaciones inconsistentes por FX.
 

@@ -119,6 +119,9 @@ interface WizardState {
     // Price / Total Logic
     totalAmountInput: string
     priceMode: 'auto' | 'manual'
+    // Settlement for stablecoin sales (USDT -> ARS)
+    settlementCurrency?: Currency
+    settlementArs?: number
 }
 
 interface MovementWizardProps {
@@ -246,7 +249,10 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
 
                 coingeckoId: (pm.assetClass === 'crypto' && asset) ? (asset as CryptoOption).coingeckoId : undefined,
                 totalAmountInput: '',
-                priceMode: 'auto'
+                priceMode: 'auto',
+                // Settlement for stablecoin sales
+                settlementCurrency: pm.meta?.settlementCurrency,
+                settlementArs: pm.meta?.settlementArs
             }
         }
 
@@ -756,7 +762,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 unitPrice: state.price,
                 tradeCurrency: state.currency,
 
-                // Meta with FCI/PF snapshot
+                // Meta with FCI/PF snapshot + settlement for stablecoin sales
                 meta: {
                     ...(state.assetClass === 'pf' ? {
                         pfGroupId,
@@ -770,6 +776,17 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                             categorySnapshot: state.fciData.category,
                             vcpAsOf: state.fciData.date
                         }
+                    } : {}),
+                    // Settlement currency for stablecoin sales (USDT/USDC/DAI -> ARS)
+                    // When selling stables in Argentina, proceeds are typically ARS not USD fiat.
+                    ...(state.assetClass === 'crypto' &&
+                        movementType === 'SELL' &&
+                        (state.asset?.ticker === 'USDT' || state.asset?.ticker === 'USDC' || state.asset?.ticker === 'DAI') ? {
+                        // Default to ARS if not explicitly set
+                        settlementCurrency: state.settlementCurrency || 'ARS',
+                        ...(state.settlementArs != null && Number.isFinite(state.settlementArs) ? {
+                            settlementArs: state.settlementArs
+                        } : {})
                     } : {})
                 },
 
@@ -2136,10 +2153,12 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                     </div>
                                 </div>
                             </div>
-                            {!state.assetClass || state.assetClass === 'crypto' ? ( // Show for crypto
-                                state.assetClass === 'crypto' &&
+                            {/* Auto-balance USDT checkbox for non-stablecoin crypto */}
+                            {state.assetClass === 'crypto' &&
                                 accountsList.find(a => a.id === state.accountId)?.kind === 'EXCHANGE' &&
-                                state.asset?.ticker !== 'USDT' && (
+                                state.asset?.ticker !== 'USDT' &&
+                                state.asset?.ticker !== 'USDC' &&
+                                state.asset?.ticker !== 'DAI' && (
                                     <div className="flex items-center space-x-2 py-4 border-t border-white/10 mt-4">
                                         <div className="flex items-center h-5">
                                             <input
@@ -2157,8 +2176,72 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                             <p className="text-xs text-slate-500">Generar movimiento espejo en USDT</p>
                                         </div>
                                     </div>
-                                )
-                            ) : null}
+                                )}
+
+                            {/* Settlement currency selector for stablecoin sales (USDT/USDC/DAI -> ARS) */}
+                            {state.assetClass === 'crypto' &&
+                                state.opType === 'sell' &&
+                                (state.asset?.ticker === 'USDT' || state.asset?.ticker === 'USDC' || state.asset?.ticker === 'DAI') && (
+                                    <div className="py-4 border-t border-white/10 mt-4 space-y-3">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-2">
+                                                Cobro en
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setState(s => ({ ...s, settlementCurrency: 'ARS', settlementArs: undefined }))}
+                                                    className={cn(
+                                                        'flex-1 px-4 py-2 rounded-lg border text-sm font-medium transition-colors',
+                                                        (state.settlementCurrency === 'ARS' || state.settlementCurrency === undefined)
+                                                            ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400'
+                                                            : 'border-white/10 text-slate-400 hover:bg-white/5'
+                                                    )}
+                                                >
+                                                    ARS (Pesos)
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setState(s => ({ ...s, settlementCurrency: 'USD', settlementArs: undefined }))}
+                                                    className={cn(
+                                                        'flex-1 px-4 py-2 rounded-lg border text-sm font-medium transition-colors',
+                                                        state.settlementCurrency === 'USD'
+                                                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                                                            : 'border-white/10 text-slate-400 hover:bg-white/5'
+                                                    )}
+                                                >
+                                                    USD (Fiat)
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                En Argentina, las ventas de USDT suelen liquidarse en pesos (ARS).
+                                            </p>
+                                        </div>
+
+                                        {/* ARS amount input when settling in ARS */}
+                                        {(state.settlementCurrency === 'ARS' || state.settlementCurrency === undefined) && (
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-400 mb-1">
+                                                    ARS recibidos
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    placeholder={formatMoneyARS(totals.native * (fxRates?.cripto?.sell || 1200))}
+                                                    value={state.settlementArs ?? ''}
+                                                    onChange={(e) => {
+                                                        const val = parseFloat(e.target.value)
+                                                        setState(s => ({ ...s, settlementArs: Number.isFinite(val) ? val : undefined }))
+                                                    }}
+                                                    className="input-base w-full rounded-lg px-4 py-2.5 text-white font-mono bg-slate-800"
+                                                />
+                                                <p className="text-xs text-slate-500 mt-1">
+                                                    Estimado: {formatMoneyARS(totals.native * (fxRates?.cripto?.sell || 1200))} (TC Cripto Venta)
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                         </div>
                     )}
 

@@ -225,4 +225,89 @@ describe('cash ledger + portfolio integration', () => {
 
         expect(metrics.roiPct).toBeNull()
     })
+
+    describe('settlement currency for stablecoin sales', () => {
+        it('SELL USDT with settlementCurrency=ARS credits CASH_ARS not CASH_USD', () => {
+            const movements: Movement[] = [
+                {
+                    id: 'usdt-sell-1',
+                    datetimeISO: '2024-01-15T10:00:00Z',
+                    type: 'SELL',
+                    assetClass: 'crypto',
+                    instrumentId: 'USDT',
+                    accountId: 'Binance',
+                    quantity: 200,
+                    unitPrice: 1,
+                    tradeCurrency: 'USD', // USDT trades in USD
+                    totalAmount: 200,
+                    // Key: settlement is in ARS, not USD fiat
+                    meta: {
+                        settlementCurrency: 'ARS',
+                        settlementArs: 240000, // 200 USDT * 1200 ARS/USD
+                    },
+                } as Movement,
+            ]
+
+            const ledger = computeCashLedger(movements)
+            const binance = ledger.balances.get('Binance')
+
+            // Should credit ARS, not USD
+            expect(binance?.get('ARS')).toBeCloseTo(240000, 2)
+            // Should NOT have USD balance from this sale
+            expect(binance?.get('USD') ?? 0).toBe(0)
+        })
+
+        it('SELL USDT with settlementCurrency=USD credits CASH_USD (explicit USD fiat)', () => {
+            const movements: Movement[] = [
+                {
+                    id: 'usdt-sell-2',
+                    datetimeISO: '2024-01-15T10:00:00Z',
+                    type: 'SELL',
+                    assetClass: 'crypto',
+                    instrumentId: 'USDT',
+                    accountId: 'Binance',
+                    quantity: 200,
+                    unitPrice: 1,
+                    tradeCurrency: 'USD',
+                    totalAmount: 200,
+                    // Explicit: settlement in USD fiat
+                    meta: {
+                        settlementCurrency: 'USD',
+                    },
+                } as Movement,
+            ]
+
+            const ledger = computeCashLedger(movements)
+            const binance = ledger.balances.get('Binance')
+
+            // Should credit USD
+            expect(binance?.get('USD')).toBeCloseTo(200, 2)
+            // Should NOT have ARS balance from this sale
+            expect(binance?.get('ARS') ?? 0).toBe(0)
+        })
+
+        it('SELL USDT without settlementCurrency defaults to tradeCurrency (backwards compatible)', () => {
+            const movements: Movement[] = [
+                {
+                    id: 'usdt-sell-3',
+                    datetimeISO: '2024-01-15T10:00:00Z',
+                    type: 'SELL',
+                    assetClass: 'crypto',
+                    instrumentId: 'USDT',
+                    accountId: 'Binance',
+                    quantity: 200,
+                    unitPrice: 1,
+                    tradeCurrency: 'USD',
+                    totalAmount: 200,
+                    // No meta.settlementCurrency -> defaults to tradeCurrency
+                } as Movement,
+            ]
+
+            const ledger = computeCashLedger(movements)
+            const binance = ledger.balances.get('Binance')
+
+            // Backwards compatible: credits tradeCurrency (USD)
+            expect(binance?.get('USD')).toBeCloseTo(200, 2)
+        })
+    })
 })

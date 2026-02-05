@@ -98,7 +98,8 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
             const isArs = currency === 'ARS'
             const category: AssetCategory = isArs ? 'ARS_CASH' : 'USD_CASH'
             const symbol = isArs ? 'ARS' : currency
-            const name = isArs ? 'Pesos Argentinos' : `Saldo ${currency}`
+            // Use "Saldo Fiat USD" to disambiguate from stablecoins (USDT/USDC)
+            const name = isArs ? 'Pesos Argentinos' : `Saldo Fiat ${currency}`
 
             // We use a synthetic ID for aggregation. 
             // Ideally we group all ARS separate from all USD.

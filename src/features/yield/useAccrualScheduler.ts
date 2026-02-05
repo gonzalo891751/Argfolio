@@ -11,12 +11,13 @@
  * 4. Shows a toast notification on success
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { useAccounts } from '@/hooks/use-instruments'
 import { useMovements } from '@/hooks/use-movements'
 import { generateAccrualMovements } from '@/domain/yield/accrual'
 import { db } from '@/db'
 import { useToast } from '@/components/ui/toast'
+import { useAutoAccrueWalletInterest } from '@/hooks/use-preferences'
 import type { Movement } from '@/domain/types'
 
 const ACCRUAL_STORAGE_KEY = 'argfolio.lastAccrualRun'
@@ -24,6 +25,11 @@ const ACCRUAL_STORAGE_KEY = 'argfolio.lastAccrualRun'
 interface UseAccrualSchedulerOptions {
     /** Whether the scheduler is enabled (e.g., after DB is ready) */
     enabled?: boolean
+}
+
+export interface AccrualResult {
+    movementsCreated: number
+    accountsUpdated: number
 }
 
 /**
@@ -97,19 +103,111 @@ function computeCashBalanceForAccount(movements: Movement[], accountId: string):
     return balance
 }
 
-export function useAccrualScheduler(options: UseAccrualSchedulerOptions = {}) {
+export interface UseAccrualSchedulerReturn {
+    /** Manually trigger accrual (ignores hasRunToday check) */
+    runAccrualNow: () => Promise<AccrualResult>
+    /** Whether accrual is currently running */
+    isRunning: boolean
+    /** Last result from accrual run */
+    lastResult: AccrualResult | null
+}
+
+export function useAccrualScheduler(options: UseAccrualSchedulerOptions = {}): UseAccrualSchedulerReturn {
     const { enabled = true } = options
 
     const { data: accounts } = useAccounts()
     const { data: movements } = useMovements()
     const { toast } = useToast()
+    const { autoAccrueEnabled } = useAutoAccrueWalletInterest()
+
+    // State for manual trigger
+    const [isRunning, setIsRunning] = useState(false)
+    const [lastResult, setLastResult] = useState<AccrualResult | null>(null)
 
     // Prevent multiple runs
     const hasRun = useRef(false)
 
+    // Core accrual logic (reusable for both auto and manual)
+    const executeAccrual = useCallback(async (showToast: boolean): Promise<AccrualResult> => {
+        if (!accounts || accounts.length === 0) {
+            return { movementsCreated: 0, accountsUpdated: 0 }
+        }
+        if (!movements || movements.length === 0) {
+            return { movementsCreated: 0, accountsUpdated: 0 }
+        }
+
+        const todayStr = getTodayDateStr()
+        const allMovs: Movement[] = []
+        let updatedAccounts = 0
+
+        for (const acc of accounts) {
+            if (!acc.cashYield?.enabled) continue
+
+            // Calculate cash balance for this account from movements
+            const cashBalance = computeCashBalanceForAccount(movements, acc.id)
+            if (cashBalance <= 0) continue
+
+            const { movements: newMovs, newLastAccrued } = generateAccrualMovements(
+                acc,
+                cashBalance,
+                todayStr
+            )
+
+            if (newMovs.length > 0) {
+                allMovs.push(...newMovs)
+
+                // Update account's lastAccruedDate
+                await db.accounts.update(acc.id, {
+                    cashYield: {
+                        ...acc.cashYield,
+                        lastAccruedDate: newLastAccrued
+                    }
+                })
+
+                updatedAccounts++
+            }
+        }
+
+        // Bulk insert all movements
+        if (allMovs.length > 0) {
+            await db.movements.bulkPut(allMovs)
+
+            if (showToast) {
+                toast({
+                    title: 'Rendimiento Acreditado',
+                    description: `Se generaron ${allMovs.length} movimientos de interés en ${updatedAccounts} cuenta${updatedAccounts > 1 ? 's' : ''}.`,
+                })
+            }
+        }
+
+        // Mark as run for today to prevent re-runs
+        markAsRun()
+
+        return { movementsCreated: allMovs.length, accountsUpdated: updatedAccounts }
+    }, [accounts, movements, toast])
+
+    // Manual trigger function
+    const runAccrualNow = useCallback(async (): Promise<AccrualResult> => {
+        if (isRunning) return { movementsCreated: 0, accountsUpdated: 0 }
+
+        setIsRunning(true)
+        try {
+            const result = await executeAccrual(false) // Don't show toast, caller will handle
+            setLastResult(result)
+            return result
+        } catch (err) {
+            console.error('[AccrualScheduler] Error running manual accrual:', err)
+            return { movementsCreated: 0, accountsUpdated: 0 }
+        } finally {
+            setIsRunning(false)
+        }
+    }, [executeAccrual, isRunning])
+
+    // Auto-run effect (respects preference)
     useEffect(() => {
         // Guards
         if (!enabled) return
+        if (!autoAccrueEnabled) return // Respect user preference
         if (hasRun.current) return
         if (hasRunToday()) {
             hasRun.current = true
@@ -119,60 +217,13 @@ export function useAccrualScheduler(options: UseAccrualSchedulerOptions = {}) {
         if (!movements || movements.length === 0) return
 
         // Run accrual
-        const runAccrual = async () => {
-            hasRun.current = true
-
-            const todayStr = getTodayDateStr()
-            const allMovs: Movement[] = []
-            let updatedAccounts = 0
-
-            for (const acc of accounts) {
-                if (!acc.cashYield?.enabled) continue
-
-                // Calculate cash balance for this account from movements
-                const cashBalance = computeCashBalanceForAccount(movements, acc.id)
-                if (cashBalance <= 0) continue
-
-                const { movements: newMovs, newLastAccrued } = generateAccrualMovements(
-                    acc,
-                    cashBalance,
-                    todayStr
-                )
-
-                if (newMovs.length > 0) {
-                    allMovs.push(...newMovs)
-
-                    // Update account's lastAccruedDate
-                    await db.accounts.update(acc.id, {
-                        cashYield: {
-                            ...acc.cashYield,
-                            lastAccruedDate: newLastAccrued
-                        }
-                    })
-
-                    updatedAccounts++
-                }
-            }
-
-            // Bulk insert all movements
-            if (allMovs.length > 0) {
-                await db.movements.bulkPut(allMovs)
-
-                toast({
-                    title: 'Rendimiento Acreditado',
-                    description: `Se generaron ${allMovs.length} movimientos de interés en ${updatedAccounts} cuenta${updatedAccounts > 1 ? 's' : ''}.`,
-                })
-            }
-
-            // Mark as run for today to prevent re-runs
-            markAsRun()
-        }
-
-        // Run async without blocking
-        runAccrual().catch(err => {
+        hasRun.current = true
+        executeAccrual(true).catch(err => {
             console.error('[AccrualScheduler] Error running accrual:', err)
             // Still mark as run to prevent error loops
             markAsRun()
         })
-    }, [enabled, accounts, movements, toast])
+    }, [enabled, autoAccrueEnabled, accounts, movements, executeAccrual])
+
+    return { runAccrualNow, isRunning, lastResult }
 }

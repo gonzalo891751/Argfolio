@@ -39,7 +39,12 @@ import {
     AlertTriangle,
     LayoutGrid,
     List,
+    ChevronsDownUp,
+    ChevronsUpDown,
+    Zap,
 } from 'lucide-react'
+import { useAutomationTrigger } from '@/hooks/use-automation-trigger'
+import { PreferencesSheet } from '@/components/PreferencesSheet'
 
 type FxOverrideMode = 'auto' | 'manual'
 
@@ -78,6 +83,7 @@ export function AssetsPageV2() {
     const location = useLocation()
     const { toast } = useToast()
     const { getOverride, setOverride, clearOverride } = useFxOverrides()
+    const { runAutomationsNow, isRunning: isAutomationRunning } = useAutomationTrigger()
 
     const [fxOverrideTarget, setFxOverrideTarget] = useState<null | {
         accountId: string
@@ -99,6 +105,7 @@ export function AssetsPageV2() {
     const [grouping, setGrouping] = useState<'rubros' | 'cuentas'>('rubros')
     const [showSettingsModal, setShowSettingsModal] = useState(false)
     const [settingsProviderId, setSettingsProviderId] = useState<string | null>(null)
+    const [showPreferences, setShowPreferences] = useState(false)
     const didInitWalletsExpand = useRef(false)
     const didLogDebug = useRef(false)
 
@@ -213,10 +220,23 @@ export function AssetsPageV2() {
     }
 
     const toggleProvider = (id: string) => {
+        // Sync expansion state for both base and -cash variants
+        // This ensures toggling "binance" also affects "binance-cash" and vice versa
+        const baseId = id.replace(/-cash$/, '')
+        const targetIds = [baseId, `${baseId}-cash`]
+
         setExpandedProviders(prev => {
             const next = new Set(prev)
-            if (next.has(id)) next.delete(id)
-            else next.add(id)
+            // Check if any of the target IDs is currently expanded
+            const isAnyExpanded = targetIds.some(tid => next.has(tid))
+
+            if (isAnyExpanded) {
+                // Collapse all
+                targetIds.forEach(tid => next.delete(tid))
+            } else {
+                // Expand all
+                targetIds.forEach(tid => next.add(tid))
+            }
             return next
         })
     }
@@ -269,12 +289,111 @@ export function AssetsPageV2() {
         setShowSettingsModal(true)
     }
 
-    // Flatten providers for "Cuentas" view
+    // Expand/Collapse All functions
+    const expandAll = () => {
+        if (!portfolio) return
+
+        if (grouping === 'rubros') {
+            // Expand all rubros
+            const allRubroIds = portfolio.rubros.map(r => r.id)
+            setExpandedRubros(new Set(allRubroIds))
+
+            // Expand all providers within rubros
+            const allProviderIds = portfolio.rubros.flatMap(r => r.providers.map(p => p.id))
+            setExpandedProviders(new Set(allProviderIds))
+        } else {
+            // In Cuentas view, expand all providers (using merged IDs)
+            const allMergedIds = allProviders.map(p => p.id)
+            // Also include -cash variants for sync
+            const allIds = allMergedIds.flatMap(id => [id, `${id}-cash`])
+            setExpandedProviders(new Set(allIds))
+        }
+    }
+
+    const collapseAll = () => {
+        if (grouping === 'rubros') {
+            setExpandedRubros(new Set())
+            setExpandedProviders(new Set())
+        } else {
+            setExpandedProviders(new Set())
+        }
+    }
+
+    // Check if anything is expanded (for button state)
+    const hasExpandedItems = useMemo(() => {
+        if (grouping === 'rubros') {
+            return expandedRubros.size > 0 || expandedProviders.size > 0
+        }
+        return expandedProviders.size > 0
+    }, [grouping, expandedRubros, expandedProviders])
+
+    // Flatten and MERGE providers for "Cuentas" view
+    // This groups providers by baseAccountId (removing -cash suffix) to avoid duplicates
+    // like "Binance" and "Binance (Liquidez)" appearing separately.
     const allProviders = useMemo(() => {
         if (!portfolio) return []
-        return portfolio.rubros
-            .flatMap(r => r.providers)
-            .sort((a, b) => b.totals.ars - a.totals.ars)
+
+        // Collect all providers
+        const rawProviders = portfolio.rubros.flatMap(r => r.providers)
+
+        // Group by baseAccountId
+        const grouped = new Map<string, ProviderV2[]>()
+        for (const p of rawProviders) {
+            const baseId = p.id.replace(/-cash$/, '')
+            const existing = grouped.get(baseId) || []
+            existing.push(p)
+            grouped.set(baseId, existing)
+        }
+
+        // Merge providers that share the same baseAccountId
+        const merged: ProviderV2[] = []
+        for (const [baseId, providers] of grouped) {
+            if (providers.length === 1) {
+                // No merge needed
+                merged.push(providers[0])
+                continue
+            }
+
+            // Merge multiple providers (e.g., binance + binance-cash)
+            // Combine all items, recalculate totals from items
+            const allItems = providers.flatMap(p => p.items)
+
+            // Use the non-cash provider's name (without "(Liquidez)" suffix)
+            const mainProvider = providers.find(p => !p.id.endsWith('-cash')) || providers[0]
+            const displayName = mainProvider.name.replace(/ \(Liquidez\)$/, '')
+
+            // Recalculate totals from merged items (avoids double counting)
+            const mergedTotals = {
+                ars: allItems.reduce((s, it) => s + it.valArs, 0),
+                usd: allItems.reduce((s, it) => s + it.valUsd, 0),
+            }
+            const mergedPnl = {
+                ars: allItems.reduce((s, it) => s + (it.pnlArs ?? 0), 0),
+                usd: allItems.reduce((s, it) => s + (it.pnlUsd ?? 0), 0),
+            }
+
+            // Compute fxMeta from items (use first item's if all share same family)
+            const itemsWithFx = allItems.filter(it => it.fxMeta)
+            let mergedFxMeta: typeof mainProvider.fxMeta = undefined
+            if (itemsWithFx.length > 0) {
+                const families = new Set(itemsWithFx.map(it => it.fxMeta!.family))
+                if (families.size === 1) {
+                    mergedFxMeta = itemsWithFx[0].fxMeta
+                }
+            }
+
+            merged.push({
+                id: baseId,
+                name: displayName,
+                totals: mergedTotals,
+                pnl: mergedPnl,
+                items: allItems,
+                fxMeta: mergedFxMeta,
+            })
+        }
+
+        // Sort by total ARS descending
+        return merged.sort((a, b) => b.totals.ars - a.totals.ars)
     }, [portfolio])
 
     // Loading state
@@ -301,11 +420,19 @@ export function AssetsPageV2() {
                 </div>
                 <div className="flex items-center gap-2">
                     <button
+                        onClick={() => setShowPreferences(true)}
+                        className="flex items-center gap-2 px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+                        title="Preferencias de automatización"
+                    >
+                        <Settings className="h-4 w-4" />
+                        <span className="hidden sm:inline">Preferencias</span>
+                    </button>
+                    <button
                         onClick={() => setShowCalcPanel(true)}
                         className="flex items-center gap-2 px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
                     >
                         <Info className="h-4 w-4" />
-                        Cómo se calcula
+                        <span className="hidden sm:inline">Cómo se calcula</span>
                     </button>
                 </div>
             </div>
@@ -323,27 +450,74 @@ export function AssetsPageV2() {
             {/* KPI Dashboard */}
             <KPIDashboard portfolio={portfolio} />
 
-            {/* View Toggle */}
-            <div className="flex bg-muted/30 p-1 rounded-lg border border-border/50 self-start w-fit">
+            {/* Toolbar: View Toggle + Expand/Collapse + Actualizar ahora */}
+            <div className="flex flex-wrap items-center gap-3">
+                {/* View Toggle */}
+                <div className="flex bg-muted/30 p-1 rounded-lg border border-border/50">
+                    <button
+                        onClick={() => setGrouping('rubros')}
+                        className={cn(
+                            "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
+                            grouping === 'rubros' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50"
+                        )}
+                    >
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                        Rubros
+                    </button>
+                    <button
+                        onClick={() => setGrouping('cuentas')}
+                        className={cn(
+                            "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
+                            grouping === 'cuentas' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50"
+                        )}
+                    >
+                        <List className="h-3.5 w-3.5" />
+                        Cuentas
+                    </button>
+                </div>
+
+                {/* Expand/Collapse All */}
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={expandAll}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors"
+                        title="Expandir todo"
+                    >
+                        <ChevronsUpDown className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Expandir</span>
+                    </button>
+                    <button
+                        onClick={collapseAll}
+                        disabled={!hasExpandedItems}
+                        className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-colors",
+                            hasExpandedItems
+                                ? "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                : "text-muted-foreground/50 cursor-not-allowed"
+                        )}
+                        title="Colapsar todo"
+                    >
+                        <ChevronsDownUp className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Colapsar</span>
+                    </button>
+                </div>
+
+                {/* Separator */}
+                <div className="w-px h-5 bg-border/50 hidden sm:block" />
+
+                {/* Actualizar ahora (manual automation trigger) */}
                 <button
-                    onClick={() => setGrouping('rubros')}
+                    onClick={() => runAutomationsNow()}
+                    disabled={isAutomationRunning}
                     className={cn(
-                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
-                        grouping === 'rubros' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50"
+                        "flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all",
+                        "bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20",
+                        isAutomationRunning && "opacity-50 cursor-not-allowed"
                     )}
+                    title="Ejecuta intereses pendientes y liquida PFs vencidos"
                 >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    Rubros
-                </button>
-                <button
-                    onClick={() => setGrouping('cuentas')}
-                    className={cn(
-                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
-                        grouping === 'cuentas' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:bg-background/50"
-                    )}
-                >
-                    <List className="h-3.5 w-3.5" />
-                    Cuentas
+                    <Zap className={cn("h-3.5 w-3.5", isAutomationRunning && "animate-pulse")} />
+                    {isAutomationRunning ? 'Procesando...' : 'Actualizar ahora'}
                 </button>
             </div>
 
@@ -531,6 +705,9 @@ export function AssetsPageV2() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Preferences Sheet */}
+            <PreferencesSheet open={showPreferences} onOpenChange={setShowPreferences} />
         </div>
     )
 }
@@ -696,6 +873,7 @@ function RubroCard({
                             onItemClick={(item) => onItemClick(item, provider)}
                             onSettings={() => onProviderSettings(provider.id)}
                             onOpenFxOverride={onOpenFxOverride}
+                            rubroId={rubro.id}
                         />
                     ))}
                 </div>
@@ -715,6 +893,8 @@ interface ProviderSectionProps {
     onItemClick: (item: ItemV2) => void
     onSettings: () => void
     onOpenFxOverride: (target: { accountId: string; kind: ItemKind; title: string; autoMeta?: ItemV2['fxMeta'] }) => void
+    /** Rubro ID to enable wallet-specific rendering */
+    rubroId?: string
 }
 
 function ProviderSection({
@@ -724,6 +904,7 @@ function ProviderSection({
     onItemClick,
     onSettings,
     onOpenFxOverride,
+    rubroId,
 }: ProviderSectionProps) {
     const isUsdPrimary = Math.abs(provider.totals.ars) < 1 && Math.abs(provider.totals.usd) >= 0.01
     const primary = isUsdPrimary ? formatMoneyUSD(provider.totals.usd) : formatMoneyARS(provider.totals.ars)
@@ -746,6 +927,79 @@ function ProviderSection({
         if (!kindForProviderFx) return provider.fxMeta
         return provider.items.find(it => it.kind === kindForProviderFx)?.fxMeta ?? provider.fxMeta
     }, [kindForProviderFx, provider.fxMeta, provider.items])
+
+    // Special case: Wallet with exactly 1 ARS item -> render as direct row (no expand needed)
+    // Also detect wallets in "Cuentas" view (rubroId undefined) by checking if ALL items are cash
+    const isWalletSingleArsItem = useMemo(() => {
+        if (provider.items.length !== 1) return false
+        const item = provider.items[0]
+        const isCashArsItem = item.kind === 'cash_ars' || item.kind === 'wallet_yield'
+        // In Rubros view: must be in wallets rubro
+        if (rubroId) return rubroId === 'wallets' && isCashArsItem
+        // In Cuentas view (rubroId undefined): detect by provider name not ending with broker/exchange patterns
+        // and having only ARS cash
+        return isCashArsItem
+    }, [rubroId, provider.items])
+
+    const singleItem = isWalletSingleArsItem ? provider.items[0] : null
+    const singleItemYield = singleItem?.yieldMeta
+
+    // Special rendering for single-item wallets (Carrefour, Fiwind with just ARS)
+    if (isWalletSingleArsItem && singleItem) {
+        return (
+            <div className="border-b border-border last:border-b-0">
+                <button
+                    onClick={() => onItemClick(singleItem)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors text-left group"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-sky-500/10 flex items-center justify-center">
+                            <Landmark className="h-4 w-4 text-sky-400" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-medium group-hover:text-primary transition-colors">
+                                    {provider.name.replace(/ \(Liquidez\)$/, '')}
+                                </span>
+                                {/* TNA/TEA chips visible directly */}
+                                {singleItemYield?.tna && singleItemYield.tna > 0 && (
+                                    <>
+                                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                            TNA {singleItemYield.tna.toFixed(0)}%
+                                        </span>
+                                        {singleItemYield.tea && singleItemYield.tea > 0 && (
+                                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                                TEA {singleItemYield.tea.toFixed(1)}%
+                                            </span>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                {singleItemYield?.tna ? 'Cuenta remunerada' : 'Liquidez inmediata'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="text-right">
+                            <p className="font-mono text-sm font-semibold">{primary}</p>
+                            <div className="flex items-center justify-end gap-1.5">
+                                <p className="text-xs text-emerald-400 font-mono">≈ {secondary}</p>
+                                {provider.fxMeta && provider.fxMeta.rate > 0 && (
+                                    <span
+                                        className="text-[9px] font-mono text-muted-foreground bg-muted/50 px-1 py-0.5 rounded whitespace-nowrap"
+                                    >
+                                        TC {provider.fxMeta.family} {provider.fxMeta.side}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                </button>
+            </div>
+        )
+    }
 
     return (
         <div className="border-b border-border last:border-b-0">
