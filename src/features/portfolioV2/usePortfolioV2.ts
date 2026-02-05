@@ -77,8 +77,10 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
                 },
                 kpis: {
                     totalArs: 0,
+                    totalUsd: 0,
                     totalUsdEq: 0,
                     pnlUnrealizedArs: 0,
+                    pnlUnrealizedUsd: 0,
                     pnlUnrealizedUsdEq: 0,
                     exposure: { usdHard: 0, usdEquivalent: 0, arsReal: 0 },
                     pctUsdHard: 0,
@@ -112,8 +114,10 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
                 },
                 kpis: {
                     totalArs: 0,
+                    totalUsd: 0,
                     totalUsdEq: 0,
                     pnlUnrealizedArs: 0,
+                    pnlUnrealizedUsd: 0,
                     pnlUnrealizedUsdEq: 0,
                     exposure: { usdHard: 0, usdEquivalent: 0, arsReal: 0 },
                     pctUsdHard: 0,

@@ -826,10 +826,9 @@ export function buildRubros(
                 if (config.id === 'cedears') {
                     // For broker accounts: include cedear/stock items, EXCLUDE cash
                     if (isBroker(account)) {
-                        // Filter out cash items (they go to Billeteras)
-                        const cedearMetrics = group.metrics.filter(m =>
-                            m.category !== 'CASH_ARS' && m.category !== 'CASH_USD'
-                        )
+                        // Brokers can hold multiple asset classes (CEDEAR + FCI, etc.).
+                        // CEDEARs rubro must include ONLY CEDEAR instruments to avoid duplication and FX mismatches.
+                        const cedearMetrics = group.metrics.filter(m => config.categories.includes(m.category))
                         if (cedearMetrics.length === 0) continue
 
                         const provider = buildProviderFromGroup(
@@ -939,7 +938,9 @@ export function buildKPIs(
     fxSnapshot: FxRatesSnapshot
 ): PortfolioKPIs {
     let totalArs = 0
+    let totalUsd = 0
     let pnlUnrealizedArs = 0
+    let pnlUnrealizedUsd = 0
 
     // Exposure buckets
     let usdHard = 0     // Crypto USD + Billete USD
@@ -947,7 +948,9 @@ export function buildKPIs(
 
     for (const rubro of rubros) {
         totalArs += rubro.totals.ars
+        totalUsd += rubro.totals.usd
         pnlUnrealizedArs += rubro.pnl.ars
+        pnlUnrealizedUsd += rubro.pnl.usd
 
         // Bucket by rubro type
         if (rubro.id === 'crypto') {
@@ -971,8 +974,11 @@ export function buildKPIs(
     }
 
     const mepRate = fxSnapshot.mepSell || fxSnapshot.officialSell || 1
-    const totalUsdEq = totalArs / mepRate
-    const pnlUnrealizedUsdEq = pnlUnrealizedArs / mepRate
+    // NOTE: We intentionally DO NOT compute total USD as totalArs / FX.
+    // Total USD should be the sum of already-valued items (each with its own FX family).
+    // Keep *Eq fields as backwards-compatible aliases.
+    const totalUsdEq = totalUsd
+    const pnlUnrealizedUsdEq = pnlUnrealizedUsd
 
     // ARS converted to USD equivalent
     const usdEquivalent = arsReal / mepRate
@@ -986,8 +992,10 @@ export function buildKPIs(
 
     return {
         totalArs,
+        totalUsd,
         totalUsdEq,
         pnlUnrealizedArs,
+        pnlUnrealizedUsd,
         pnlUnrealizedUsdEq,
         exposure: { usdHard, usdEquivalent, arsReal },
         pctUsdHard,
@@ -1021,6 +1029,39 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
     const fxSnapshot = buildFxSnapshot(fxRates)
     const rubros = buildRubros(groupedRows, accounts, pfData, fxSnapshot, accountSettings, fxOverrides)
     const kpis = buildKPIs(rubros, accounts, fxSnapshot)
+
+    // Debug guard rail: detect same (accountId + instrumentId/symbol) present in multiple rubros.
+    // Only in browser when `?debug=1` is set.
+    try {
+        const isDebug = typeof window !== 'undefined'
+            && typeof window.location?.search === 'string'
+            && new URLSearchParams(window.location.search).get('debug') === '1'
+
+        if (isDebug) {
+            const seen = new Map<string, { rubros: Set<string>; labels: Set<string> }>()
+            for (const rubro of rubros) {
+                for (const provider of rubro.providers) {
+                    for (const item of provider.items) {
+                        const key = `${item.accountId}:${item.instrumentId ?? item.symbol}`
+                        const entry = seen.get(key) ?? { rubros: new Set<string>(), labels: new Set<string>() }
+                        entry.rubros.add(rubro.id)
+                        entry.labels.add(item.label)
+                        seen.set(key, entry)
+                    }
+                }
+            }
+
+            const duplicates = [...seen.entries()]
+                .filter(([, v]) => v.rubros.size > 1)
+                .map(([key, v]) => ({ key, rubros: [...v.rubros], labels: [...v.labels] }))
+
+            if (duplicates.length > 0) {
+                console.warn('[portfolioV2] Duplicate items across rubros detected:', duplicates)
+            }
+        }
+    } catch {
+        // ignore debug-only guard rail failures
+    }
 
     // Count inferred balances
     let inferredCount = 0

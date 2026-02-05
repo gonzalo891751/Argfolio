@@ -545,7 +545,7 @@ function KPIDashboard({ portfolio }: KPIDashboardProps) {
                 <p className="text-xs uppercase text-muted-foreground mb-1">Patrimonio Total</p>
                 <p className="text-2xl font-bold font-mono">{formatMoneyARS(kpis.totalArs)}</p>
                 <p className="text-sm text-muted-foreground font-mono">
-                    ≈ {formatMoneyUSD(kpis.totalUsdEq)}
+                    ≈ {formatMoneyUSD(kpis.totalUsd)}
                 </p>
             </div>
 
@@ -586,7 +586,7 @@ function KPIDashboard({ portfolio }: KPIDashboardProps) {
                     {kpis.pnlUnrealizedArs >= 0 ? '+' : ''}{formatMoneyARS(kpis.pnlUnrealizedArs)}
                 </p>
                 <p className="text-sm text-muted-foreground font-mono">
-                    ≈ {kpis.pnlUnrealizedUsdEq >= 0 ? '+' : ''}{formatMoneyUSD(kpis.pnlUnrealizedUsdEq)}
+                    ≈ {kpis.pnlUnrealizedUsd >= 0 ? '+' : ''}{formatMoneyUSD(kpis.pnlUnrealizedUsd)}
                 </p>
             </div>
 

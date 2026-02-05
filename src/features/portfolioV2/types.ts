@@ -55,11 +55,18 @@ export interface ExposureBucket {
 export interface PortfolioKPIs {
     /** Total patrimonio en ARS */
     totalArs: number
-    /** Total patrimonio equivalente en USD (using base FX) */
+    /** Total patrimonio consolidado en USD (sum of item valuations) */
+    totalUsd: number
+
+    /**
+     * Legacy alias kept for backwards compatibility.
+     * Prefer `totalUsd` (do not compute as totalArs / FX).
+     */
     totalUsdEq: number
 
     /** Unrealized PnL */
     pnlUnrealizedArs: number
+    pnlUnrealizedUsd: number
     pnlUnrealizedUsdEq: number
 
     /** Realized PnL (optional, may not be computed) */

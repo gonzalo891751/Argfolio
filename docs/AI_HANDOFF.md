@@ -45,6 +45,24 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-05 — Codex — Fix P0: FCI duplicado en CEDEARs + auditoría de Patrimonio total (USD)
+**Bug:** En `/mis-activos-v2` un FCI (ej: “Premier Capital - Clase D”) aparecía duplicado: dentro de **CEDEARs** y dentro de **Fondos (FCI)**, inflando métricas/totales y abriendo la puerta a valuaciones inconsistentes por FX.
+
+**Causa raíz:** `buildRubros()` tenía un caso especial para brokers donde el rubro **CEDEARs** incluía “todo lo no-cash” (sin filtrar por `category`), arrastrando activos `FCI` al rubro CEDEARs y duplicándolos.
+
+**Fix (en motor/builder, sin hacks de UI):**
+- `src/features/portfolioV2/builder.ts`: en cuentas `BROKER`, rubro `cedears` ahora incluye **solo** métricas `category === 'CEDEAR'` (FCI queda exclusivamente en `fci`).
+- `src/features/portfolioV2/builder.ts` + `src/features/portfolioV2/types.ts`: KPIs agregan `totalUsd` y `pnlUnrealizedUsd` como **sumatoria** de `valUsd/pnlUsd` ya valuados por rubro/item (no `totalArs / TC`). `totalUsdEq/pnlUnrealizedUsdEq` quedan como alias legacy.
+- `src/pages/assets-v2.tsx`: “Patrimonio total” y “Resultado no realizado” muestran los consolidados USD correctos.
+
+**Guard rails:**
+- Test: `src/features/portfolioV2/builder.test.ts` valida que un broker con CEDEAR + FCI no duplica el FCI en rubros ni en totales.
+- Debug: `?debug=1` emite `console.warn` si un `(accountId + instrumentId/symbol)` aparece en más de un rubro.
+
+**Validación:**
+- `npm test` ✅
+- `npm run build` ✅
+
 ### 2026-02-05 — Claude Opus 4.5 — Feat: CEDEAR Detail Subpágina (Dual ARS/USD)
 **Goal:** Implementar subpágina de detalle CEDEAR con valuación dual ARS/USD, tabla de lotes con doble moneda, selector de método de costeo, y simulador de venta con acreditación de liquidez ARS.
 
