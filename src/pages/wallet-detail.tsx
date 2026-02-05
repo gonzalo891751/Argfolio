@@ -248,8 +248,6 @@ export function WalletDetailPage() {
         return usd / ars
     }, [selectedItem, baseCurrency])
 
-    const oficialSell = portfolio?.fx.officialSell ?? 0
-
     // TNA editing state
     const [isEditingTna, setIsEditingTna] = useState(false)
     const [tnaInput, setTnaInput] = useState('')
@@ -422,9 +420,14 @@ export function WalletDetailPage() {
                     <p className="text-xs uppercase text-muted-foreground tracking-wider mb-2">Capital Actual</p>
                     <p className="text-4xl font-bold font-mono mb-2">{formatPrimaryMoney(capitalPrimary)}</p>
                     <div className="flex items-center gap-3">
-                        <span className="px-2 py-1 bg-background/50 rounded text-sm font-mono text-muted-foreground">
+                        <span className="px-2 py-1 bg-background/50 rounded text-sm font-mono text-emerald-400">
                             ≈ {formatSecondaryMoney(capitalSecondary)}
                         </span>
+                        {selectedItem.fxMeta && selectedItem.fxMeta.rate > 0 && (
+                            <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                                TC {selectedItem.fxMeta.family} {selectedItem.fxMeta.side}
+                            </span>
+                        )}
                         {baseCurrency === 'USD' && selectedItem.symbol.toUpperCase() === 'USDT' && (
                             <span className="text-xs text-muted-foreground">USD (USDT 1:1)</span>
                         )}
@@ -589,9 +592,9 @@ export function WalletDetailPage() {
             </div>
 
             {/* FX Info */}
-            {oficialSell > 0 && (
+            {selectedItem.fxMeta && selectedItem.fxMeta.rate > 0 && (
                 <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg">
-                    <strong>TC utilizado:</strong> Oficial Venta ${oficialSell.toFixed(2)}
+                    <strong>TC utilizado:</strong> {selectedItem.fxMeta.family} {selectedItem.fxMeta.side === 'V' ? 'Venta' : 'Compra'} ${selectedItem.fxMeta.rate.toFixed(2)}
                 </div>
             )}
         </div>

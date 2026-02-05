@@ -389,11 +389,11 @@ function KPIDashboard({ portfolio }: KPIDashboardProps) {
                     </div>
                     <div className="flex justify-between">
                         <span className="text-muted-foreground">MEP</span>
-                        <span className="font-mono">${fx.mep.toFixed(2)}</span>
+                        <span className="font-mono">${fx.mepSell.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                         <span className="text-muted-foreground">Cripto</span>
-                        <span className="font-mono">${fx.cryptoUsdtArs.toFixed(2)}</span>
+                        <span className="font-mono">${fx.cryptoSell.toFixed(2)}</span>
                     </div>
                 </div>
             </div>
@@ -593,7 +593,7 @@ function ItemRow({ item, onClick }: ItemRowProps) {
                     </div>
                     <p className="text-xs text-muted-foreground">
                         {isUsdCash ? 'Tenencia en USD' : isWalletOrCash ? 'Liquidez inmediata' :
-                         item.qty ? `${item.qty.toLocaleString('es-AR', { maximumFractionDigits: 4 })} unidades` : ''}
+                            item.qty ? `${item.qty.toLocaleString('es-AR', { maximumFractionDigits: 4 })} unidades` : ''}
                     </p>
                 </div>
             </div>
@@ -605,9 +605,17 @@ function ItemRow({ item, onClick }: ItemRowProps) {
                 {/* Secondary value (dual-currency) or PnL */}
                 {isWalletOrCash ? (
                     hasSecondary ? (
-                        <p className="text-xs text-muted-foreground font-mono">
-                            ≈ {isUsdCash ? formatMoneyARS(item.valArs) : formatMoneyUSD(item.valUsd)}
-                        </p>
+                        <div className="flex items-center justify-end gap-1.5">
+                            <p className="text-xs text-emerald-400 font-mono">
+                                ≈ {isUsdCash ? formatMoneyARS(item.valArs) : formatMoneyUSD(item.valUsd)}
+                            </p>
+                            {/* TC Chip */}
+                            {item.fxMeta && item.fxMeta.rate > 0 && (
+                                <span className="text-[9px] font-mono text-muted-foreground bg-muted/50 px-1 py-0.5 rounded whitespace-nowrap">
+                                    TC {item.fxMeta.family} {item.fxMeta.side}
+                                </span>
+                            )}
+                        </div>
                     ) : null
                 ) : item.pnlPct !== undefined && (
                     <p className={cn(
@@ -704,7 +712,7 @@ function DetailOverlay({
                             <p className="text-xs uppercase text-muted-foreground mb-1">Capital</p>
                             <p className="text-2xl font-bold font-mono">{formatMoneyARS(capitalArs)}</p>
                             <p className="text-sm text-green-400 font-mono">
-                                ≈ {formatMoneyUSD(capitalUsdOficial)} (Oficial Venta)
+                                ≈ {formatMoneyUSD(capitalUsdOficial)} ({item.fxMeta ? `TC ${item.fxMeta.family} ${item.fxMeta.side === 'V' ? 'Venta' : 'Compra'}` : 'Oficial Venta'})
                             </p>
                         </div>
 
@@ -1004,11 +1012,11 @@ function CalcPanel({ fx, onClose }: CalcPanelProps) {
                                     </tr>
                                     <tr>
                                         <td className="p-3">MEP</td>
-                                        <td className="p-3 text-right font-mono">${fx.mep.toFixed(2)}</td>
+                                        <td className="p-3 text-right font-mono">${fx.mepSell.toFixed(2)}</td>
                                     </tr>
                                     <tr>
                                         <td className="p-3">Cripto (USDT/ARS)</td>
-                                        <td className="p-3 text-right font-mono">${fx.cryptoUsdtArs.toFixed(2)}</td>
+                                        <td className="p-3 text-right font-mono">${fx.cryptoSell.toFixed(2)}</td>
                                     </tr>
                                 </tbody>
                             </table>

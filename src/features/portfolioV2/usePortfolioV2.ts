@@ -65,9 +65,12 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
                 fx: {
                     officialSell: fxRates.oficial.sell ?? 0,
                     officialBuy: fxRates.oficial.buy ?? 0,
-                    mep: fxRates.mep.sell ?? fxRates.mep.buy ?? 0,
-                    ccl: 0,
-                    cryptoUsdtArs: fxRates.cripto.sell ?? fxRates.cripto.buy ?? 0,
+                    mepSell: fxRates.mep.sell ?? fxRates.mep.buy ?? 0,
+                    mepBuy: fxRates.mep.buy ?? fxRates.mep.sell ?? 0,
+                    cclSell: 0,
+                    cclBuy: 0,
+                    cryptoSell: fxRates.cripto.sell ?? fxRates.cripto.buy ?? 0,
+                    cryptoBuy: fxRates.cripto.buy ?? fxRates.cripto.sell ?? 0,
                     updatedAtISO: fxRates.updatedAtISO,
                 },
                 kpis: {
@@ -97,9 +100,12 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
                 fx: {
                     officialSell: 0,
                     officialBuy: 0,
-                    mep: 0,
-                    ccl: 0,
-                    cryptoUsdtArs: 0,
+                    mepSell: 0,
+                    mepBuy: 0,
+                    cclSell: 0,
+                    cclBuy: 0,
+                    cryptoSell: 0,
+                    cryptoBuy: 0,
                     updatedAtISO: '',
                 },
                 kpis: {

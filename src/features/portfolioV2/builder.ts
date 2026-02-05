@@ -18,6 +18,7 @@ import type {
     FixedDepositDetail,
     ItemKind,
     MoneyPair,
+    FxMeta,
 } from './types'
 import type { Account, Movement, FxRates } from '@/domain/types'
 import type { AssetRowMetrics } from '@/domain/assets/types'
@@ -222,11 +223,59 @@ export function buildFxSnapshot(fxRates: FxRates): FxRatesSnapshot {
     return {
         officialSell: fxRates.oficial.sell ?? 0,
         officialBuy: fxRates.oficial.buy ?? 0,
-        mep: fxRates.mep.sell ?? fxRates.mep.buy ?? 0,
-        ccl: fxRates.ccl?.sell ?? fxRates.ccl?.buy ?? 0,
-        cryptoUsdtArs: fxRates.cripto.sell ?? fxRates.cripto.buy ?? 0,
+        mepSell: fxRates.mep.sell ?? fxRates.mep.buy ?? 0,
+        mepBuy: fxRates.mep.buy ?? fxRates.mep.sell ?? 0,
+        cclSell: fxRates.ccl?.sell ?? fxRates.ccl?.buy ?? 0,
+        cclBuy: fxRates.ccl?.buy ?? fxRates.ccl?.sell ?? 0,
+        cryptoSell: fxRates.cripto.sell ?? fxRates.cripto.buy ?? 0,
+        cryptoBuy: fxRates.cripto.buy ?? fxRates.cripto.sell ?? 0,
         updatedAtISO: fxRates.updatedAtISO,
     }
+}
+
+// =============================================================================
+// FX Family Helpers for Smart Valuation
+// =============================================================================
+
+type FxFamily = 'Oficial' | 'MEP' | 'Cripto'
+
+/** Determine FX family based on account kind */
+function getFxFamilyForAccount(account: Account | undefined): FxFamily {
+    if (!account) return 'Oficial'
+    if (isExchange(account)) return 'Cripto'
+    if (isBroker(account)) return 'MEP'
+    return 'Oficial'
+}
+
+/** Get the correct FX rate for a given family and side */
+function getFxRate(
+    fx: FxRatesSnapshot,
+    family: FxFamily,
+    side: 'C' | 'V'
+): number {
+    switch (family) {
+        case 'Cripto':
+            return side === 'V' ? fx.cryptoSell : fx.cryptoBuy
+        case 'MEP':
+            return side === 'V' ? fx.mepSell : fx.mepBuy
+        case 'Oficial':
+        default:
+            return side === 'V' ? fx.officialSell : fx.officialBuy
+    }
+}
+
+/** Build FxMeta for an item based on account type and currency direction */
+function buildFxMeta(
+    account: Account | undefined,
+    fx: FxRatesSnapshot,
+    isUsdToArs: boolean
+): FxMeta {
+    const family = getFxFamilyForAccount(account)
+    // USD->ARS: selling USD, get Venta (bid)
+    // ARS->USD: buying USD, pay Compra (ask)
+    const side: 'C' | 'V' = isUsdToArs ? 'V' : 'C'
+    const rate = getFxRate(fx, family, side)
+    return { family, side, rate }
 }
 
 function mapCategoryToKind(category: string): ItemKind {
@@ -252,11 +301,24 @@ function mapCategoryToKind(category: string): ItemKind {
 
 function buildItemFromMetrics(
     metrics: AssetRowMetrics,
-    accountId: string
+    accountId: string,
+    fxSnapshot?: FxRatesSnapshot,
+    account?: Account
 ): ItemV2 {
+    const kind = mapCategoryToKind(metrics.category)
+
+    // Compute fxMeta for cash items if FX info is available
+    let fxMeta: FxMeta | undefined
+    if (fxSnapshot && (kind === 'cash_ars' || kind === 'cash_usd' || kind === 'wallet_yield')) {
+        // CASH_USD: US dollar balance valued to ARS → USD→ARS = Venta
+        // CASH_ARS: ARS balance valued to USD → ARS→USD = Compra
+        const isUsdToArs = kind === 'cash_usd'
+        fxMeta = buildFxMeta(account, fxSnapshot, isUsdToArs)
+    }
+
     return {
         id: `${accountId}-${metrics.instrumentId || metrics.symbol}`,
-        kind: mapCategoryToKind(metrics.category),
+        kind,
         symbol: metrics.symbol,
         label: metrics.name || metrics.symbol,
         qty: metrics.quantity,
@@ -267,6 +329,7 @@ function buildItemFromMetrics(
         pnlPct: metrics.pnlPct ?? undefined,
         accountId,
         instrumentId: metrics.instrumentId,
+        fxMeta,
     }
 }
 
@@ -275,12 +338,13 @@ function buildProviderFromGroup(
     accountName: string,
     metrics: AssetRowMetrics[],
     settingsMap: Map<string, AccountSettings>,
-    account?: Account
+    account?: Account,
+    fxSnapshot?: FxRatesSnapshot
 ): ProviderV2 | null {
     // Filter out zero-balance items
     const filteredMetrics = metrics.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity, m.category))
     if (filteredMetrics.length === 0) return null
-    const items: ItemV2[] = filteredMetrics.map(m => buildItemFromMetrics(m, accountId))
+    const items: ItemV2[] = filteredMetrics.map(m => buildItemFromMetrics(m, accountId, fxSnapshot, account))
     const displayName = getDisplayName(accountId, accountName, settingsMap)
 
     // Attach yield metadata for remunerated ARS cash (so ItemRow can render TNA chip)
@@ -371,7 +435,7 @@ export function buildRubros(
 
                 // Convert to wallet_yield items
                 const yieldItems: ItemV2[] = filteredCashItems.map(m => ({
-                    ...buildItemFromMetrics(m, accountId),
+                    ...buildItemFromMetrics(m, accountId, fxSnapshot, account),
                     kind: 'wallet_yield' as ItemKind,
                     yieldMeta: account?.cashYield ? {
                         tna: account.cashYield.tna,
@@ -469,7 +533,8 @@ export function buildRubros(
                             group.accountName,
                             matchingMetrics,
                             settingsMap,
-                            account
+                            account,
+                            fxSnapshot
                         )
                         if (!provider) continue
 
@@ -499,7 +564,7 @@ export function buildRubros(
                         // Create provider with suffix to differentiate from main rubro
                         const providerName = getDisplayName(accountId, account?.name, settingsMap)
                         const items = cashMetrics.map(m => {
-                            const base = buildItemFromMetrics(m, accountId)
+                            const base = buildItemFromMetrics(m, accountId, fxSnapshot, account)
                             if (m.category === 'CASH_ARS') {
                                 return maybePromoteArsCashToYieldItem(base, accountId, account, settingsMap)
                             }
@@ -542,7 +607,8 @@ export function buildRubros(
                             group.accountName,
                             cryptoMetrics,
                             settingsMap,
-                            account
+                            account,
+                            fxSnapshot
                         )
                         if (!provider) continue
 
@@ -563,7 +629,8 @@ export function buildRubros(
                             group.accountName,
                             matchingMetrics,
                             settingsMap,
-                            account
+                            account,
+                            fxSnapshot
                         )
                         if (!provider) continue
 
@@ -593,7 +660,8 @@ export function buildRubros(
                             group.accountName,
                             cedearMetrics,
                             settingsMap,
-                            account
+                            account,
+                            fxSnapshot
                         )
                         if (!provider) continue
 
@@ -614,7 +682,8 @@ export function buildRubros(
                             group.accountName,
                             matchingMetrics,
                             settingsMap,
-                            account
+                            account,
+                            fxSnapshot
                         )
                         if (!provider) continue
 
@@ -641,7 +710,8 @@ export function buildRubros(
                     group.accountName,
                     matchingMetrics,
                     settingsMap,
-                    account
+                    account,
+                    fxSnapshot
                 )
                 if (!provider) continue
 
@@ -707,7 +777,7 @@ export function buildKPIs(
         }
     }
 
-    const mepRate = fxSnapshot.mep || fxSnapshot.officialSell || 1
+    const mepRate = fxSnapshot.mepSell || fxSnapshot.officialSell || 1
     const totalUsdEq = totalArs / mepRate
     const pnlUnrealizedUsdEq = pnlUnrealizedArs / mepRate
 

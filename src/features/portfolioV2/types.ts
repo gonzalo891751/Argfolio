@@ -15,12 +15,27 @@ export interface MoneyPair {
     usd: number
 }
 
+/**
+ * FX metadata for TC chip display in UI
+ */
+export interface FxMeta {
+    /** FX family used for valuation */
+    family: 'Oficial' | 'MEP' | 'Cripto'
+    /** Side: Compra (C) or Venta (V) */
+    side: 'C' | 'V'
+    /** Actual rate used */
+    rate: number
+}
+
 export interface FxRatesSnapshot {
     officialSell: number
     officialBuy: number
-    mep: number
-    ccl: number
-    cryptoUsdtArs: number
+    mepSell: number
+    mepBuy: number
+    cclSell: number
+    cclBuy: number
+    cryptoSell: number
+    cryptoBuy: number
     updatedAtISO: string
 }
 
@@ -139,6 +154,9 @@ export interface ItemV2 {
         expectedInterestArs: number
         expectedTotalArs: number
     }
+
+    /** FX metadata for TC chip display */
+    fxMeta?: FxMeta
 
     /** Reference to source data */
     accountId: string

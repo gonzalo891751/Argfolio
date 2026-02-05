@@ -45,6 +45,28 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-05 — Antigravity — Feat: Smart TC Valuation + Chips (Billeteras V2)
+**Objetivo:** Implementar valuación inteligente por tipo de cambio según plataforma (Cripto/MEP/Oficial) + lado Compra/Venta, mostrar chips de TC en UI, y secundario en verde.
+
+**Cambios clave:**
+- **Types:** Agregado `FxMeta` interface (`family`, `side`, `rate`) y actualizado `FxRatesSnapshot` con campos separados buy/sell por familia (`mepSell`, `mepBuy`, `cryptoSell`, `cryptoBuy`, etc).
+- **Builder:** Agregadas funciones `getFxFamilyForAccount()`, `getFxRate()`, `buildFxMeta()`. Reglas: EXCHANGE→Cripto, BROKER→MEP, WALLET/BANK→Oficial. `buildItemFromMetrics()` ahora computa y adjunta `fxMeta` a items cash/wallet.
+- **UI ItemRow:** Valor secundario ahora en verde (`text-emerald-400`) + chip TC que muestra familia y lado (ej: "TC Cripto V").
+- **UI DetailOverlay:** Label TC dinámico desde `item.fxMeta` en vez de hardcoded "Oficial Venta".
+- **UI wallet-detail:** Chip TC en capital card, secundario en verde, footer TC info dinámico.
+- **Cleanup:** Eliminada variable `oficialSell` en wallet-detail (ahora usa `fxMeta.rate`).
+
+**Archivos modificados:**
+- `src/features/portfolioV2/types.ts` — `FxMeta`, `FxRatesSnapshot` fields
+- `src/features/portfolioV2/builder.ts` — FX helpers + fxMeta wiring
+- `src/features/portfolioV2/usePortfolioV2.ts` — Updated field names
+- `src/pages/assets-v2.tsx` — TC chip in ItemRow + DetailOverlay
+- `src/pages/wallet-detail.tsx` — TC chip + green secondary + footer
+
+**Estado:** ✅ Build passing, 49 tests passing.
+
+---
+
 ### 2026-02-05 — Codex — Fix: Wallet Detail multi-moneda (Billeteras V2: cash ARS vs USD/USDT)
 **Objetivo:** En `/mis-activos-v2/billeteras/:accountId` respetar la subcuenta (ARS vs USD/USDT) clickeada desde Billeteras, mostrando **Capital actual** en la moneda base y **Últimos movimientos** filtrados por esa moneda con signos correctos.
 
