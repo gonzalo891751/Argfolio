@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Billeteras Virtuales</title>
+    
+    <!-- Fonts: Inter, Space Grotesk, JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Configuración del Brand System -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            primary: '#6366f1', // Indigo
+                            accent: '#0ea5e9', // Sky
+                        },
+                        semantic: {
+                            up: '#10b981', // Emerald
+                            down: '#f43f5e', // Rose
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.3s ease-out forwards',
+                        'slide-in': 'slideIn 0.3s ease-out forwards',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideIn: {
+                            '0%': { transform: 'translateY(10px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+            --border-subtle: rgba(255,255,255,0.08);
+        }
+        
+        body {
+            background-color: var(--bg-app);
+            color: #F8FAFC;
+        }
+
+        /* Utilidades Glass */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-subtle);
+        }
+        
+        /* Scrollbar fina */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Utilitarios de input number sin flechas */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans selection:bg-brand-primary/30">
+
+    <!-- Navbar Minimalista -->
+    <nav class="fixed top-0 inset-x-0 z-50 h-16 glass-panel border-b border-white/5 flex items-center justify-between px-6">
+        <div class="flex items-center gap-3">
+            <svg class="w-6 h-6 text-brand-primary" viewBox="0 0 40 40" fill="none">
+                <path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/>
+                <circle cx="20" cy="14" r="3" class="text-white" fill="currentColor"/>
+            </svg>
+            <span class="font-display font-bold text-lg tracking-tight">Argfolio</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5 text-xs font-mono text-slate-400">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                USD Oficial Venta: $1.465,00
+            </div>
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-primary to-purple-500"></div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="flex-1 pt-24 pb-12 px-4 md:px-8 max-w-5xl mx-auto w-full relative">
+        
+        <!-- VISTA 1: OVERVIEW (Billeteras) -->
+        <div id="view-overview" class="space-y-8 animate-fade-in">
+            
+            <!-- Header Sección -->
+            <header class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                <div>
+                    <h1 class="font-display font-bold text-3xl md:text-4xl text-white mb-2">Billeteras Virtuales</h1>
+                    <p class="text-slate-400 text-sm md:text-base max-w-xl">
+                        Agrupamos tus cuentas remuneradas y saldos líquidos. <br>
+                        Tenés <span id="total-wallets-count" class="text-white font-medium">0</span> billeteras activas.
+                    </p>
+                </div>
+                
+                <!-- Totales Globales -->
+                <div class="flex flex-col items-end gap-1">
+                    <span class="text-xs font-mono text-slate-500 uppercase tracking-wider">Total Consolidado</span>
+                    <div class="font-display font-bold text-3xl md:text-4xl text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400" id="global-total-ars">
+                        $0,00
+                    </div>
+                    <div class="flex items-center gap-2 text-sm font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded">
+                        ≈ <span id="global-total-usd-eq">US$ 0,00</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Lista de Billeteras -->
+            <div id="wallets-container" class="space-y-4">
+                <!-- Se inyecta vía JS -->
+            </div>
+
+            <div class="flex justify-end pt-4">
+                <button onclick="toggleDrawer()" class="text-xs font-medium text-brand-primary hover:text-indigo-400 flex items-center gap-1 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Cómo se calcula esto
+                </button>
+            </div>
+        </div>
+
+        <!-- VISTA 2: DETALLE (Sub-página) -->
+        <div id="view-detail" class="hidden space-y-8 animate-slide-in">
+            
+            <!-- Navegación Breadcrumb -->
+            <nav class="flex items-center gap-2 text-sm text-slate-500 mb-6">
+                <button onclick="router.navigate('overview')" class="hover:text-white transition">Mis Activos</button>
+                <span>/</span>
+                <button onclick="router.navigate('overview')" class="hover:text-white transition">Billeteras Virtuales</button>
+                <span>/</span>
+                <span id="detail-breadcrumb-wallet" class="text-slate-300">Wallet</span>
+                <span>/</span>
+                <span id="detail-breadcrumb-account" class="text-brand-primary font-medium">Cuenta</span>
+            </nav>
+
+            <header class="flex justify-between items-start">
+                <div>
+                    <div class="flex items-center gap-3 mb-2">
+                         <!-- Icono dinámico -->
+                        <div id="detail-icon" class="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-xl">🏦</div>
+                        <h1 id="detail-title" class="font-display font-bold text-3xl text-white">Nombre Billetera</h1>
+                    </div>
+                    <p class="text-slate-400 text-sm">Rendimiento y proyecciones de tu cuenta.</p>
+                </div>
+                <button onclick="router.navigate('overview')" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 transition" title="Volver">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </header>
+
+            <!-- Grid de Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <!-- Card 1: Capital -->
+                <div class="glass-panel p-6 rounded-2xl md:col-span-2 relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 p-32 bg-brand-primary/10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 group-hover:bg-brand-primary/20 transition duration-700"></div>
+                    
+                    <h3 class="text-xs font-mono text-slate-400 uppercase tracking-widest mb-4">Capital Actual</h3>
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-4xl md:text-5xl font-mono font-bold text-white tracking-tight" id="detail-balance-main">$0,00</span>
+                    </div>
+                    <div class="mt-2 flex gap-4 items-center">
+                        <span class="px-2 py-1 bg-white/5 border border-white/5 rounded text-xs font-mono text-slate-300" id="detail-balance-secondary">
+                            ≈ US$ 0,00
+                        </span>
+                        <!-- Solo visible si es USD Real -->
+                        <span id="detail-usd-real-badge" class="hidden px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-xs font-medium">
+                            Tenencia Física
+                        </span>
+                    </div>
+
+                    <!-- Mini Chart (Sparkline SVG) -->
+                    <div class="mt-8 h-16 w-full opacity-60">
+                        <svg class="w-full h-full overflow-visible" preserveAspectRatio="none">
+                            <defs>
+                                <linearGradient id="gradient" x1="0" x2="0" y1="0" y2="1">
+                                    <stop offset="0%" stop-color="#6366f1" stop-opacity="0.3"/>
+                                    <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M0 60 C 50 60, 50 40, 100 45 S 150 20, 200 30 S 250 5, 300 15 S 350 40, 400 35 S 450 10, 500 5 V 64 H 0 Z" fill="url(#gradient)" />
+                            <path d="M0 60 C 50 60, 50 40, 100 45 S 150 20, 200 30 S 250 5, 300 15 S 350 40, 400 35 S 450 10, 500 5" fill="none" stroke="#6366f1" stroke-width="2" />
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Card 2: Tasas y Edición -->
+                <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-6">
+                            <h3 class="text-xs font-mono text-slate-400 uppercase tracking-widest">Rendimiento</h3>
+                            <button id="btn-edit-tna" class="p-1.5 text-brand-primary hover:bg-brand-primary/10 rounded transition" title="Editar TNA">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                            </button>
+                        </div>
+                        
+                        <!-- TNA Display -->
+                        <div id="tna-display-container" class="mb-4">
+                            <div class="text-sm text-slate-400 mb-1">TNA Actual</div>
+                            <div class="text-3xl font-display font-bold text-white flex items-baseline gap-1">
+                                <span id="detail-tna-value">0,00</span><span class="text-lg">%</span>
+                            </div>
+                        </div>
+
+                        <!-- TNA Edit Form (Hidden) -->
+                        <div id="tna-edit-container" class="hidden mb-4 bg-slate-900/50 p-3 rounded-lg border border-brand-primary/30">
+                            <label class="text-xs text-brand-primary mb-1 block">Nueva TNA %</label>
+                            <div class="flex gap-2">
+                                <input type="number" id="input-tna" class="w-full bg-slate-950 border border-white/20 rounded px-2 py-1 text-white font-mono focus:border-brand-primary outline-none" placeholder="32.5">
+                                <button id="btn-save-tna" class="bg-brand-primary text-white px-3 rounded hover:bg-indigo-500 text-xs font-bold">OK</button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3 pt-4 border-t border-white/10">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-400">TEA (Estimada)</span>
+                                <span class="font-mono font-bold text-emerald-400" id="detail-tea-value">0,00%</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-400">Interés Diario</span>
+                                <span class="font-mono text-white text-sm" id="detail-daily-interest">$0,00</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-[10px] text-slate-500 leading-tight">
+                        *La TEA asume reinversión diaria de intereses al 100%.
+                    </div>
+                </div>
+
+                <!-- Card 3: Proyecciones -->
+                <div class="glass-panel p-6 rounded-2xl md:col-span-3">
+                    <h3 class="text-xs font-mono text-slate-400 uppercase tracking-widest mb-6">Proyección de Ganancias (Estimada)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- 30 Días -->
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full bg-brand-accent/10 flex items-center justify-center text-brand-accent font-bold text-sm">30d</div>
+                            <div>
+                                <div class="text-sm text-slate-400 mb-1">En 30 días</div>
+                                <div class="font-mono text-xl text-emerald-400 font-bold" id="proj-30d-ars">+$0,00</div>
+                                <div class="font-mono text-xs text-slate-500" id="proj-30d-usd">≈ US$ 0,00</div>
+                            </div>
+                        </div>
+                        <!-- 1 Año -->
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary font-bold text-sm">1A</div>
+                            <div>
+                                <div class="text-sm text-slate-400 mb-1">En 1 año (TEA)</div>
+                                <div class="font-mono text-xl text-emerald-400 font-bold" id="proj-1y-ars">+$0,00</div>
+                                <div class="font-mono text-xs text-slate-500" id="proj-1y-usd">≈ US$ 0,00</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 4: Movimientos -->
+                <div class="glass-panel rounded-2xl md:col-span-3 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/5">
+                        <h3 class="text-sm font-display font-semibold text-white">Últimos movimientos</h3>
+                        <button class="text-xs text-brand-primary hover:text-white transition">Ver todos</button>
+                    </div>
+                    <div class="divide-y divide-white/5" id="transactions-list">
+                        <!-- Inyectado por JS -->
+                    </div>
+                </div>
+
+            </div> <!-- End Grid -->
+            
+            <div class="flex justify-end">
+                <button onclick="toggleDrawer()" class="text-xs text-slate-500 hover:text-white flex items-center gap-1 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Ver fórmulas de cálculo
+                </button>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Drawer de Ayuda -->
+    <div id="drawer-help" class="fixed inset-y-0 right-0 w-full md:w-96 bg-[#0f172a] border-l border-white/10 shadow-2xl transform translate-x-full transition-transform duration-300 z-[60] overflow-y-auto p-8">
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="font-display font-bold text-2xl text-white">Cómo se calcula</h2>
+            <button onclick="toggleDrawer()" class="text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        
+        <div class="space-y-8 text-sm text-slate-300">
+            <section>
+                <h3 class="text-brand-primary font-bold mb-2">Tasas (TNA vs TEA)</h3>
+                <p class="mb-2">La <strong class="text-white">TNA</strong> (Tasa Nominal Anual) es la base. La usamos para calcular tu rendimiento diario simple.</p>
+                <p class="mb-2">La <strong class="text-white">TEA</strong> (Tasa Efectiva Anual) es una <em>estimación</em>. Asume que cada peso de interés que ganás hoy, lo reinvertís mañana (interés compuesto).</p>
+                <div class="bg-slate-900 p-3 rounded border border-white/10 font-mono text-xs text-slate-400 mt-2">
+                    TEA = ((1 + TNA/365) ^ 365) - 1
+                </div>
+            </section>
+
+            <section>
+                <h3 class="text-brand-primary font-bold mb-2">Interés Diario</h3>
+                <p>Es lo que ves acreditarse (o devengarse) cada día.</p>
+                <div class="bg-slate-900 p-3 rounded border border-white/10 font-mono text-xs text-slate-400 mt-2">
+                    Interés = Capital * (TNA / 365)
+                </div>
+            </section>
+
+            <section>
+                <h3 class="text-brand-primary font-bold mb-2">Conversión a Dólares</h3>
+                <p class="mb-2">Usamos el tipo de cambio <strong>Oficial Venta</strong> del Banco Nación (aprox). ¿Por qué?</p>
+                <ul class="list-disc list-inside space-y-1 text-slate-400 ml-1">
+                    <li>Es la referencia oficial.</li>
+                    <li>Para dolarizar via MEP o Crypto, el valor sería más alto (y tu equivalente en USD sería menor).</li>
+                </ul>
+                <div class="mt-4 p-3 bg-indigo-900/20 border border-indigo-500/20 rounded">
+                    <span class="block text-indigo-300 font-bold text-xs mb-1">DIFERENCIA CLAVE</span>
+                    <p class="text-xs">
+                        <strong>USD Equivalente:</strong> Cuántos dólares comprás con tus pesos al oficial.<br>
+                        <strong>USD Real:</strong> Dólares que tenés físicos en la cuenta.
+                    </p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Overlay del Drawer -->
+    <div id="drawer-overlay" onclick="toggleDrawer()" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[55] hidden transition-opacity"></div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- 1. CONFIG & MOCK DATA ---
+        const CONFIG = {
+            fxRate: 1465.00, // Oficial Venta Mock
+        };
+
+        // Estado inicial (simulando DB)
+        // Usamos localStorage para persistir cambios de TNA si existen
+        const getStoredTNA = (id, defaultTNA) => {
+            const stored = localStorage.getItem(`argfolio_tna_${id}`);
+            return stored ? parseFloat(stored) : defaultTNA;
+        };
+
+        const walletsData = [
+            {
+                id: 'mercadopago',
+                name: 'Mercado Pago',
+                icon: '🔷',
+                accounts: [
+                    {
+                        type: 'ars_remunerada',
+                        currency: 'ARS',
+                        balance: 54300.20,
+                        tna: getStoredTNA('mercadopago_ars', 35.0),
+                        name: 'Cuenta Remunerada'
+                    },
+                    {
+                        type: 'usd_real',
+                        currency: 'USD',
+                        balance: 120.00, // USD Reales
+                        tna: 0, 
+                        name: 'Caja de Ahorro USD'
+                    }
+                ]
+            },
+            {
+                id: 'fiwind',
+                name: 'Fiwind',
+                icon: '🍃',
+                accounts: [
+                    {
+                        type: 'ars_remunerada',
+                        currency: 'ARS',
+                        balance: 145020.50,
+                        tna: getStoredTNA('fiwind_ars', 32.0),
+                        name: 'Cuenta Pesos'
+                    }
+                ]
+            },
+            {
+                id: 'carrefour',
+                name: 'Carrefour (Banco de Servicios)',
+                icon: '🛒',
+                accounts: [
+                    {
+                        type: 'ars_remunerada',
+                        currency: 'ARS',
+                        balance: 237785.78,
+                        tna: getStoredTNA('carrefour_ars', 31.0),
+                        name: 'Cuenta Plus'
+                    }
+                ]
+            },
+            {
+                id: 'personalpay',
+                name: 'Personal Pay',
+                icon: '📱',
+                accounts: [
+                    {
+                        type: 'ars_remunerada',
+                        currency: 'ARS',
+                        balance: 0, // DEBE FILTRARSE
+                        tna: 36.0,
+                        name: 'Saldo Remunerado'
+                    }
+                ]
+            }
+        ];
+
+        // Mocks de movimientos para el detalle
+        const movementsMock = [
+            { date: 'Hoy', concept: 'Rendimiento diario', amount: 120.50, type: 'interest' },
+            { date: 'Ayer', concept: 'Rendimiento diario', amount: 118.20, type: 'interest' },
+            { date: '01/02', concept: 'Transferencia recibida', amount: 50000.00, type: 'income' },
+            { date: '30/01', concept: 'Pago QR Kiosco', amount: -2500.00, type: 'expense' },
+            { date: '29/01', concept: 'Rendimiento diario', amount: 95.40, type: 'interest' },
+        ];
+
+        // --- 2. HELPERS ---
+        
+        const fmtMoney = (amount, currency = 'ARS') => {
+            const formatter = new Intl.NumberFormat('es-AR', {
+                style: 'decimal',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            });
+            const symbol = currency === 'ARS' ? '$' : 'US$';
+            return `${symbol} ${formatter.format(amount)}`;
+        };
+
+        const calculateTEA = (tna) => {
+            // Formula: ((1 + (TNA/100)/365) ^ 365) - 1
+            const i = tna / 100;
+            const tea = (Math.pow(1 + (i / 365), 365) - 1) * 100;
+            return tea;
+        };
+
+        const calculateInterest = (capital, tna, days = 1) => {
+            return capital * ((tna / 100) / 365) * days;
+        };
+
+        const calculateCompoundProjection = (capital, tna, days) => {
+            // Capital * ((1 + dailyRate)^days - 1)
+            const dailyRate = (tna / 100) / 365;
+            const factor = Math.pow(1 + dailyRate, days);
+            return capital * (factor - 1); // Solo la ganancia
+        };
+
+        // --- 3. STATE & ROUTING ---
+
+        const router = {
+            currentView: 'overview',
+            currentWalletId: null,
+            currentAccountIdx: null,
+            
+            navigate: (view, walletId = null, accountIdx = null) => {
+                router.currentView = view;
+                
+                document.getElementById('view-overview').classList.add('hidden');
+                document.getElementById('view-detail').classList.add('hidden');
+                
+                if (view === 'overview') {
+                    document.getElementById('view-overview').classList.remove('hidden');
+                    renderOverview();
+                } else if (view === 'detail') {
+                    router.currentWalletId = walletId;
+                    router.currentAccountIdx = accountIdx;
+                    document.getElementById('view-detail').classList.remove('hidden');
+                    renderDetail(walletId, accountIdx);
+                }
+                
+                window.scrollTo(0, 0);
+            }
+        };
+
+        // --- 4. RENDERERS ---
+
+        function renderOverview() {
+            const container = document.getElementById('wallets-container');
+            container.innerHTML = '';
+            
+            let totalArs = 0;
+            let totalUsdReal = 0; // Suma de billetes físicos
+            let walletCount = 0;
+
+            walletsData.forEach(wallet => {
+                // Filtrar cuentas vacías
+                const activeAccounts = wallet.accounts.filter(acc => acc.balance > 0);
+                
+                if (activeAccounts.length === 0) return; // Skip wallet if empty
+                walletCount++;
+
+                let walletHtml = `
+                    <div class="glass-panel rounded-xl overflow-hidden transition hover:border-white/20">
+                        <div class="p-4 md:p-6 cursor-pointer select-none bg-white/5 hover:bg-white/10 transition" onclick="toggleAccordion('${wallet.id}')">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-xl shadow-lg border border-white/5">
+                                        ${wallet.icon}
+                                    </div>
+                                    <div>
+                                        <h3 class="font-display font-bold text-white text-lg">${wallet.name}</h3>
+                                        <div class="text-xs text-slate-400 font-mono">${activeAccounts.length} cuenta(s) activa(s)</div>
+                                    </div>
+                                </div>
+                                <div class="text-slate-400 transform transition-transform duration-300" id="arrow-${wallet.id}">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="acc-${wallet.id}" class="hidden border-t border-white/5 divide-y divide-white/5 bg-[#0f172a]/50">
+                `;
+
+                activeAccounts.forEach((acc, idx) => {
+                    let displayArs = 0;
+                    let displayUsdEq = 0;
+                    
+                    if (acc.currency === 'ARS') {
+                        totalArs += acc.balance;
+                        displayArs = acc.balance;
+                        displayUsdEq = acc.balance / CONFIG.fxRate;
+                    } else {
+                        // Es USD real
+                        totalUsdReal += acc.balance;
+                        displayArs = acc.balance * CONFIG.fxRate; // Valuación en pesos
+                        displayUsdEq = acc.balance; // Es lo mismo
+                        totalArs += displayArs; // Sumamos la valuación al total global ARS
+                    }
+
+                    // Badge de TNA
+                    const tnaBadge = acc.currency === 'ARS' 
+                        ? `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">TNA ${acc.tna}%</span>`
+                        : '';
+
+                    walletHtml += `
+                        <div class="p-4 pl-[4.5rem] flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-white/5 transition cursor-pointer group"
+                             onclick="router.navigate('detail', '${wallet.id}', ${idx})">
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-sm font-medium text-slate-200 group-hover:text-white transition">${acc.name}</span>
+                                    ${tnaBadge}
+                                </div>
+                                <div class="text-xs text-slate-500 font-mono">${acc.currency === 'ARS' ? 'Liquidez inmediata' : 'Tenencia en USD'}</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-mono font-bold text-white text-lg group-hover:text-brand-primary transition">
+                                    ${acc.currency === 'USD' ? fmtMoney(acc.balance, 'USD') : fmtMoney(acc.balance, 'ARS')}
+                                </div>
+                                <div class="font-mono text-xs text-slate-500">
+                                    ${acc.currency === 'USD' ? `≈ ${fmtMoney(displayArs, 'ARS')}` : `≈ ${fmtMoney(displayUsdEq, 'USD')}`}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                walletHtml += `</div></div>`; // Close container
+                container.innerHTML += walletHtml;
+            });
+
+            // Update Globals
+            const globalUsdEq = totalArs / CONFIG.fxRate; // Total ARS valuación / tipo de cambio
+            
+            document.getElementById('total-wallets-count').innerText = walletCount;
+            document.getElementById('global-total-ars').innerText = fmtMoney(totalArs, 'ARS');
+            document.getElementById('global-total-usd-eq').innerText = fmtMoney(globalUsdEq, 'USD');
+        }
+
+        function renderDetail(walletId, accountIdx) {
+            const wallet = walletsData.find(w => w.id === walletId);
+            const account = wallet.accounts[accountIdx];
+            
+            // 1. Breadcrumb & Titles
+            document.getElementById('detail-breadcrumb-wallet').innerText = wallet.name;
+            document.getElementById('detail-breadcrumb-account').innerText = account.name;
+            document.getElementById('detail-title').innerText = `${wallet.name}`;
+            document.getElementById('detail-icon').innerText = wallet.icon;
+
+            // 2. Main Balance Card
+            let mainBalance, secondaryBalance;
+            const isUsdReal = account.currency === 'USD';
+            const usdBadge = document.getElementById('detail-usd-real-badge');
+
+            if (isUsdReal) {
+                mainBalance = fmtMoney(account.balance, 'USD');
+                secondaryBalance = `≈ ${fmtMoney(account.balance * CONFIG.fxRate, 'ARS')}`;
+                usdBadge.classList.remove('hidden');
+            } else {
+                mainBalance = fmtMoney(account.balance, 'ARS');
+                secondaryBalance = `≈ ${fmtMoney(account.balance / CONFIG.fxRate, 'USD')}`;
+                usdBadge.classList.add('hidden');
+            }
+            
+            document.getElementById('detail-balance-main').innerText = mainBalance;
+            document.getElementById('detail-balance-secondary').innerText = secondaryBalance;
+
+            // 3. Rates & Calculations
+            // Solo calculamos proyecciones reales si es cuenta remunerada ARS (por simplicidad del scope)
+            const tnaValue = account.tna;
+            document.getElementById('detail-tna-value').innerText = tnaValue.toFixed(2);
+            document.getElementById('input-tna').value = tnaValue;
+
+            if (account.currency === 'ARS') {
+                const tea = calculateTEA(tnaValue);
+                const dailyInterest = calculateInterest(account.balance, tnaValue, 1);
+                
+                document.getElementById('detail-tea-value').innerText = tea.toFixed(2) + '%';
+                document.getElementById('detail-daily-interest').innerText = '+' + fmtMoney(dailyInterest, 'ARS');
+
+                // Projections
+                const gain30d = calculateCompoundProjection(account.balance, tnaValue, 30);
+                const gain1y = account.balance * (tea / 100);
+
+                document.getElementById('proj-30d-ars').innerText = '+' + fmtMoney(gain30d, 'ARS');
+                document.getElementById('proj-30d-usd').innerText = '≈ ' + fmtMoney(gain30d / CONFIG.fxRate, 'USD');
+                
+                document.getElementById('proj-1y-ars').innerText = '+' + fmtMoney(gain1y, 'ARS');
+                document.getElementById('proj-1y-usd').innerText = '≈ ' + fmtMoney(gain1y / CONFIG.fxRate, 'USD');
+            } else {
+                // Caso USD: No mostramos TNA editable ni proyecciones complejas para este MVP
+                document.getElementById('detail-tea-value').innerText = '-';
+                document.getElementById('detail-daily-interest').innerText = '-';
+                ['proj-30d-ars', 'proj-30d-usd', 'proj-1y-ars', 'proj-1y-usd'].forEach(id => {
+                    document.getElementById(id).innerText = '-';
+                });
+            }
+
+            // 4. Render Movements
+            const list = document.getElementById('transactions-list');
+            list.innerHTML = '';
+            
+            // Generar mock mezclado
+            movementsMock.forEach(mov => {
+                let colorClass, sign;
+                if (mov.type === 'interest' || mov.type === 'income') {
+                    colorClass = 'text-emerald-400';
+                    sign = '+';
+                } else {
+                    colorClass = 'text-slate-200';
+                    sign = '-';
+                }
+                
+                // Si es cuenta USD, mostramos movimientos mock en USD, si no en ARS (adaptación visual)
+                const displayAmount = isUsdReal ? (mov.amount / 1000) : mov.amount; 
+                const currencySym = isUsdReal ? 'USD' : 'ARS';
+
+                list.innerHTML += `
+                    <div class="px-6 py-4 flex items-center justify-between hover:bg-white/5 transition">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-full ${mov.type === 'interest' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700 text-slate-300'} flex items-center justify-center text-xs">
+                                ${mov.type === 'interest' ? '📈' : (mov.type === 'income' ? '↓' : '↑')}
+                            </div>
+                            <div>
+                                <div class="text-sm font-medium text-white">${mov.concept}</div>
+                                <div class="text-xs text-slate-500">${mov.date}</div>
+                            </div>
+                        </div>
+                        <div class="font-mono text-sm font-bold ${colorClass}">
+                            ${sign}${fmtMoney(displayAmount, currencySym)}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // --- 5. INTERACTION HANDLERS ---
+
+        function toggleAccordion(walletId) {
+            const content = document.getElementById(`acc-${walletId}`);
+            const arrow = document.getElementById(`arrow-${walletId}`);
+            
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                arrow.style.transform = 'rotate(180deg)';
+            } else {
+                content.classList.add('hidden');
+                arrow.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // TNA Editing Logic
+        const btnEditTna = document.getElementById('btn-edit-tna');
+        const displayContainer = document.getElementById('tna-display-container');
+        const editContainer = document.getElementById('tna-edit-container');
+        const btnSaveTna = document.getElementById('btn-save-tna');
+        const inputTna = document.getElementById('input-tna');
+
+        btnEditTna.addEventListener('click', () => {
+            const wallet = walletsData.find(w => w.id === router.currentWalletId);
+            const account = wallet.accounts[router.currentAccountIdx];
+            if(account.currency !== 'ARS') {
+                alert('Solo editable para cuentas en ARS en este prototipo.');
+                return;
+            }
+
+            displayContainer.classList.add('hidden');
+            editContainer.classList.remove('hidden');
+            inputTna.focus();
+        });
+
+        btnSaveTna.addEventListener('click', () => {
+            const newVal = parseFloat(inputTna.value);
+            if (!isNaN(newVal) && newVal >= 0) {
+                // Update Data
+                const wallet = walletsData.find(w => w.id === router.currentWalletId);
+                const account = wallet.accounts[router.currentAccountIdx];
+                account.tna = newVal;
+                
+                // Persist
+                localStorage.setItem(`argfolio_tna_${wallet.id}_${account.type.split('_')[0]}`, newVal);
+
+                // Re-render
+                renderDetail(router.currentWalletId, router.currentAccountIdx);
+            }
+            displayContainer.classList.remove('hidden');
+            editContainer.classList.add('hidden');
+        });
+
+        // Drawer Logic
+        function toggleDrawer() {
+            const drawer = document.getElementById('drawer-help');
+            const overlay = document.getElementById('drawer-overlay');
+            
+            if (drawer.classList.contains('translate-x-full')) {
+                drawer.classList.remove('translate-x-full');
+                overlay.classList.remove('hidden');
+                setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+            } else {
+                drawer.classList.add('translate-x-full');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => overlay.classList.add('hidden'), 300);
+            }
+        }
+
+        // Init
+        document.addEventListener('DOMContentLoaded', () => {
+            renderOverview();
+        });
+
+    </script>
+</body>
+</html>

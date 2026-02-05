@@ -178,6 +178,7 @@ export function useComputedPortfolio() {
                 stableFx,
                 cashBalances: cashLedger.balances,
                 openingBalances: cashLedger.openingBalances,
+                accountsById: accounts,
                 realizedPnLArs: realizedPnLResult.realizedArs,
                 realizedPnLUsd: realizedPnLResult.realizedUsd,
                 realizedPnLByAccount: realizedPnLResult.byAccount,

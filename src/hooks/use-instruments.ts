@@ -10,7 +10,7 @@ export function useInstruments() {
 }
 
 export function useAccounts() {
-    return useQuery({
+    return useQuery<Account[]>({
         queryKey: ['accounts'],
         queryFn: () => accountsRepo.list(),
     })
@@ -45,6 +45,21 @@ export function useCreateAccount() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['accounts'] })
+        },
+    })
+}
+
+export function useUpdateAccount() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async ({ id, updates }: { id: string; updates: Partial<Account> }) => {
+            await accountsRepo.update(id, updates)
+            return { id, ...updates }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['accounts'] })
+            queryClient.invalidateQueries({ queryKey: ['portfolio'] })
         },
     })
 }

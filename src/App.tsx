@@ -9,6 +9,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { DashboardPage } from '@/pages/dashboard'
 import { AssetsPage } from '@/pages/assets'
 import { AssetsPageV2 } from '@/pages/assets-v2'
+import { WalletDetailPage } from '@/pages/wallet-detail'
 import { AssetDetailPage } from '@/pages/asset-detail'
 import { MovementsPageV2 as MovementsPage } from '@/pages/movements/index'
 import { HistoryPage } from '@/pages/history'
@@ -105,6 +106,15 @@ function App() {
                                                 element={
                                                     <ErrorBoundary>
                                                         <AssetsPageV2 />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* Wallet Detail - Subpage */}
+                                            <Route
+                                                path="/mis-activos-v2/billeteras/:accountId"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <WalletDetailPage />
                                                     </ErrorBoundary>
                                                 }
                                             />

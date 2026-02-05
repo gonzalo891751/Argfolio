@@ -8,6 +8,7 @@ import type {
     AssetCategory,
     Currency,
     Instrument,
+    Account,
 } from '@/domain/types'
 
 const categoryLabels: Record<AssetCategory, string> = {
@@ -33,6 +34,8 @@ interface ComputeTotalsInput {
     stableFx: FxType
     cashBalances: Map<string, Map<string, number>>
     openingBalances?: Map<string, Map<string, number>>
+    /** Optional map to resolve real account objects for cash injection (prevents placeholder name 'Account'). */
+    accountsById?: Map<string, Account>
     realizedPnLArs: number
     realizedPnLUsd: number
     realizedPnLByAccount: Record<string, { ars: number; usd: number }>
@@ -46,7 +49,7 @@ import { computeExposure } from './currencyExposure'
  * Compute portfolio totals including ARS/USD values, liquidity, and category breakdown.
  */
 export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
-    const { holdings, currentPrices, priceChanges, fxRates, cashBalances, openingBalances, realizedPnLArs, realizedPnLUsd, realizedPnLByAccount } = input
+    const { holdings, currentPrices, priceChanges, fxRates, cashBalances, openingBalances, accountsById, realizedPnLArs, realizedPnLUsd, realizedPnLByAccount } = input
 
     // Aggregate holdings by instrument
     const aggregatedMap = new Map<string, HoldingAggregated>()
@@ -121,7 +124,7 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 instrumentId,
                 accountId,
                 instrument,
-                account: { id: accountId, name: 'Account', kind: 'BROKER', defaultCurrency: 'ARS' }, // Mock account object if needed
+                account: accountsById?.get(accountId) ?? { id: accountId, name: 'Account', kind: 'BROKER', defaultCurrency: 'ARS' }, // Mock account object if needed
                 quantity: balance,
                 costBasisNative: balance,
                 costBasisArs: isArs ? balance : 0, // Simplified: ARS cost of USD is unknown here without history

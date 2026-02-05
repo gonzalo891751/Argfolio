@@ -88,9 +88,10 @@ export function useAccountSettings() {
                 .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                 .join(' ')
 
-            // If ID looks like a UUID or hash, use generic fallback
+            // If ID looks like a UUID or hash, create friendly fallback with last 4 chars
             if (accountId.length > 20 || /^[a-f0-9-]{20,}$/i.test(accountId)) {
-                return 'Cuenta sin nombre'
+                const suffix = accountId.slice(-4).toUpperCase()
+                return `Liquidez ${suffix}`
             }
 
             return humanized
@@ -188,9 +189,10 @@ export function resolveDisplayName(
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ')
 
-    // If ID looks like a UUID or hash, use generic fallback
+    // If ID looks like a UUID or hash, create friendly fallback with last 4 chars
     if (accountId.length > 20 || /^[a-f0-9-]{20,}$/i.test(accountId)) {
-        return 'Cuenta sin nombre'
+        const suffix = accountId.slice(-4).toUpperCase()
+        return `Liquidez ${suffix}`
     }
 
     return humanized

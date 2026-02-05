@@ -134,7 +134,7 @@ function getDisplayName(
     const override = settingsMap.get(accountId)?.displayNameOverride
     if (override?.trim()) return override.trim()
 
-    // 2. Check account name
+    // 2. Check account name (excluding generic placeholders)
     const name = accountName?.trim()
     if (name && name !== 'Account' && name !== 'account' && name.length > 0) {
         return name
@@ -146,9 +146,10 @@ function getDisplayName(
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ')
 
-    // If ID looks like a UUID or hash, use generic fallback
+    // 4. If ID looks like a UUID or hash, create friendly fallback with last 4 chars
     if (accountId.length > 20 || /^[a-f0-9-]{20,}$/i.test(accountId)) {
-        return 'Cuenta sin nombre'
+        const suffix = accountId.slice(-4).toUpperCase()
+        return `Liquidez ${suffix}`
     }
 
     return humanized
@@ -158,10 +159,59 @@ function getDisplayName(
 const ZERO_BALANCE_THRESHOLD = 1
 
 /** Check if item has significant value (not near zero) */
-function hasSignificantValue(valArs: number, qty?: number): boolean {
-    // If qty > 0, always show (for crypto/cedears with tiny ARS value)
-    if (qty && qty > 0) return true
+function hasSignificantValue(valArs: number, qty?: number, category?: string): boolean {
+    // For CASH items, always require significant ARS value (no qty bypass)
+    if (category === 'CASH_ARS') {
+        return Math.abs(valArs) >= ZERO_BALANCE_THRESHOLD
+    }
+    // For CASH_USD, allow qty-based significance so USD-only rows don't disappear if FX/valArs is missing
+    if (category === 'CASH_USD') {
+        const qtyUsd = qty ?? 0
+        return Math.abs(valArs) >= ZERO_BALANCE_THRESHOLD || Math.abs(qtyUsd) >= 0.01
+    }
+    // For tradeable assets (CEDEAR/CRYPTO/etc), show if qty > 0 AND valArs >= threshold
+    // This prevents showing $0 rows for assets without price data
+    if (qty && qty > 0 && Math.abs(valArs) >= ZERO_BALANCE_THRESHOLD) {
+        return true
+    }
     return Math.abs(valArs) >= ZERO_BALANCE_THRESHOLD
+}
+
+function resolveAccountTnaPct(
+    accountId: string,
+    account: Account | undefined,
+    settingsMap: Map<string, AccountSettings>
+): number | null {
+    const override = settingsMap.get(accountId)?.tnaOverride
+    if (typeof override === 'number' && override > 0) return override
+    const tna = account?.cashYield?.tna
+    if (typeof tna === 'number' && tna > 0) return tna
+    return null
+}
+
+function maybePromoteArsCashToYieldItem(
+    item: ItemV2,
+    accountId: string,
+    account: Account | undefined,
+    settingsMap: Map<string, AccountSettings>
+): ItemV2 {
+    if (item.kind !== 'cash_ars') return item
+    if (!account?.cashYield?.enabled) return item
+    if (account.cashYield.currency !== 'ARS') return item
+
+    const tnaPct = resolveAccountTnaPct(accountId, account, settingsMap)
+    if (!tnaPct) return item
+
+    return {
+        ...item,
+        kind: 'wallet_yield',
+        label: 'Cuenta remunerada',
+        yieldMeta: {
+            tna: tnaPct,
+            tea: computeTEA(tnaPct),
+            lastAccruedISO: account.cashYield.lastAccruedDate,
+        },
+    }
 }
 
 // =============================================================================
@@ -224,12 +274,23 @@ function buildProviderFromGroup(
     accountId: string,
     accountName: string,
     metrics: AssetRowMetrics[],
-    settingsMap: Map<string, AccountSettings>
-): ProviderV2 {
+    settingsMap: Map<string, AccountSettings>,
+    account?: Account
+): ProviderV2 | null {
     // Filter out zero-balance items
-    const filteredMetrics = metrics.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity))
+    const filteredMetrics = metrics.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity, m.category))
+    if (filteredMetrics.length === 0) return null
     const items: ItemV2[] = filteredMetrics.map(m => buildItemFromMetrics(m, accountId))
     const displayName = getDisplayName(accountId, accountName, settingsMap)
+
+    // Attach yield metadata for remunerated ARS cash (so ItemRow can render TNA chip)
+    const enrichedItems = items.map((it, idx) => {
+        const m = filteredMetrics[idx]
+        if (m.category === 'CASH_ARS') {
+            return maybePromoteArsCashToYieldItem(it, accountId, account, settingsMap)
+        }
+        return it
+    })
 
     // Calculate totals from filtered items
     const totals = {
@@ -244,7 +305,7 @@ function buildProviderFromGroup(
         name: displayName,
         totals: { ars: totals.valArs, usd: totals.valUsd },
         pnl: { ars: totals.pnlArs, usd: totals.pnlUsd },
-        items,
+        items: enrichedItems,
     }
 }
 
@@ -298,7 +359,7 @@ export function buildRubros(
                     m => m.category === 'CASH_ARS' || m.category === 'CASH_USD'
                 )
                 // Filter out zero balances
-                const filteredCashItems = cashItems.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity))
+                const filteredCashItems = cashItems.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity, m.category))
                 if (filteredCashItems.length === 0) continue
 
                 const itemsTotals = {
@@ -391,70 +452,105 @@ export function buildRubros(
                 const account = accountMap.get(accountId)
 
                 // ==========================================================
-                // BILLETERAS: Only WALLET/BANK kinds (not exchange/broker)
+                // BILLETERAS: WALLET/BANK + cash from brokers/exchanges
                 // ==========================================================
                 if (config.id === 'wallets') {
                     const rubroOverride = settingsMap.get(accountId)?.rubroOverride
-                    // Skip if not a wallet-type account
-                    if (!isWalletForBilleteras(account, rubroOverride)) continue
 
-                    // Only include cash categories
-                    const matchingMetrics = group.metrics.filter(m =>
-                        config.categories.includes(m.category)
-                    )
-                    if (matchingMetrics.length === 0) continue
-
-                    const itemsTotals = {
-                        valArs: matchingMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
-                        valUsd: matchingMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-                        pnlArs: matchingMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-                        pnlUsd: matchingMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
-                    }
-
-                    const provider = buildProviderFromGroup(
-                        accountId,
-                        group.accountName,
-                        matchingMetrics,
-                        settingsMap
-                    )
-
-                    providers.push(provider)
-                    rubroTotals.ars += itemsTotals.valArs
-                    rubroTotals.usd += itemsTotals.valUsd
-                    rubroPnl.ars += itemsTotals.pnlArs
-                    rubroPnl.usd += itemsTotals.pnlUsd
-                    continue
-                }
-
-                // ==========================================================
-                // CRIPTO: Exchange accounts get ALL their items here  
-                // ==========================================================
-                if (config.id === 'crypto') {
-                    // For exchange accounts: include EVERYTHING (crypto + cash)
-                    if (isExchange(account)) {
-                        // All items from exchange go to Cripto
-                        const allMetrics = group.metrics
-                        if (allMetrics.length === 0) continue
-
-                        const itemsTotals = {
-                            valArs: allMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
-                            valUsd: allMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-                            pnlArs: allMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-                            pnlUsd: allMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
-                        }
+                    // Case A: Standard wallet/bank accounts - include all their cash
+                    if (isWalletForBilleteras(account, rubroOverride)) {
+                        const matchingMetrics = group.metrics.filter(m =>
+                            config.categories.includes(m.category)
+                        )
+                        if (matchingMetrics.length === 0) continue
 
                         const provider = buildProviderFromGroup(
                             accountId,
                             group.accountName,
-                            allMetrics,
-                            settingsMap
+                            matchingMetrics,
+                            settingsMap,
+                            account
                         )
+                        if (!provider) continue
+
+                        providers.push(provider)
+                        rubroTotals.ars += provider.totals.ars
+                        rubroTotals.usd += provider.totals.usd
+                        rubroPnl.ars += provider.pnl.ars
+                        rubroPnl.usd += provider.pnl.usd
+                        continue
+                    }
+
+                    // Case B: Broker/Exchange accounts - extract ONLY their cash items
+                    if (isBroker(account) || isExchange(account)) {
+                        const cashMetrics = group.metrics.filter(m =>
+                            (m.category === 'CASH_ARS' || m.category === 'CASH_USD') &&
+                            hasSignificantValue(m.valArs ?? 0, m.quantity, m.category)
+                        )
+                        if (cashMetrics.length === 0) continue
+
+                        const itemsTotals = {
+                            valArs: cashMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
+                            valUsd: cashMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
+                            pnlArs: cashMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
+                            pnlUsd: cashMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
+                        }
+
+                        // Create provider with suffix to differentiate from main rubro
+                        const providerName = getDisplayName(accountId, account?.name, settingsMap)
+                        const items = cashMetrics.map(m => {
+                            const base = buildItemFromMetrics(m, accountId)
+                            if (m.category === 'CASH_ARS') {
+                                return maybePromoteArsCashToYieldItem(base, accountId, account, settingsMap)
+                            }
+                            return base
+                        })
+                        const provider: ProviderV2 = {
+                            id: `${accountId}-cash`,
+                            name: `${providerName} (Liquidez)`,
+                            totals: { ars: itemsTotals.valArs, usd: itemsTotals.valUsd },
+                            pnl: { ars: itemsTotals.pnlArs, usd: itemsTotals.pnlUsd },
+                            items,
+                        }
 
                         providers.push(provider)
                         rubroTotals.ars += itemsTotals.valArs
                         rubroTotals.usd += itemsTotals.valUsd
                         rubroPnl.ars += itemsTotals.pnlArs
                         rubroPnl.usd += itemsTotals.pnlUsd
+                        continue
+                    }
+
+                    // Other account types: skip for wallets rubro
+                    continue
+                }
+
+                // ==========================================================
+                // CRIPTO: Exchange accounts get crypto items (cash goes to Billeteras)
+                // ==========================================================
+                if (config.id === 'crypto') {
+                    // For exchange accounts: include crypto/stable items, EXCLUDE cash
+                    if (isExchange(account)) {
+                        // Filter out cash items (they go to Billeteras)
+                        const cryptoMetrics = group.metrics.filter(m =>
+                            m.category !== 'CASH_ARS' && m.category !== 'CASH_USD'
+                        )
+                        if (cryptoMetrics.length === 0) continue
+
+                        const provider = buildProviderFromGroup(
+                            accountId,
+                            group.accountName,
+                            cryptoMetrics,
+                            settingsMap,
+                            account
+                        )
+                        if (!provider) continue
+
+                        providers.push(provider)
+                        rubroTotals.ars += provider.totals.ars
+                        rubroTotals.usd += provider.totals.usd
+                        rubroPnl.ars += provider.pnl.ars
+                        rubroPnl.usd += provider.pnl.usd
                     } else {
                         // For non-exchange accounts, only CRYPTO/STABLE categories
                         const matchingMetrics = group.metrics.filter(m =>
@@ -462,57 +558,50 @@ export function buildRubros(
                         )
                         if (matchingMetrics.length === 0) continue
 
-                        const itemsTotals = {
-                            valArs: matchingMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
-                            valUsd: matchingMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-                            pnlArs: matchingMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-                            pnlUsd: matchingMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
-                        }
-
                         const provider = buildProviderFromGroup(
                             accountId,
                             group.accountName,
                             matchingMetrics,
-                            settingsMap
+                            settingsMap,
+                            account
                         )
+                        if (!provider) continue
 
                         providers.push(provider)
-                        rubroTotals.ars += itemsTotals.valArs
-                        rubroTotals.usd += itemsTotals.valUsd
-                        rubroPnl.ars += itemsTotals.pnlArs
-                        rubroPnl.usd += itemsTotals.pnlUsd
+                        rubroTotals.ars += provider.totals.ars
+                        rubroTotals.usd += provider.totals.usd
+                        rubroPnl.ars += provider.pnl.ars
+                        rubroPnl.usd += provider.pnl.usd
                     }
                     continue
                 }
 
                 // ==========================================================
-                // CEDEARS: Broker accounts get ALL their items here
+                // CEDEARS: Broker accounts get cedear items (cash goes to Billeteras)
                 // ==========================================================
                 if (config.id === 'cedears') {
-                    // For broker accounts: include EVERYTHING (cedears + cash)
+                    // For broker accounts: include cedear/stock items, EXCLUDE cash
                     if (isBroker(account)) {
-                        const allMetrics = group.metrics
-                        if (allMetrics.length === 0) continue
-
-                        const itemsTotals = {
-                            valArs: allMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
-                            valUsd: allMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-                            pnlArs: allMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-                            pnlUsd: allMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
-                        }
+                        // Filter out cash items (they go to Billeteras)
+                        const cedearMetrics = group.metrics.filter(m =>
+                            m.category !== 'CASH_ARS' && m.category !== 'CASH_USD'
+                        )
+                        if (cedearMetrics.length === 0) continue
 
                         const provider = buildProviderFromGroup(
                             accountId,
                             group.accountName,
-                            allMetrics,
-                            settingsMap
+                            cedearMetrics,
+                            settingsMap,
+                            account
                         )
+                        if (!provider) continue
 
                         providers.push(provider)
-                        rubroTotals.ars += itemsTotals.valArs
-                        rubroTotals.usd += itemsTotals.valUsd
-                        rubroPnl.ars += itemsTotals.pnlArs
-                        rubroPnl.usd += itemsTotals.pnlUsd
+                        rubroTotals.ars += provider.totals.ars
+                        rubroTotals.usd += provider.totals.usd
+                        rubroPnl.ars += provider.pnl.ars
+                        rubroPnl.usd += provider.pnl.usd
                     } else {
                         // For non-broker accounts, only CEDEAR category
                         const matchingMetrics = group.metrics.filter(m =>
@@ -520,25 +609,20 @@ export function buildRubros(
                         )
                         if (matchingMetrics.length === 0) continue
 
-                        const itemsTotals = {
-                            valArs: matchingMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
-                            valUsd: matchingMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-                            pnlArs: matchingMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-                            pnlUsd: matchingMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
-                        }
-
                         const provider = buildProviderFromGroup(
                             accountId,
                             group.accountName,
                             matchingMetrics,
-                            settingsMap
+                            settingsMap,
+                            account
                         )
+                        if (!provider) continue
 
                         providers.push(provider)
-                        rubroTotals.ars += itemsTotals.valArs
-                        rubroTotals.usd += itemsTotals.valUsd
-                        rubroPnl.ars += itemsTotals.pnlArs
-                        rubroPnl.usd += itemsTotals.pnlUsd
+                        rubroTotals.ars += provider.totals.ars
+                        rubroTotals.usd += provider.totals.usd
+                        rubroPnl.ars += provider.pnl.ars
+                        rubroPnl.usd += provider.pnl.usd
                     }
                     continue
                 }
@@ -552,25 +636,20 @@ export function buildRubros(
                 )
                 if (matchingMetrics.length === 0) continue
 
-                const itemsTotals = {
-                    valArs: matchingMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
-                    valUsd: matchingMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-                    pnlArs: matchingMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-                    pnlUsd: matchingMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
-                }
-
                 const provider = buildProviderFromGroup(
                     accountId,
                     group.accountName,
                     matchingMetrics,
-                    settingsMap
+                    settingsMap,
+                    account
                 )
+                if (!provider) continue
 
                 providers.push(provider)
-                rubroTotals.ars += itemsTotals.valArs
-                rubroTotals.usd += itemsTotals.valUsd
-                rubroPnl.ars += itemsTotals.pnlArs
-                rubroPnl.usd += itemsTotals.pnlUsd
+                rubroTotals.ars += provider.totals.ars
+                rubroTotals.usd += provider.totals.usd
+                rubroPnl.ars += provider.pnl.ars
+                rubroPnl.usd += provider.pnl.usd
             }
         }
 

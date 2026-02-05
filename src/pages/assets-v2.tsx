@@ -10,7 +10,8 @@
  * - No flickering (accrual moved to global scheduler)
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
 import { usePortfolioV2, type RubroV2, type ProviderV2, type ItemV2 } from '@/features/portfolioV2'
@@ -22,6 +23,8 @@ import {
     BarChart3,
     Bitcoin,
     TrendingUp,
+    Landmark,
+    DollarSign,
     ChevronDown,
     ChevronRight,
     Settings,
@@ -53,6 +56,8 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 export function AssetsPageV2() {
     const portfolio = usePortfolioV2()
     const { calculateVNR } = useProviderSettings()
+    const navigate = useNavigate()
+    const location = useLocation()
 
     // UI State
     const [expandedRubros, setExpandedRubros] = useState<Set<string>>(new Set())
@@ -63,6 +68,55 @@ export function AssetsPageV2() {
     const [grouping, setGrouping] = useState<'rubros' | 'cuentas'>('rubros')
     const [showSettingsModal, setShowSettingsModal] = useState(false)
     const [settingsProviderId, setSettingsProviderId] = useState<string | null>(null)
+    const didInitWalletsExpand = useRef(false)
+    const didLogDebug = useRef(false)
+
+    const debug = useMemo(() => {
+        return new URLSearchParams(location.search).get('debug') === '1'
+    }, [location.search])
+
+    // Default UX: keep Billeteras expanded (rubro + providers) on first load
+    useEffect(() => {
+        if (!portfolio || portfolio.isLoading) return
+        if (didInitWalletsExpand.current) return
+
+        const wallets = portfolio.rubros.find(r => r.id === 'wallets')
+        if (wallets) {
+            setExpandedRubros(prev => {
+                const next = new Set(prev)
+                next.add('wallets')
+                return next
+            })
+            setExpandedProviders(prev => {
+                const next = new Set(prev)
+                wallets.providers.forEach(p => next.add(p.id))
+                return next
+            })
+        }
+
+        didInitWalletsExpand.current = true
+    }, [portfolio])
+
+    // Optional dev-only debug: /mis-activos-v2?debug=1
+    useEffect(() => {
+        if (!debug) return
+        if (!portfolio || portfolio.isLoading) return
+        if (didLogDebug.current) return
+
+        const wallets = portfolio.rubros.find(r => r.id === 'wallets')
+        if (wallets) {
+            console.table(wallets.providers.map(p => ({
+                providerId: p.id,
+                providerName: p.name,
+                baseAccountId: p.id.replace(/-cash$/, ''),
+                totalArs: p.totals.ars,
+                totalUsd: p.totals.usd,
+                items: p.items.length,
+            })))
+        }
+
+        didLogDebug.current = true
+    }, [debug, portfolio])
 
     // Toggle helpers
     const toggleRubro = (id: string) => {
@@ -84,6 +138,15 @@ export function AssetsPageV2() {
     }
 
     const openItemDetail = (item: ItemV2, provider: ProviderV2) => {
+        // For wallet/cash items, navigate to detail subpage
+        const isWalletOrCash = item.kind === 'wallet_yield' || item.kind === 'cash_ars' || item.kind === 'cash_usd'
+        if (isWalletOrCash) {
+            // Use accountId from item, falling back to provider id (removing -cash suffix if present)
+            const accountId = item.accountId || provider.id.replace(/-cash$/, '')
+            navigate(`/mis-activos-v2/billeteras/${accountId}?kind=${item.kind}`)
+            return
+        }
+        // For other items, use overlay
         setSelectedItem(item)
         setSelectedProvider(provider)
     }
@@ -435,6 +498,10 @@ function ProviderSection({
     onItemClick,
     onSettings,
 }: ProviderSectionProps) {
+    const isUsdPrimary = Math.abs(provider.totals.ars) < 1 && Math.abs(provider.totals.usd) >= 0.01
+    const primary = isUsdPrimary ? formatMoneyUSD(provider.totals.usd) : formatMoneyARS(provider.totals.ars)
+    const secondary = isUsdPrimary ? formatMoneyARS(provider.totals.ars) : formatMoneyUSD(provider.totals.usd)
+
     return (
         <div className="border-b border-border last:border-b-0">
             {/* Provider Header */}
@@ -452,7 +519,8 @@ function ProviderSection({
                 </button>
                 <div className="flex items-center gap-4">
                     <div className="text-right">
-                        <p className="font-mono text-sm">{formatMoneyARS(provider.totals.ars)}</p>
+                        <p className="font-mono text-sm font-semibold">{primary}</p>
+                        <p className="text-xs text-muted-foreground font-mono">≈ {secondary}</p>
                     </div>
                     <button
                         onClick={(e) => {
@@ -493,27 +561,55 @@ interface ItemRowProps {
 }
 
 function ItemRow({ item, onClick }: ItemRowProps) {
+    const isWalletOrCash = item.kind === 'wallet_yield' || item.kind === 'cash_ars' || item.kind === 'cash_usd'
+    const isUsdCash = item.kind === 'cash_usd'
+    const hasTna = item.yieldMeta?.tna && item.yieldMeta.tna > 0
+    const hasSecondary = isUsdCash ? Math.abs(item.valArs) >= 1 : Math.abs(item.valUsd) >= 0.01
+
     return (
         <button
             onClick={onClick}
-            className="w-full flex items-center justify-between px-6 py-3 hover:bg-muted/30 transition-colors text-left"
+            className="w-full flex items-center justify-between px-6 py-3 hover:bg-muted/30 transition-colors text-left group"
         >
             <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                    {item.symbol.slice(0, 2)}
+                <div className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold",
+                    isUsdCash ? "bg-emerald-500/10 text-emerald-400" :
+                        isWalletOrCash ? "bg-sky-500/10 text-sky-400" : "bg-muted"
+                )}>
+                    {isWalletOrCash ? (
+                        isUsdCash ? <DollarSign className="h-4 w-4" /> : <Landmark className="h-4 w-4" />
+                    ) : item.symbol.slice(0, 2)}
                 </div>
                 <div>
-                    <p className="font-medium text-sm">{item.label}</p>
-                    {item.qty && (
-                        <p className="text-xs text-muted-foreground">
-                            {item.qty.toLocaleString('es-AR', { maximumFractionDigits: 4 })} unidades
-                        </p>
-                    )}
+                    <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm group-hover:text-primary transition-colors">{item.label}</p>
+                        {/* TNA Chip */}
+                        {hasTna && (
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                TNA {item.yieldMeta!.tna}%
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        {isUsdCash ? 'Tenencia en USD' : isWalletOrCash ? 'Liquidez inmediata' :
+                         item.qty ? `${item.qty.toLocaleString('es-AR', { maximumFractionDigits: 4 })} unidades` : ''}
+                    </p>
                 </div>
             </div>
             <div className="text-right">
-                <p className="font-mono text-sm">{formatMoneyARS(item.valArs)}</p>
-                {item.pnlPct !== undefined && (
+                {/* Primary value */}
+                <p className="font-mono text-base font-semibold">
+                    {isUsdCash ? formatMoneyUSD(item.valUsd) : formatMoneyARS(item.valArs)}
+                </p>
+                {/* Secondary value (dual-currency) or PnL */}
+                {isWalletOrCash ? (
+                    hasSecondary ? (
+                        <p className="text-xs text-muted-foreground font-mono">
+                            ≈ {isUsdCash ? formatMoneyARS(item.valArs) : formatMoneyUSD(item.valUsd)}
+                        </p>
+                    ) : null
+                ) : item.pnlPct !== undefined && (
                     <p className={cn(
                         "text-xs font-mono",
                         (item.pnlPct ?? 0) >= 0 ? "text-green-500" : "text-red-500"

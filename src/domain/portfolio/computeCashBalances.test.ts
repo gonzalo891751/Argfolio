@@ -103,6 +103,7 @@ describe('cash ledger + portfolio integration', () => {
             baseFx: 'MEP',
             stableFx: 'CRIPTO',
             cashBalances: new Map(),
+            accountsById: accountsMap,
             realizedPnLArs: 0,
             realizedPnLUsd: 0,
             realizedPnLByAccount: {},
@@ -118,6 +119,7 @@ describe('cash ledger + portfolio integration', () => {
             stableFx: 'CRIPTO',
             cashBalances: ledger.balances,
             openingBalances: ledger.openingBalances,
+            accountsById: accountsMap,
             realizedPnLArs: 0,
             realizedPnLUsd: 0,
             realizedPnLByAccount: {},
@@ -128,6 +130,13 @@ describe('cash ledger + portfolio integration', () => {
         expect(totalsOn.exposure.pctArs).toBeLessThanOrEqual(1)
         expect(totalsOn.exposure.pctUsd).toBeGreaterThanOrEqual(0)
         expect(totalsOn.exposure.pctUsd).toBeLessThanOrEqual(1)
+
+        // Cash injection should preserve real account naming when accountsById is provided
+        const arsCash = totalsOn.categories.find(c => c.category === 'ARS_CASH')
+        const iolArsCashHolding = arsCash?.items
+            .flatMap(i => i.byAccount)
+            .find(h => h.accountId === 'IOL')
+        expect(iolArsCashHolding?.account.name).toBe('InvertirOnline')
     })
 
     it('computes Carrefour cash from deposit + interest', () => {
