@@ -41,7 +41,7 @@ const STORAGE_KEY = 'argfolio-sidebar-collapsed'
 const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/market', label: 'Mercado', icon: TrendingUp },
-    { path: '/assets', label: 'Mis Activos', icon: Wallet },
+    { path: '/mis-activos-v2', label: 'Mis Activos', icon: Wallet },
     { path: '/movements', label: 'Movimientos', icon: ArrowLeftRight },
     { path: '/history', label: 'Historial', icon: History },
     { path: '/personal-finances', label: 'Finanzas', icon: CreditCard },

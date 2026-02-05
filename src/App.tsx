@@ -7,14 +7,12 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { AppLayout } from '@/components/layout/app-layout'
 import { DashboardPage } from '@/pages/dashboard'
-import { AssetsPage } from '@/pages/assets'
 import { AssetsPageV2 } from '@/pages/assets-v2'
 import { WalletDetailPage } from '@/pages/wallet-detail'
 import { PFDetailPage } from '@/pages/pf-detail'
 import { CryptoDetailPage } from '@/pages/crypto-detail'
 import { CedearDetailPage } from '@/pages/cedear-detail'
 import { FciDetailPage } from '@/pages/fci-detail'
-import { AssetDetailPage } from '@/pages/asset-detail'
 import { MovementsPageV2 as MovementsPage } from '@/pages/movements/index'
 import { HistoryPage } from '@/pages/history'
 import { PersonalFinancesPage } from '@/features/personal-finances'
@@ -88,22 +86,7 @@ function App() {
                                                     </ErrorBoundary>
                                                 }
                                             />
-                                            <Route
-                                                path="/assets"
-                                                element={
-                                                    <ErrorBoundary>
-                                                        <AssetsPage />
-                                                    </ErrorBoundary>
-                                                }
-                                            />
-                                            <Route
-                                                path="/assets/:instrumentId"
-                                                element={
-                                                    <ErrorBoundary>
-                                                        <AssetDetailPage />
-                                                    </ErrorBoundary>
-                                                }
-                                            />
+                                            <Route path="/assets/*" element={<Navigate to="/mis-activos-v2" replace />} />
                                             {/* Mis Activos V2 - New Implementation */}
                                             <Route
                                                 path="/mis-activos-v2"

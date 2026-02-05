@@ -45,6 +45,7 @@ import {
 } from 'lucide-react'
 import { useAutomationTrigger } from '@/hooks/use-automation-trigger'
 import { PreferencesSheet } from '@/components/PreferencesSheet'
+import { AssetsKpiTop } from '@/components/AssetsKpiTop'
 
 type FxOverrideMode = 'auto' | 'manual'
 
@@ -448,7 +449,7 @@ export function AssetsPageV2() {
             )}
 
             {/* KPI Dashboard */}
-            <KPIDashboard portfolio={portfolio} />
+            <AssetsKpiTop kpis={portfolio.kpis} fx={portfolio.fx} rubros={portfolio.rubros} />
 
             {/* Toolbar: View Toggle + Expand/Collapse + Actualizar ahora */}
             <div className="flex flex-wrap items-center gap-3">
@@ -708,91 +709,6 @@ export function AssetsPageV2() {
 
             {/* Preferences Sheet */}
             <PreferencesSheet open={showPreferences} onOpenChange={setShowPreferences} />
-        </div>
-    )
-}
-
-// =============================================================================
-// KPI Dashboard
-// =============================================================================
-
-interface KPIDashboardProps {
-    portfolio: NonNullable<ReturnType<typeof usePortfolioV2>>
-}
-
-function KPIDashboard({ portfolio }: KPIDashboardProps) {
-    const { kpis, fx } = portfolio
-
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Total Patrimonio */}
-            <div className="bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30 rounded-xl p-4">
-                <p className="text-xs uppercase text-muted-foreground mb-1">Patrimonio Total</p>
-                <p className="text-2xl font-bold font-mono">{formatMoneyARS(kpis.totalArs)}</p>
-                <p className="text-sm text-muted-foreground font-mono">
-                    ≈ {formatMoneyUSD(kpis.totalUsd)}
-                </p>
-            </div>
-
-            {/* Composición USD */}
-            <div className="bg-muted/50 border border-border rounded-xl p-4">
-                <p className="text-xs uppercase text-muted-foreground mb-2">Composición USD</p>
-                <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                        <span>USD Billete</span>
-                        <span className="font-mono">{formatPercent(kpis.pctUsdHard / 100)}</span>
-                    </div>
-                    <div className="h-2 bg-background rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-green-500 rounded-full transition-all"
-                            style={{ width: `${kpis.pctUsdHard}%` }}
-                        />
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                        <span>USD Equivalente</span>
-                        <span className="font-mono">{formatPercent(kpis.pctUsdEq / 100)}</span>
-                    </div>
-                    <div className="h-2 bg-background rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-blue-500 rounded-full transition-all"
-                            style={{ width: `${kpis.pctUsdEq}%` }}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* PnL */}
-            <div className="bg-muted/50 border border-border rounded-xl p-4">
-                <p className="text-xs uppercase text-muted-foreground mb-1">Resultado No Realizado</p>
-                <p className={cn(
-                    "text-2xl font-bold font-mono",
-                    kpis.pnlUnrealizedArs >= 0 ? "text-green-500" : "text-red-500"
-                )}>
-                    {kpis.pnlUnrealizedArs >= 0 ? '+' : ''}{formatMoneyARS(kpis.pnlUnrealizedArs)}
-                </p>
-                <p className="text-sm text-muted-foreground font-mono">
-                    ≈ {kpis.pnlUnrealizedUsd >= 0 ? '+' : ''}{formatMoneyUSD(kpis.pnlUnrealizedUsd)}
-                </p>
-            </div>
-
-            {/* FX Rates */}
-            <div className="bg-muted/50 border border-border rounded-xl p-4">
-                <p className="text-xs uppercase text-muted-foreground mb-2">Tipos de Cambio</p>
-                <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                        <span className="text-muted-foreground">Oficial</span>
-                        <span className="font-mono">${fx.officialSell.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-muted-foreground">MEP</span>
-                        <span className="font-mono">${fx.mepSell.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-muted-foreground">Cripto</span>
-                        <span className="font-mono">${fx.cryptoSell.toFixed(2)}</span>
-                    </div>
-                </div>
-            </div>
         </div>
     )
 }

@@ -45,6 +45,72 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-05 — Claude Opus 4.6 — Feat: KPI Dashboard Premium (4 Cards) para Mis Activos V2
+
+**Goal:** Implementar 4 KPI cards superiores en `/mis-activos-v2` replicando diseño del prototipo `Dash.html` (glass-panel, donut SVG, exposición ARS vs USD, P&L con badges), conectadas a datos reales del portfolioV2.
+
+**Scope touched:** `src/components/AssetsKpiTop.tsx` (NEW), `src/pages/assets-v2.tsx` (MODIFY).
+
+**Key Changes:**
+
+1. **Nuevo componente `AssetsKpiTop.tsx`:**
+   - **Card 1 — Patrimonio Total:** ARS grande + ≈USD, badge "CONSOLIDADO", tooltip "Cómo se calcula", footer con TC referencia (MEP)
+   - **Card 2 — Exposición Moneda:** Barra segmentada ARS vs USD/HARD con %, chips sky-500/emerald-500, footer con montos, tooltip explicando clasificación
+   - **Card 3 — Resultado (P&L):** P&L ARS y USD con badges dinámicos (GANANCIA/PÉRDIDA/NEUTRO), indicador vertical con glow, colores según signo
+   - **Card 4 — Distribución:** Donut SVG con 5 categorías (Billeteras, Plazos Fijos, CEDEARs, Cripto, Fondos), leyenda interactiva, hover tooltip con monto USD + %, centro dinámico
+
+2. **Exposición soft/hard clasificación:**
+   - **Soft ARS:** wallet ARS items + frascos ARS + plazos totals + FCI totals
+   - **Hard USD:** wallet USD items + crypto totals + cedears totals
+   - TC referencia: `fx.mepSell` para normalizar a USD equivalente
+   - Distinta del modelo de `buildKPIs` (que trata CEDEARs como ARS): Card 2 usa clasificación económica real
+
+3. **Donut distribución:**
+   - 5 categorías por rubroId (wallets+frascos → Billeteras, plazos, cedears, crypto, fci)
+   - SVG stroke-dasharray technique, sin libs de charts
+   - Hover: segment opacity fade + center text update + tooltip
+   - Zero-value slices filtradas
+
+4. **Integración en assets-v2.tsx:**
+   - Reemplaza `KPIDashboard` por `AssetsKpiTop`
+   - Props: `kpis`, `fx`, `rubros` (no full portfolio object)
+   - Old KPIDashboard function eliminada
+
+**Design Decisions:**
+- Glass-panel: `bg-[rgba(21,30,50,0.7)] backdrop-blur-[12px]` matching prototype exactly
+- Colors: sky-500 (ARS), emerald-500 (USD/success), rose-500 (danger), primary (indigo), amber/warning
+- Donut colors: `#0EA5E9` (wallets), `#3B82F6` (PF), `#10B981` (cedears), `#F59E0B` (crypto), `#6366F1` (FCI)
+- Tooltips: CSS-only hover (group-hover opacity/visibility transition), no JS tooltip lib
+- No new dependencies added
+- No changes to builder.ts or domain code
+
+**Files Changed:**
+- `src/components/AssetsKpiTop.tsx` — NEW: 4 KPI cards component (~310 lines)
+- `src/pages/assets-v2.tsx` — MODIFY: import AssetsKpiTop, replace KPIDashboard call, delete old KPIDashboard function
+
+**Validación:**
+- `npm test` ✅ (75/75)
+- `npm run build` ✅
+- TypeScript `tsc --noEmit` ✅
+
+**Checklist de aceptación:**
+- [x] 4 KPI cards con estilo glass-panel del prototipo
+- [x] Card 1: Patrimonio ARS + USD (mismos valores que antes)
+- [x] Card 2: Barra segmentada ARS% vs USD% + montos + tooltip
+- [x] Card 3: P&L ARS y USD con badges según signo + indicadores
+- [x] Card 4: Donut SVG con 5 categorías + leyenda + hover
+- [x] Sin dependencias nuevas de charts
+- [x] Build + tests pasan
+- [x] No se tocó builder.ts ni domain
+
+**Pendientes (nice-to-have):**
+- [ ] Modal "Cómo se calcula" más detallado (reusar panel existente)
+- [ ] Micro-animaciones de entrada (fade-in al mount)
+- [ ] FCI split ARS/USD en exposición (actualmente todo FCI → soft ARS)
+- [ ] Responsive fine-tuning para mobile (cards h-64 puede ser alto en pantallas chicas)
+
+---
+
 ### 2026-02-05 — Claude Opus 4.5 — Automatizaciones Configurables + UX Expand/Collapse
 
 **Goal:** Implementar automatizaciones configurables (intereses diarios en billeteras remuneradas + liquidación de plazos fijos al vencimiento), botones "Expandir/Colapsar todo" para Rubros/Cuentas, y un panel de preferencias para configurar estas automatizaciones.
@@ -964,3 +1030,27 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 2. Sincronizar el toggle de expansión para abrir ambos providers (Activo + Liquidez) simultáneamente.
 3. Habilitar metadata `cashYield` en cuentas faltantes.
 4. (Opcional) Renombrar "Saldo USD" a "Saldo Fiat" para reducir ambigüedad.
+
+### 2026-02-05 - Codex - Routing swap Mis Activos + cleanup legacy /assets
+**Objetivo:** Hacer que el menu izquierdo "Mis Activos" navegue a `/mis-activos-v2`, desactivar la UI legacy de `/assets` con redirect SPA, y eliminar paginas legacy del repo sin tocar logica de calculo (portfolioV2/FX/engine).
+
+**Archivos tocados:**
+- `src/components/layout/sidebar.tsx` - nav item "Mis Activos" ahora apunta a `/mis-activos-v2`.
+- `src/App.tsx` - se reemplazaron rutas legacy de `/assets` por redirect compatible `path="/assets/*"` -> `<Navigate to="/mis-activos-v2" replace />`.
+- `src/components/dashboard/category-card.tsx` - `linkTo` default actualizado de `/assets` a `/mis-activos-v2`.
+- `docs/AI_HANDOFF.md` - checkpoint agregado.
+
+**Archivos eliminados:**
+- `src/pages/assets.tsx` (pagina legacy Mis Activos).
+- `src/pages/asset-detail.tsx` (detalle legacy asociado a `/assets/:instrumentId`).
+
+**Como validar (comandos + expected):**
+- `npm test` -> OK (75/75 tests passing).
+- `npm run build` -> OK (build production exitoso).
+- `npm run lint` -> OK sin errores (warnings existentes del repo, sin nuevos errores).
+- Manual:
+  - Click en sidebar "Mis Activos" -> abre `/mis-activos-v2`.
+  - Navegar directo a `/assets` o `/assets/...` -> redirige a `/mis-activos-v2`.
+
+**Pendientes:**
+- `src/features/assets` no se elimina en este ticket porque sigue siendo dependencia activa de `src/features/portfolioV2/usePortfolioV2.ts` (`useAssetsRows`).

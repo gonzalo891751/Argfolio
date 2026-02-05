@@ -15,7 +15,7 @@ interface CategoryCardProps {
 export function CategoryCard({
     category,
     icon: Icon,
-    linkTo = '/assets',
+    linkTo = '/mis-activos-v2',
     maxItems = 4,
 }: CategoryCardProps) {
     // Auto-hide if no items

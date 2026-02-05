@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio - Mis Activos v2 (Prototipo)</title>
+    
+    <!-- FUENTES -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- TAILWIND CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- CONFIGURACIÓN DE TOKENS ARGFOLIO -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        background: '#0B1121',
+                        surface: '#151E32',
+                        surfaceHighlight: '#1E293B',
+                        primary: '#6366F1', // Indigo
+                        accent: '#0EA5E9',  // Sky
+                        success: '#10B981',
+                        danger: '#F43F5E',
+                        warning: '#F59E0B',
+                        borderSubtle: 'rgba(255,255,255,0.08)'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- ESTILOS CUSTOM (GLASSMORPHISM & UTILS) -->
+    <style>
+        body {
+            background-color: #0B1121;
+            color: #E2E8F0;
+        }
+        
+        /* Glass Effect */
+        .glass-panel {
+            background: rgba(21, 30, 50, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Chart Animations */
+        .chart-transition {
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Tooltip Custom */
+        .custom-tooltip {
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.2s ease;
+        }
+        
+        .has-tooltip:hover .custom-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        /* Input Range Styles */
+        input[type=number]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+        }
+        
+        /* Scrollbar aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0B1121; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1E293B; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6366F1; 
+        }
+    </style>
+
+    <!-- 
+    SUPUESTOS DEL PROTOTIPO:
+    1. CEDEARs/CDRs se ingresan como valor equivalente en USD para facilitar el cálculo de exposición dura.
+    2. Cripto se trata 100% como exposición USD (USDT/BTC).
+    3. Fondos (FCI) se separan explícitamente en inputs ARS y USD.
+    4. La distribución del Donut Chart se normaliza a una moneda base (USD) para comparar peras con peras.
+    -->
+</head>
+<body class="min-h-screen flex flex-col xl:flex-row overflow-x-hidden font-sans">
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="flex-1 p-4 md:p-8 flex flex-col gap-8 max-w-[1600px] mx-auto w-full">
+        
+        <!-- Header Simulado -->
+        <header class="flex justify-between items-center mb-2">
+            <div>
+                <div class="text-xs font-mono text-accent mb-1 tracking-wider">ARGFOLIO BETA</div>
+                <h1 class="text-3xl font-display font-bold text-white tracking-tight">Mis Activos <span class="text-gray-500 text-lg font-normal">v2.0</span></h1>
+            </div>
+            <div class="hidden md:flex gap-3">
+                <button class="px-4 py-2 rounded-full glass-panel text-sm hover:bg-white/5 transition border border-white/10 text-gray-300">
+                    Exportar
+                </button>
+                <button onclick="toggleModal('infoModal')" class="px-4 py-2 rounded-full bg-surfaceHighlight text-sm hover:bg-primary/20 hover:text-primary transition text-gray-300">
+                    ¿Cómo se calcula?
+                </button>
+            </div>
+        </header>
+
+        <!-- KPI GRID (DASHBOARD CORE) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+
+            <!-- CARD 1: PATRIMONIO TOTAL -->
+            <article class="glass-panel rounded-2xl p-6 relative group flex flex-col justify-between h-64">
+                <div>
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-gray-400 font-display text-sm uppercase tracking-wide">Patrimonio Total</h3>
+                        <span class="bg-primary/20 text-primary text-[10px] font-mono px-2 py-0.5 rounded-full border border-primary/20">CONSOLIDADO</span>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <span class="text-gray-500 text-2xl font-light mr-1">$</span>
+                        <span id="display-total-ars" class="text-4xl font-mono font-bold text-white tracking-tighter">0</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-gray-400">
+                        <span class="text-sm">≈ US$</span>
+                        <span id="display-total-usd" class="font-mono text-lg text-gray-300">0</span>
+                    </div>
+                </div>
+
+                <div class="mt-auto pt-4 border-t border-white/5">
+                    <p class="text-xs text-gray-500">
+                        Consolidado ARS + USD convertido al TC de referencia (<span id="ref-tc-label" class="text-accent">MEP</span>).
+                    </p>
+                </div>
+
+                <!-- Tooltip -->
+                <div class="custom-tooltip absolute top-2 right-2 w-64 p-4 glass-panel bg-[#0B1121]/95 rounded-xl border border-white/10 z-20 shadow-2xl">
+                    <p class="text-xs text-gray-300 mb-2 font-bold">Cálculo Patrimonio:</p>
+                    <ul class="text-[10px] text-gray-400 space-y-1 list-disc pl-3">
+                        <li>Suma activos en Pesos.</li>
+                        <li>Suma activos en Dólares (convertidos a ARS según TC).</li>
+                        <li>Total = ARS + (USD * TC).</li>
+                    </ul>
+                </div>
+            </article>
+
+            <!-- CARD 2: EXPOSICIÓN POR MONEDA -->
+            <article class="glass-panel rounded-2xl p-6 relative group has-tooltip flex flex-col justify-between h-64">
+                <div class="w-full">
+                    <h3 class="text-gray-400 font-display text-sm uppercase tracking-wide mb-6">Exposición Moneda</h3>
+                    
+                    <!-- Header Porcentajes -->
+                    <div class="flex justify-between items-end mb-2 font-mono">
+                        <div class="text-accent">
+                            <span class="text-xs">ARS</span>
+                            <div class="text-2xl font-bold" id="display-pct-ars">0%</div>
+                        </div>
+                        <div class="text-success text-right">
+                            <span class="text-xs">USD / HARD</span>
+                            <div class="text-2xl font-bold" id="display-pct-usd">0%</div>
+                        </div>
+                    </div>
+
+                    <!-- Visual Bar -->
+                    <div class="h-4 w-full bg-surfaceHighlight rounded-full overflow-hidden flex relative">
+                        <!-- ARS Segment -->
+                        <div id="bar-ars" class="h-full bg-accent chart-transition relative group/bar" style="width: 0%"></div>
+                        <!-- USD Segment -->
+                        <div id="bar-usd" class="h-full bg-success chart-transition relative group/bar" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Detalles Montos -->
+                <div class="mt-auto grid grid-cols-2 gap-4 pt-4 border-t border-white/5 text-xs">
+                    <div>
+                        <div class="text-gray-500 mb-1">Total ARS</div>
+                        <div id="display-exp-ars" class="font-mono text-gray-200">0</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-gray-500 mb-1">Total USD</div>
+                        <div id="display-exp-usd" class="font-mono text-gray-200">0</div>
+                    </div>
+                </div>
+
+                <!-- Tooltip Hover Barra -->
+                <div class="custom-tooltip absolute bottom-20 left-1/2 -translate-x-1/2 w-64 p-3 glass-panel bg-[#0B1121] rounded-xl z-20 pointer-events-none">
+                    <div class="text-[10px] text-gray-400">
+                        <span class="text-accent font-bold">ARS:</span> Billeteras, PF, FCI Pesos.<br>
+                        <span class="text-success font-bold">USD:</span> Cash, Crypto, CEDEARs, FCI USD.
+                    </div>
+                </div>
+            </article>
+
+            <!-- CARD 3: RESULTADO NO REALIZADO -->
+            <article class="glass-panel rounded-2xl p-6 relative has-tooltip flex flex-col justify-between h-64">
+                <div>
+                    <h3 class="text-gray-400 font-display text-sm uppercase tracking-wide mb-4">Resultado (P&L)</h3>
+                    
+                    <!-- P&L ARS ROW -->
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-500">En Pesos (ARS)</span>
+                            <span id="badge-pnl-ars" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-800 text-gray-400">NEUTRO</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="h-8 w-1 rounded-full bg-gray-700 transition-colors duration-300" id="indicator-pnl-ars"></div>
+                            <span id="display-pnl-ars" class="text-2xl font-mono font-medium text-white">0</span>
+                        </div>
+                    </div>
+
+                    <!-- P&L USD ROW -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-500">En Dólares (USD)</span>
+                            <span id="badge-pnl-usd" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-800 text-gray-400">NEUTRO</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="h-8 w-1 rounded-full bg-gray-700 transition-colors duration-300" id="indicator-pnl-usd"></div>
+                            <span id="display-pnl-usd" class="text-2xl font-mono font-medium text-white">0</span>
+                        </div>
+                    </div>
+                </div>
+                 
+                <!-- Tooltip -->
+                <div class="custom-tooltip absolute top-2 right-2 w-48 p-3 glass-panel bg-[#0B1121] rounded-xl z-20">
+                     <p class="text-[10px] text-gray-300">
+                        Diferencia entre valor actual y costo de adquisición. <br>
+                        <span class="text-gray-500">Calculado por separado para activos ARS y USD.</span>
+                     </p>
+                </div>
+            </article>
+
+            <!-- CARD 4: DISTRIBUCIÓN ACTIVOS -->
+            <article class="glass-panel rounded-2xl p-6 relative flex flex-col h-64">
+                <h3 class="text-gray-400 font-display text-sm uppercase tracking-wide mb-2 absolute top-6 left-6 z-10">Distribución</h3>
+                
+                <div class="flex items-center h-full gap-4">
+                    <!-- Donut Chart Container -->
+                    <div class="relative w-32 h-32 flex-shrink-0 mx-auto md:mx-0">
+                        <svg viewBox="0 0 100 100" class="w-full h-full -rotate-90">
+                            <!-- Background Circle -->
+                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#1E293B" stroke-width="12" />
+                            
+                            <!-- Segments (Generated via JS) -->
+                            <!-- Values: Wallets, PF, Cedears, Crypto, Funds -->
+                            <circle id="donut-segment-1" cx="50" cy="50" r="40" fill="transparent" stroke="#0EA5E9" stroke-width="12" stroke-dasharray="0 251" class="chart-transition hover:opacity-80 cursor-pointer" />
+                            <circle id="donut-segment-2" cx="50" cy="50" r="40" fill="transparent" stroke="#6366F1" stroke-width="12" stroke-dasharray="0 251" class="chart-transition hover:opacity-80 cursor-pointer" />
+                            <circle id="donut-segment-3" cx="50" cy="50" r="40" fill="transparent" stroke="#10B981" stroke-width="12" stroke-dasharray="0 251" class="chart-transition hover:opacity-80 cursor-pointer" />
+                            <circle id="donut-segment-4" cx="50" cy="50" r="40" fill="transparent" stroke="#F59E0B" stroke-width="12" stroke-dasharray="0 251" class="chart-transition hover:opacity-80 cursor-pointer" />
+                            <circle id="donut-segment-5" cx="50" cy="50" r="40" fill="transparent" stroke="#F43F5E" stroke-width="12" stroke-dasharray="0 251" class="chart-transition hover:opacity-80 cursor-pointer" />
+                        </svg>
+                        <!-- Center Text -->
+                        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span class="text-[10px] text-gray-500 font-mono">ASSETS</span>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div class="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                        <ul class="space-y-2 text-xs" id="legend-container">
+                            <!-- Populated by JS -->
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Dynamic Hover Tooltip for Donut -->
+                <div id="donut-tooltip" class="absolute hidden bg-[#0B1121] border border-white/20 p-2 rounded-lg pointer-events-none z-50 text-xs shadow-xl">
+                    <div id="dt-name" class="font-bold text-white">Cat</div>
+                    <div id="dt-value" class="font-mono text-gray-300">0</div>
+                    <div id="dt-pct" class="text-accent">0%</div>
+                </div>
+            </article>
+
+        </div>
+    </main>
+
+    <!-- SIDEBAR / CONTROL PANEL (INTERACTIVE INPUTS) -->
+    <aside class="w-full xl:w-96 bg-surface border-l border-white/5 p-6 flex flex-col gap-6 overflow-y-auto max-h-screen">
+        <div>
+            <h2 class="text-lg font-display font-bold text-white mb-1">Editor de Datos</h2>
+            <p class="text-xs text-gray-400">Modificá los valores para simular escenarios.</p>
+        </div>
+
+        <!-- Section: Configuración TC -->
+        <div class="space-y-3 pb-4 border-b border-white/5">
+            <label class="text-xs font-bold text-primary uppercase tracking-wider">Tipo de Cambio (Referencia)</label>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="col-span-2">
+                    <select id="input-tc-type" class="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary transition">
+                        <option value="oficial">Dólar Oficial</option>
+                        <option value="mep" selected>Dólar MEP</option>
+                        <option value="cripto">Dólar Cripto</option>
+                    </select>
+                </div>
+                <!-- Inputs for TC values -->
+                <div class="space-y-1">
+                    <label class="text-[10px] text-gray-500">Valor MEP</label>
+                    <input type="number" id="val-tc-mep" value="1180" class="w-full bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right focus:border-accent outline-none">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] text-gray-500">Valor Cripto</label>
+                    <input type="number" id="val-tc-cripto" value="1205" class="w-full bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right focus:border-accent outline-none">
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Activos ARS -->
+        <div class="space-y-3">
+            <label class="text-xs font-bold text-accent uppercase tracking-wider">Activos Pesos (ARS)</label>
+            <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <label class="text-xs text-gray-400">Billeteras / Cash</label>
+                    <input type="number" id="input-ars-wallet" value="450000" class="w-32 bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right text-white focus:border-accent outline-none hover:border-white/20 transition">
+                </div>
+                <div class="flex justify-between items-center">
+                    <label class="text-xs text-gray-400">Plazos Fijos</label>
+                    <input type="number" id="input-ars-pf" value="2500000" class="w-32 bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right text-white focus:border-accent outline-none hover:border-white/20 transition">
+                </div>
+                <div class="flex justify-between items-center">
+                    <label class="text-xs text-gray-400">FCI (Moneda $)</label>
+                    <input type="number" id="input-ars-fci" value="1200000" class="w-32 bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right text-white focus:border-accent outline-none hover:border-white/20 transition">
+                </div>
+                <div class="flex justify-between items-center pt-2 border-t border-white/5 border-dashed">
+                    <label class="text-xs text-gray-400">P&L (ARS)</label>
+                    <input type="number" id="input-pnl-ars" value="350000" class="w-32 bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right text-white focus:border-success outline-none hover:border-white/20 transition">
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Activos USD -->
+        <div class="space-y-3">
+            <label class="text-xs font-bold text-success uppercase tracking-wider">Activos Dólar (USD)</label>
+            <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <label class="text-xs text-gray-400">USD Billete</label>
+                    <input type="number" id="input-usd-cash" value="2500" class="w-32 bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right text-white focus:border-success outline-none hover:border-white/20 transition">
+                </div>
+                <div class="flex justify-between items-center">
+                    <label class="text-xs text-gray-400">Cripto (USDT eq)</label>
+                    <input type="number" id="input-usd-crypto" value="1500" class="w-32 bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right text-white focus:border-success outline-none hover:border-white/20 transition">
+                </div>
+                <div class="flex justify-between items-center">
+                    <label class="text-xs text-gray-400">CEDEARs (USD eq)</label>
+                    <input type="number" id="input-usd-cedear" value="4000" class="w-32 bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right text-white focus:border-success outline-none hover:border-white/20 transition">
+                </div>
+                <div class="flex justify-between items-center">
+                    <label class="text-xs text-gray-400">FCI (Moneda USD)</label>
+                    <input type="number" id="input-usd-fci" value="0" class="w-32 bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right text-white focus:border-success outline-none hover:border-white/20 transition">
+                </div>
+                <div class="flex justify-between items-center pt-2 border-t border-white/5 border-dashed">
+                    <label class="text-xs text-gray-400">P&L (USD)</label>
+                    <input type="number" id="input-pnl-usd" value="-120" class="w-32 bg-background border border-white/10 rounded px-2 py-1 text-sm font-mono text-right text-white focus:border-danger outline-none hover:border-white/20 transition">
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-auto pt-4">
+            <button onclick="resetDemo()" class="w-full py-3 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition text-sm">
+                Resetear Demo
+            </button>
+        </div>
+    </aside>
+
+    <!-- LOGIC SCRIPT -->
+    <script>
+        // --- 1. CONFIG & STATE ---
+        const formatMoneyARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        const formatMoneyUSD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const formatPct = new Intl.NumberFormat('es-AR', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        const formatNum = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+        const colors = {
+            wallet: '#0EA5E9', // Accent (ARS)
+            pf: '#3B82F6',     // Blue
+            fci: '#6366F1',    // Indigo
+            cedear: '#10B981', // Success
+            crypto: '#F59E0B', // Warning
+            usd_cash: '#22C55E' // Green
+        };
+
+        const defaultState = {
+            tc_type: 'mep',
+            tc_values: { oficial: 1040, mep: 1180, cripto: 1205 },
+            assets: {
+                ars_wallet: 450000,
+                ars_pf: 2500000,
+                ars_fci: 1200000,
+                usd_cash: 2500,
+                usd_crypto: 1500,
+                usd_cedear: 4000,
+                usd_fci: 0
+            },
+            pnl: {
+                ars: 350000,
+                usd: -120
+            }
+        };
+
+        // --- 2. LOGIC ENGINE ---
+
+        function getActiveTC() {
+            const type = document.getElementById('input-tc-type').value;
+            // Update internal map based on inputs in case they changed
+            const valMep = parseFloat(document.getElementById('val-tc-mep').value) || 0;
+            const valCripto = parseFloat(document.getElementById('val-tc-cripto').value) || 0;
+            const valOficial = 1040; // Hardcoded for demo simplicity or add input
+            
+            if(type === 'mep') return valMep;
+            if(type === 'cripto') return valCripto;
+            return valOficial;
+        }
+
+        function calculateDashboard() {
+            // Get Current Values from Inputs
+            const ars_wallet = parseFloat(document.getElementById('input-ars-wallet').value) || 0;
+            const ars_pf = parseFloat(document.getElementById('input-ars-pf').value) || 0;
+            const ars_fci = parseFloat(document.getElementById('input-ars-fci').value) || 0;
+            
+            const usd_cash = parseFloat(document.getElementById('input-usd-cash').value) || 0;
+            const usd_crypto = parseFloat(document.getElementById('input-usd-crypto').value) || 0;
+            const usd_cedear = parseFloat(document.getElementById('input-usd-cedear').value) || 0;
+            const usd_fci = parseFloat(document.getElementById('input-usd-fci').value) || 0;
+
+            const pnl_ars = parseFloat(document.getElementById('input-pnl-ars').value) || 0;
+            const pnl_usd = parseFloat(document.getElementById('input-pnl-usd').value) || 0;
+
+            const TC = getActiveTC();
+            const TC_Label = document.getElementById('input-tc-type').options[document.getElementById('input-tc-type').selectedIndex].text;
+
+            // 1. Calculate Exposures
+            const total_exposure_ars = ars_wallet + ars_pf + ars_fci; // Raw ARS
+            const total_exposure_usd_assets = usd_cash + usd_crypto + usd_cedear + usd_fci; // Raw USD assets
+            
+            // Normalize to common currency (ARS for Total Wealth, USD for percentages comparison usually works better mentally for dollarized investors, but let's do Total in ARS as requested)
+            const total_wealth_ars = total_exposure_ars + (total_exposure_usd_assets * TC);
+            const total_wealth_usd_eq = total_wealth_ars / TC;
+
+            // Percentages for Bar Chart (Card 2)
+            // We compare equivalent value in same currency
+            const ars_in_usd_eq = total_exposure_ars / TC;
+            const total_exposure_usd_eq = ars_in_usd_eq + total_exposure_usd_assets;
+            
+            const pct_ars = total_exposure_usd_eq > 0 ? (ars_in_usd_eq / total_exposure_usd_eq) : 0;
+            const pct_usd = total_exposure_usd_eq > 0 ? (total_exposure_usd_assets / total_exposure_usd_eq) : 0;
+
+            // 2. Prepare Donut Data (Distribution) - normalized to USD Eq
+            const distribution = [
+                { name: 'Billeteras ARS', value: ars_wallet / TC, color: colors.wallet, originalValue: ars_wallet, originalCurr: 'ARS' },
+                { name: 'Plazos Fijos', value: ars_pf / TC, color: colors.pf, originalValue: ars_pf, originalCurr: 'ARS' },
+                { name: 'FCI (ARS/USD)', value: (ars_fci / TC) + usd_fci, color: colors.fci, originalValue: null, originalCurr: 'MIX' }, // Aggregated for simplification or keep separate? Let's keep separate in logic but maybe merge visual if needed. Request said "Fondos". Let's merge.
+                { name: 'Cripto', value: usd_crypto, color: colors.crypto, originalValue: usd_crypto, originalCurr: 'USD' },
+                { name: 'CEDEARs / Cash', value: usd_cedear + usd_cash, color: colors.cedear, originalValue: usd_cedear + usd_cash, originalCurr: 'USD' } // Grouping for donut clarity or split? Let's split if space. Request categories: Billeteras, PF, CEDEARs, Cripto, Fondos.
+            ];
+
+            // Re-mapping strictly to request categories
+            const donutData = [
+                { id: 'cat-wallet', label: 'Billeteras', valueUSD: ars_wallet / TC + usd_cash, color: '#0EA5E9', detail: 'ARS + USD Cash' }, 
+                { id: 'cat-pf', label: 'Plazos Fijos', valueUSD: ars_pf / TC, color: '#3B82F6', detail: 'PF ARS' },
+                { id: 'cat-cedear', label: 'CEDEARs', valueUSD: usd_cedear, color: '#10B981', detail: 'USD Link' },
+                { id: 'cat-crypto', label: 'Cripto', valueUSD: usd_crypto, color: '#F59E0B', detail: 'Stable/Volatile' },
+                { id: 'cat-fci', label: 'Fondos', valueUSD: (ars_fci / TC) + usd_fci, color: '#6366F1', detail: 'FCI Mix' }
+            ];
+
+            const totalDonut = donutData.reduce((acc, item) => acc + item.valueUSD, 0);
+
+            return {
+                wealth: { ars: total_wealth_ars, usd: total_wealth_usd_eq, tc_used: TC, tc_label: TC_Label },
+                exposure: { ars_amt: total_exposure_ars, usd_amt: total_exposure_usd_assets, pct_ars, pct_usd },
+                pnl: { ars: pnl_ars, usd: pnl_usd },
+                donut: donutData,
+                totalDonut
+            };
+        }
+
+        // --- 3. DOM UPDATE FUNCTIONS ---
+
+        function updateUI() {
+            const data = calculateDashboard();
+
+            // CARD 1: PATRIMONIO
+            document.getElementById('display-total-ars').innerText = formatNum.format(data.wealth.ars);
+            document.getElementById('display-total-usd').innerText = formatNum.format(data.wealth.usd);
+            document.getElementById('ref-tc-label').innerText = data.wealth.tc_label;
+
+            // CARD 2: EXPOSICIÓN
+            document.getElementById('display-pct-ars').innerText = formatPct.format(data.exposure.pct_ars);
+            document.getElementById('display-pct-usd').innerText = formatPct.format(data.exposure.pct_usd);
+            
+            document.getElementById('bar-ars').style.width = `${data.exposure.pct_ars * 100}%`;
+            document.getElementById('bar-usd').style.width = `${data.exposure.pct_usd * 100}%`;
+
+            document.getElementById('display-exp-ars').innerText = formatMoneyARS.format(data.exposure.ars_amt);
+            document.getElementById('display-exp-usd').innerText = formatMoneyUSD.format(data.exposure.usd_amt);
+
+            // CARD 3: P&L
+            updatePnLCards(data.pnl);
+
+            // CARD 4: DONUT
+            updateDonut(data.donut, data.totalDonut);
+        }
+
+        function updatePnLCards(pnlData) {
+            // ARS Logic
+            const elArs = document.getElementById('display-pnl-ars');
+            const bgArs = document.getElementById('indicator-pnl-ars');
+            const badgeArs = document.getElementById('badge-pnl-ars');
+            
+            elArs.innerText = formatMoneyARS.format(pnlData.ars);
+            if(pnlData.ars > 0) {
+                elArs.classList.replace('text-white', 'text-success');
+                elArs.classList.remove('text-danger');
+                bgArs.className = "h-8 w-1.5 rounded-full bg-success shadow-[0_0_10px_rgba(16,185,129,0.5)]";
+                badgeArs.innerText = "GANANCIA";
+                badgeArs.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-success/20 text-success border border-success/20";
+            } else if (pnlData.ars < 0) {
+                elArs.classList.replace('text-white', 'text-danger');
+                elArs.classList.remove('text-success');
+                bgArs.className = "h-8 w-1.5 rounded-full bg-danger shadow-[0_0_10px_rgba(244,63,94,0.5)]";
+                badgeArs.innerText = "PÉRDIDA";
+                badgeArs.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-danger/20 text-danger border border-danger/20";
+            } else {
+                elArs.className = "text-2xl font-mono font-medium text-white";
+                bgArs.className = "h-8 w-1 rounded-full bg-gray-700";
+                badgeArs.innerText = "NEUTRO";
+                badgeArs.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-800 text-gray-400";
+            }
+
+            // USD Logic
+            const elUsd = document.getElementById('display-pnl-usd');
+            const bgUsd = document.getElementById('indicator-pnl-usd');
+            const badgeUsd = document.getElementById('badge-pnl-usd');
+
+            elUsd.innerText = formatMoneyUSD.format(pnlData.usd);
+            if(pnlData.usd > 0) {
+                elUsd.classList.replace('text-white', 'text-success');
+                elUsd.classList.remove('text-danger');
+                bgUsd.className = "h-8 w-1.5 rounded-full bg-success shadow-[0_0_10px_rgba(16,185,129,0.5)]";
+                badgeUsd.innerText = "GANANCIA";
+                badgeUsd.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-success/20 text-success border border-success/20";
+            } else if (pnlData.usd < 0) {
+                elUsd.classList.replace('text-white', 'text-danger');
+                elUsd.classList.remove('text-success');
+                bgUsd.className = "h-8 w-1.5 rounded-full bg-danger shadow-[0_0_10px_rgba(244,63,94,0.5)]";
+                badgeUsd.innerText = "PÉRDIDA";
+                badgeUsd.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-danger/20 text-danger border border-danger/20";
+            } else {
+                elUsd.className = "text-2xl font-mono font-medium text-white";
+                bgUsd.className = "h-8 w-1 rounded-full bg-gray-700";
+                badgeUsd.innerText = "NEUTRO";
+                badgeUsd.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-800 text-gray-400";
+            }
+        }
+
+        function updateDonut(items, total) {
+            let accumulatedPct = 0;
+            const radius = 40;
+            const circumference = 2 * Math.PI * radius; // ~251.327
+            
+            // DOM Elements
+            const legendContainer = document.getElementById('legend-container');
+            legendContainer.innerHTML = ''; // Clear legend
+
+            items.forEach((item, index) => {
+                const pct = total > 0 ? item.valueUSD / total : 0;
+                const segmentLength = pct * circumference;
+                
+                // Update SVG Circle
+                // In SVG, stroke-dasharray="length gap". 
+                // We offset it to rotate it into position.
+                // However, doing cumulative offset in CSS/JS for simpler implementation:
+                // We set dasharray to [segmentLength, circumference]
+                // We set dashoffset to -accumulatedLength
+                
+                const circle = document.getElementById(`donut-segment-${index+1}`);
+                if(circle) {
+                    // Update Circle Look
+                    circle.style.stroke = item.color;
+                    circle.style.strokeDasharray = `${segmentLength} ${circumference}`;
+                    circle.style.strokeDashoffset = -accumulatedPct * circumference;
+                    
+                    // Add Interaction Data
+                    circle.setAttribute('data-name', item.label);
+                    circle.setAttribute('data-value', formatMoneyUSD.format(item.valueUSD));
+                    circle.setAttribute('data-pct', formatPct.format(pct));
+
+                    // Hover Events
+                    circle.onmouseenter = (e) => showDonutTooltip(e, item.label, formatMoneyUSD.format(item.valueUSD), formatPct.format(pct));
+                    circle.onmouseleave = hideDonutTooltip;
+                }
+
+                // Update Legend
+                const li = document.createElement('li');
+                li.className = "flex justify-between items-center group cursor-pointer";
+                li.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full shadow-[0_0_8px_${item.color}]" style="background-color: ${item.color}"></span>
+                        <span class="text-gray-400 group-hover:text-white transition">${item.label}</span>
+                    </div>
+                    <span class="font-mono text-gray-500 text-[10px]">${formatPct.format(pct)}</span>
+                `;
+                // Hover on legend highlights chart segment? (Nice to have, skip for simplicity unless easy)
+                legendContainer.appendChild(li);
+
+                accumulatedPct += pct;
+            });
+        }
+
+        // --- 4. INTERACTION HELPERS ---
+
+        const tooltip = document.getElementById('donut-tooltip');
+        
+        function showDonutTooltip(e, name, value, pct) {
+            tooltip.classList.remove('hidden');
+            document.getElementById('dt-name').innerText = name;
+            document.getElementById('dt-value').innerText = value;
+            document.getElementById('dt-pct').innerText = pct;
+            
+            // Positioning (Simple)
+            const rect = e.target.getBoundingClientRect();
+            // This is relative to viewport, tooltip needs absolute placement relative to article or body
+            // Let's attach to mouse or center of chart. Mouse is easier.
+            // Actually, attaching to the "Distribución" article is safer for layout.
+        }
+
+        // Better SVG Mouse tracking
+        document.querySelectorAll('circle').forEach(c => {
+            c.addEventListener('mousemove', (e) => {
+                tooltip.style.left = e.layerX + 10 + 'px';
+                tooltip.style.top = e.layerY + 10 + 'px';
+            });
+        });
+
+        function hideDonutTooltip() {
+            tooltip.classList.add('hidden');
+        }
+
+        function toggleModal(id) {
+            alert("Modal informativo (Feature Nice-to-have): Aquí se explicarían las reglas de consolidación: \n1. Activos en ARS se suman directo.\n2. Activos en USD se convierten al MEP/Cripto seleccionado.\n3. El gráfico de torta usa 'USD Equivalente' para normalizar porciones.");
+        }
+
+        function resetDemo() {
+            // Restore inputs
+            document.getElementById('input-ars-wallet').value = defaultState.assets.ars_wallet;
+            document.getElementById('input-ars-pf').value = defaultState.assets.ars_pf;
+            document.getElementById('input-ars-fci').value = defaultState.assets.ars_fci;
+            document.getElementById('input-usd-cash').value = defaultState.assets.usd_cash;
+            document.getElementById('input-usd-crypto').value = defaultState.assets.usd_crypto;
+            document.getElementById('input-usd-cedear').value = defaultState.assets.usd_cedear;
+            document.getElementById('input-usd-fci').value = defaultState.assets.usd_fci;
+            document.getElementById('input-pnl-ars').value = defaultState.pnl.ars;
+            document.getElementById('input-pnl-usd').value = defaultState.pnl.usd;
+            
+            document.getElementById('input-tc-type').value = defaultState.tc_type;
+
+            updateUI();
+        }
+
+        // --- 5. INITIALIZATION ---
+
+        // Listeners for all inputs
+        document.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('input', updateUI);
+        });
+
+        // First Run
+        updateUI();
+
+    </script>
+</body>
+</html>
