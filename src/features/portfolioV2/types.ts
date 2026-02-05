@@ -221,6 +221,24 @@ export interface FixedDepositDetail {
     fxAtConstituteOficial?: number
 }
 
+export interface CedearLotDetail {
+    id: string
+    dateISO: string
+    qty: number
+    unitCostArs: number
+    unitCostUsd: number
+    totalCostArs: number
+    totalCostUsd: number
+    currentValueArs: number
+    currentValueUsd: number
+    pnlArs: number
+    pnlUsd: number
+    pnlPctArs: number
+    pnlPctUsd: number
+    fxAtTrade: number
+    fxMissing?: boolean
+}
+
 export interface CedearDetail {
     instrumentId: string
     symbol: string
@@ -238,8 +256,9 @@ export interface CedearDetail {
     currentValueUsd: number
     pnlArs: number
     pnlUsd: number
-    pnlPct: number
-    lots: LotDetail[]
+    pnlPctArs: number
+    pnlPctUsd: number
+    lots: CedearLotDetail[]
     fxUsed: 'MEP'
 }
 

@@ -240,6 +240,12 @@ export function AssetsPageV2() {
             navigate(`/mis-activos-v2/cripto/${accountId}/${item.symbol}`)
             return
         }
+        // For CEDEAR items, navigate to cedear detail subpage
+        if (item.kind === 'cedear') {
+            const accountId = item.accountId || provider.id
+            navigate(`/mis-activos-v2/cedears/${accountId}/${item.symbol}`)
+            return
+        }
         // For other items, use overlay
         setSelectedItem(item)
         setSelectedProvider(provider)

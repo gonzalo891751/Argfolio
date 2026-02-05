@@ -12,6 +12,7 @@ import { AssetsPageV2 } from '@/pages/assets-v2'
 import { WalletDetailPage } from '@/pages/wallet-detail'
 import { PFDetailPage } from '@/pages/pf-detail'
 import { CryptoDetailPage } from '@/pages/crypto-detail'
+import { CedearDetailPage } from '@/pages/cedear-detail'
 import { AssetDetailPage } from '@/pages/asset-detail'
 import { MovementsPageV2 as MovementsPage } from '@/pages/movements/index'
 import { HistoryPage } from '@/pages/history'
@@ -135,6 +136,15 @@ function App() {
                                                 element={
                                                     <ErrorBoundary>
                                                         <CryptoDetailPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* CEDEAR Detail - Subpage */}
+                                            <Route
+                                                path="/mis-activos-v2/cedears/:accountId/:ticker"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <CedearDetailPage />
                                                     </ErrorBoundary>
                                                 }
                                             />

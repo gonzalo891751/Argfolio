@@ -45,6 +45,86 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-05 — Claude Opus 4.5 — Feat: CEDEAR Detail Subpágina (Dual ARS/USD)
+**Goal:** Implementar subpágina de detalle CEDEAR con valuación dual ARS/USD, tabla de lotes con doble moneda, selector de método de costeo, y simulador de venta con acreditación de liquidez ARS.
+
+**Scope touched:** `src/features/portfolioV2/types.ts`, `src/features/portfolioV2/builder.ts`, `src/App.tsx`, `src/pages/assets-v2.tsx`, `src/pages/cedear-detail.tsx` (NEW).
+
+**Key Changes:**
+
+1. **Nuevo tipo CedearLotDetail (`types.ts`):**
+   - Interface con campos duales: `unitCostArs/unitCostUsd`, `totalCostArs/totalCostUsd`, `currentValueArs/currentValueUsd`, `pnlArs/pnlUsd`, `pnlPctArs/pnlPctUsd`
+   - Campo `fxAtTrade` (TC MEP al momento de compra) y `fxMissing` flag
+   - `CedearDetail` ahora usa `CedearLotDetail[]` en lugar de `LotDetail[]`
+
+2. **Builder population (`builder.ts`):**
+   - Nuevo bloque ~90 líneas para poblar `cedearDetails` Map (análogo a `cryptoDetails`)
+   - Itera cedears rubro → providers → items, filtra movements por `assetClass === 'cedear'`
+   - Llama `buildFifoLots()` y mapea `FifoLot` → `CedearLotDetail` con cálculos dual currency
+   - USD histórico: `unitCostUsd = unitCostArs / fxAtTrade`
+   - USD actual: `currentValueUsd = currentValueArs / mepSellRate`
+
+3. **Navegación (`App.tsx` + `assets-v2.tsx`):**
+   - Nueva ruta: `/mis-activos-v2/cedears/:accountId/:ticker`
+   - Handler en `openItemDetail()` para `kind === 'cedear'` navega a subpágina
+
+4. **Subpágina detalle (`cedear-detail.tsx` — NEW, ~800 líneas):**
+   - **Header/Breadcrumb**: Mis Activos / CEDEARs / {Ticker} + chip TC MEP Venta
+   - **Hero cards**: Valuación ARS (principal) + equivalente USD con % return
+   - **Metrics grid**: Tenencia, Precio Mercado (ARS/USD), Invertido (ARS/USD), PPC (ARS/USD), Resultado dual
+   - **Alerta divergencia**: Cuando ARS gana pero USD pierde (o viceversa)
+   - **Tabs**: Lotes, Simulador, Info
+   - **Tabla Lotes**: Columnas duales (ARS arriba, US$ abajo), sorteable, totales row, TC histórico por lote
+   - **Simulador Venta**: qty/price inputs, selector método (PPP/PEPS/UEPS/Baratos/Manual), preview dual (producido/costo/resultado ARS+USD)
+   - **Confirmar venta**: SELL movement (cedear, ARS) + DEPOSIT movement (liquidez ARS broker)
+   - **Tab Info**: Explicación educativa de valuación dual y métodos de costeo
+
+**FX Logic:**
+| Campo | Fórmula |
+|-------|---------|
+| Costo USD histórico | `unitCostArs / fxAtTrade` (MEP al comprar) |
+| Valor USD actual | `currentValueArs / mepSellCurrent` |
+| PnL USD | `currentValueUsd - totalCostUsd` |
+| Divergencia | `sign(pnlArs) !== sign(pnlUsd)` |
+
+**Files Changed:**
+- `src/features/portfolioV2/types.ts` — NEW: `CedearLotDetail` interface, EXTEND: `CedearDetail`
+- `src/features/portfolioV2/builder.ts` — NEW: ~90 líneas poblando `cedearDetails`
+- `src/App.tsx` — NEW: ruta `/mis-activos-v2/cedears/:accountId/:ticker`
+- `src/pages/assets-v2.tsx` — EXTEND: handler para `cedear` kind
+- `src/pages/cedear-detail.tsx` — NEW: subpágina completa (~800 líneas)
+
+**Decisions:**
+- **Dual currency nativo**: CEDEARs son ARS-native (a diferencia de crypto USD-native), así que la UI muestra ARS como principal y USD como "valor real"
+- **fxAtTrade para USD histórico**: Se usa el TC MEP guardado en el movement para calcular costo USD preciso; si falta, se marca `fxMissing` y se usa rate actual con warning visual
+- **Sale acredita ARS**: A diferencia de crypto (acredita USDT), CEDEAR sale genera liquidez ARS en la cuenta broker
+- **Mismo motor FIFO**: Reutiliza `buildFifoLots()` existente que ya maneja `tradeCurrency: 'ARS'`
+
+**Validación:**
+- `npm run build` ✅
+- `npm test` ✅ (68/68)
+- `npm run lint` ✅ (0 errors, 108 warnings — pre-existentes)
+
+**Checklist de aceptación:**
+- [x] Click en CEDEAR abre subpágina (NO modal)
+- [x] Valuación dual ARS/USD en hero cards
+- [x] Tabla lotes con doble moneda (ARS arriba, US$ abajo)
+- [x] TC histórico por lote (fxAtTrade)
+- [x] Selector método costeo (PPP/PEPS/UEPS/Baratos/Manual)
+- [x] Simulador venta con preview dual (producido/costo/resultado)
+- [x] Confirmar venta crea SELL + DEPOSIT ARS
+- [x] Alerta divergencia cuando ARS↑ pero USD↓
+- [x] Tab "Cómo se calcula" educativo
+- [x] Build, test, lint pasan
+
+**Pendientes (nice-to-have):**
+- [ ] Comisiones en simulador (deducir del producido)
+- [ ] Gráfico evolución precio
+- [ ] Toggle mostrar lotes cerrados (qty=0)
+- [ ] Manual allocation UI mejorada (sliders)
+
+---
+
 ### 2026-02-05 — Claude Opus 4.5 — Feat: Selector Costeo + Simulador Venta + Tabla Sorteable + Acreditación Stable
 **Goal:** Agregar selector de método de costeo (PPP/PEPS/UEPS/Baratos/Manual), tabla sorteable de lotes, simulador de venta con preview y confirmación, y acreditación automática de USDT en liquidez del exchange.
 

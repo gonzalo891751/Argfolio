@@ -16,6 +16,8 @@ import type {
     FxRatesSnapshot,
     WalletDetail,
     FixedDepositDetail,
+    CedearDetail,
+    CedearLotDetail,
     CryptoDetail,
     LotDetail,
     ItemKind,
@@ -1099,6 +1101,112 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
         }
     }
 
+    // Build CEDEAR details from movements + FIFO lots
+    const cedearDetails = new Map<string, CedearDetail>()
+    const cedearRubro = rubros.find(r => r.id === 'cedears')
+    if (cedearRubro) {
+        const mepSellRate = fxSnapshot.mepSell || 1
+
+        for (const provider of cedearRubro.providers) {
+            for (const item of provider.items) {
+                if (item.kind !== 'cedear') continue
+                if (!item.instrumentId && !item.symbol) continue
+
+                const assetMovements = movements.filter(m =>
+                    m.accountId === item.accountId &&
+                    (m.instrumentId === item.instrumentId ||
+                        (!m.instrumentId && m.ticker === item.symbol)) &&
+                    (m.assetClass === 'cedear')
+                )
+
+                if (assetMovements.length === 0) continue
+
+                const fifoResult = buildFifoLots(assetMovements)
+
+                // Current price ARS: derive from item value / qty
+                const currentPriceArs = (item.qty && item.qty > 0)
+                    ? item.valArs / item.qty
+                    : 0
+                const currentPriceUsd = mepSellRate > 0 ? currentPriceArs / mepSellRate : 0
+
+                // Find instrument for ratio info
+                const instrument = assetMovements[0]
+                const cedearRatio = (instrument as any)?.cedearRatio ?? 1
+
+                // Map FIFO lots to CedearLotDetail
+                const lots: CedearLotDetail[] = fifoResult.lots.map((lot, idx) => {
+                    const fxMissing = !lot.fxAtTrade || lot.fxAtTrade <= 1
+                    const fxHist = lot.fxAtTrade > 0 ? lot.fxAtTrade : mepSellRate
+
+                    const unitCostArs = lot.unitCostArs
+                    const unitCostUsd = fxHist > 0 ? unitCostArs / fxHist : 0
+                    const totalCostArs = lot.quantity * unitCostArs
+                    const totalCostUsd = lot.quantity * unitCostUsd
+
+                    const currentValueArs = lot.quantity * currentPriceArs
+                    const currentValueUsd = mepSellRate > 0 ? currentValueArs / mepSellRate : 0
+
+                    const pnlArs = currentValueArs - totalCostArs
+                    const pnlUsd = currentValueUsd - totalCostUsd
+                    const pnlPctArs = totalCostArs > 0 ? pnlArs / totalCostArs : 0
+                    const pnlPctUsd = totalCostUsd > 0 ? pnlUsd / totalCostUsd : 0
+
+                    return {
+                        id: `${item.id}-lot-${idx}`,
+                        dateISO: lot.date,
+                        qty: lot.quantity,
+                        unitCostArs,
+                        unitCostUsd,
+                        totalCostArs,
+                        totalCostUsd,
+                        currentValueArs,
+                        currentValueUsd,
+                        pnlArs,
+                        pnlUsd,
+                        pnlPctArs,
+                        pnlPctUsd,
+                        fxAtTrade: lot.fxAtTrade,
+                        fxMissing: fxMissing ? true : undefined,
+                    }
+                })
+
+                const totalQty = fifoResult.totalQuantity
+                const totalCostArs = lots.reduce((s, l) => s + l.totalCostArs, 0)
+                const totalCostUsd = lots.reduce((s, l) => s + l.totalCostUsd, 0)
+                const avgCostArs = totalQty > 0 ? totalCostArs / totalQty : 0
+                const avgCostUsd = totalQty > 0 ? totalCostUsd / totalQty : 0
+                const currentValueArs = totalQty * currentPriceArs
+                const currentValueUsd = mepSellRate > 0 ? currentValueArs / mepSellRate : 0
+                const pnlArs = currentValueArs - totalCostArs
+                const pnlUsd = currentValueUsd - totalCostUsd
+                const pnlPctArs = totalCostArs > 0 ? pnlArs / totalCostArs : 0
+                const pnlPctUsd = totalCostUsd > 0 ? pnlUsd / totalCostUsd : 0
+
+                cedearDetails.set(item.id, {
+                    instrumentId: item.instrumentId || item.symbol,
+                    symbol: item.symbol,
+                    name: item.label,
+                    ratio: cedearRatio,
+                    totalQty,
+                    totalCostArs,
+                    totalCostUsd,
+                    avgCostArs,
+                    avgCostUsd,
+                    currentPriceArs,
+                    currentPriceUsd,
+                    currentValueArs,
+                    currentValueUsd,
+                    pnlArs,
+                    pnlUsd,
+                    pnlPctArs,
+                    pnlPctUsd,
+                    lots,
+                    fxUsed: 'MEP',
+                })
+            }
+        }
+    }
+
     // Build crypto details from movements + FIFO lots
     const cryptoDetails = new Map<string, CryptoDetail>()
     const cryptoRubro = rubros.find(r => r.id === 'crypto')
@@ -1191,7 +1299,7 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
         rubros,
         walletDetails,
         fixedDepositDetails,
-        cedearDetails: new Map(),
+        cedearDetails,
         cryptoDetails,
     }
 }

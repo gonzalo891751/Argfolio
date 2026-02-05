@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invesco QQQ Trust (QQQ) — Argfolio</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Config -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                            primary: '#6366f1',
+                            accent: '#0ea5e9',
+                        },
+                        semantic: {
+                            up: '#10b981',
+                            down: '#f43f5e',
+                            warn: '#f59e0b',
+                            info: '#3b82f6',
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-sm': '0 0 10px -2px rgba(99, 102, 241, 0.2)',
+                    },
+                    fontSize: {
+                        'clamp-xl': 'clamp(2rem, 5vw, 3.5rem)', // Responsive big number
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+            --glass-panel: rgba(30, 41, 59, 0.4);
+            --border-subtle: rgba(255,255,255,0.08);
+        }
+        body {
+            background-color: var(--bg-app);
+            color: #F8FAFC;
+        }
+        .glass {
+            background: var(--glass-panel);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-subtle);
+        }
+        /* Custom scrollbar */
+        .custom-scroll::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.02);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+        }
+        .tabular-nums {
+            font-feature-settings: "tnum";
+            font-variant-numeric: tabular-nums;
+        }
+        
+        /* Hierarchy Utilities */
+        .currency-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #64748B;
+            margin-right: 4px;
+            font-weight: 700;
+        }
+        .secondary-value {
+            font-size: 0.75rem; /* text-xs */
+            color: #94A3B8; /* slate-400 */
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+        }
+        .tc-reference {
+            font-size: 0.65rem;
+            color: #475569; /* slate-600 */
+            font-family: 'JetBrains Mono', monospace;
+            margin-top: 2px;
+        }
+        
+        /* Metric Card Layout */
+        .metric-block {
+            padding: 1rem;
+            border-radius: 0.75rem;
+            background: rgba(15, 23, 42, 0.3); /* Slate 900 / 30% */
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .metric-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            color: #64748B; /* Slate 500 */
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-20 selection:bg-brand-primary/30">
+
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-50 glass border-b border-white/5 px-6 py-4 flex justify-between items-center mb-8 bg-[#0B1121]/80 backdrop-blur-xl">
+        <div class="flex items-center gap-3">
+            <svg class="w-6 h-6 text-brand-primary" viewBox="0 0 40 40" fill="none">
+                <path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/>
+                <circle cx="20" cy="14" r="3" class="text-white" fill="currentColor"/>
+            </svg>
+            <span class="font-display font-bold tracking-wide text-sm text-slate-300">Argfolio / Mis Activos</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="h-8 w-8 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center font-bold text-xs border border-brand-primary/20">JM</div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+
+        <!-- 01. HEADER -->
+        <header class="space-y-6">
+            <nav class="flex items-center text-xs text-slate-500 font-mono space-x-2">
+                <span class="hover:text-white cursor-pointer transition">Mis Activos</span>
+                <span>/</span>
+                <span class="hover:text-white cursor-pointer transition">CEDEARs</span>
+                <span>/</span>
+                <span class="text-brand-primary font-bold">QQQ</span>
+            </nav>
+
+            <div class="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                <div class="flex items-start gap-5">
+                    <div class="w-16 h-16 rounded-2xl bg-slate-800 border border-white/10 flex items-center justify-center shadow-lg shadow-indigo-500/10 shrink-0">
+                        <span class="font-display font-bold text-2xl text-white tracking-tighter">QQQ</span>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl md:text-4xl font-display font-bold text-white tracking-tight">
+                            Invesco QQQ Trust
+                        </h1>
+                        <div class="flex flex-wrap items-center gap-3 mt-2 text-sm text-slate-400">
+                            <span class="bg-slate-800/50 border border-white/10 px-2 py-0.5 rounded text-xs font-medium text-slate-300">CEDEAR</span>
+                            <span class="text-xs">Ratio 20:1</span>
+                            <span class="w-1 h-1 rounded-full bg-slate-600"></span>
+                            <span class="text-xs">Nasdaq-100</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Data / Chips -->
+                <div class="flex flex-col items-end gap-2">
+                    <div class="flex gap-2 items-center">
+                        <span class="text-[10px] text-slate-500 font-mono uppercase mr-1 hidden md:inline">Ref. Conversión:</span>
+                        <!-- MEP VENTA es el clave para convertir ARS -> USD -->
+                        <div class="px-3 py-1.5 rounded-lg bg-slate-900 border border-brand-primary/30 text-xs font-mono text-slate-300 flex items-center gap-2 shadow-[0_0_10px_rgba(99,102,241,0.1)] relative overflow-hidden group cursor-help">
+                            <span class="absolute inset-0 bg-brand-primary/5 group-hover:bg-brand-primary/10 transition"></span>
+                            <span class="text-brand-primary font-bold relative">TC MEP (Venta)</span>
+                            <span class="text-white font-bold relative" id="mep-sell-display">...</span>
+                        </div>
+                    </div>
+                    <span class="text-[10px] text-slate-600 uppercase tracking-wider font-mono">Act. 14:45hs · Mercado Abierto</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 02. HERO CARDS -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Card 1: Valuation (Optimized for space) -->
+            <div class="glass rounded-2xl p-6 relative overflow-hidden group flex flex-col justify-between h-full border border-white/10 hover:border-white/20 transition duration-300">
+                <div class="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition duration-500 pointer-events-none">
+                    <svg class="w-32 h-32 text-brand-primary" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.15-1.46-3.27-3.4h1.96c.1 1.05 1.18 1.91 2.53 1.91 1.38 0 2.29-.9 2.29-1.95s-.8-1.78-2.67-2.22c-2.31-.56-3.75-1.74-3.75-3.57 0-1.83 1.4-3.1 3.11-3.45V3h2.67v1.9c1.55.32 2.76 1.43 2.91 3.09h-1.97c-.15-.83-.98-1.52-2.2-1.52-1.2 0-2 .88-2 1.83 0 1.25.96 1.69 2.68 2.14 2.55.67 3.73 1.88 3.73 3.65 0 1.95-1.49 3.25-3.35 3.5z"/></svg>
+                </div>
+                
+                <div class="relative z-10">
+                    <h3 class="text-slate-400 text-xs font-mono uppercase tracking-wider mb-2 flex items-center gap-2">
+                        Valuación Actual
+                        <span class="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-500 border border-white/5 font-bold">ARS</span>
+                    </h3>
+                    
+                    <!-- Primary: ARS (Clamped Font Size) -->
+                    <div class="font-mono font-medium text-white tracking-tight tabular-nums text-clamp-xl leading-none mb-4 break-all" id="hero-ars-value">
+                        --
+                    </div>
+                    
+                    <!-- Secondary: USD -->
+                    <div class="flex items-center gap-3">
+                        <div class="bg-slate-900/50 rounded-lg px-3 py-1.5 border border-white/5 inline-flex items-baseline gap-2">
+                            <span class="text-sm text-slate-500 font-sans">≈</span>
+                            <span class="text-xl font-mono text-slate-300 tabular-nums" id="hero-usd-value">--</span>
+                        </div>
+                        <span class="text-xs font-bold px-1.5 py-0.5 rounded tabular-nums" id="hero-badge-usd">--</span>
+                    </div>
+                </div>
+                
+                <div class="relative z-10 mt-8 pt-4 border-t border-white/5 flex justify-between items-end">
+                    <div>
+                        <span class="block text-slate-500 mb-1 uppercase tracking-wider text-[10px]">Precio Mercado (ARS)</span>
+                        <div class="text-white font-mono text-sm font-medium" id="hero-price-ars">--</div>
+                    </div>
+                    <div class="text-right">
+                        <span class="block text-slate-500 mb-1 uppercase tracking-wider text-[10px]">Implícito (USD)</span>
+                        <div class="text-slate-400 font-mono text-sm" id="hero-price-usd">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Metrics Dashboard (Clean Grid) -->
+            <div class="glass rounded-2xl p-5 lg:col-span-2 flex flex-col justify-between relative border border-white/10">
+                
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 h-full">
+                    
+                    <!-- 1. Tenencia (Destacado) -->
+                    <div class="metric-block md:col-span-1 lg:col-span-1 border-brand-primary/20 bg-brand-primary/5">
+                        <div class="metric-label text-brand-primary">Tenencia</div>
+                        <div class="text-3xl font-display font-bold text-white tabular-nums" id="hero-qty">--</div>
+                        <div class="text-[10px] text-slate-500 mt-1 uppercase tracking-wide">Certificados</div>
+                    </div>
+
+                    <!-- 2. Precio Actual -->
+                    <div class="metric-block">
+                        <div class="metric-label">Precio Unitario</div>
+                        <!-- ARS -->
+                        <div class="text-lg text-white font-mono tabular-nums mb-1" id="dash-price-ars">--</div>
+                        <!-- USD -->
+                        <div class="secondary-value">
+                            <span class="currency-label">USD</span> <span id="dash-price-usd">--</span>
+                        </div>
+                        <div class="tc-reference" id="dash-tc-ref">TC: --</div>
+                    </div>
+
+                    <!-- 3. Invertido -->
+                    <div class="metric-block relative group">
+                        <div class="metric-label">
+                            Invertido
+                            <svg class="w-3 h-3 text-slate-600 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <!-- Tooltip -->
+                            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-900 text-slate-300 text-[10px] p-2 rounded border border-white/10 shadow-xl opacity-0 group-hover:opacity-100 transition pointer-events-none z-20 normal-case font-sans">
+                                USD Histórico = Suma de valuaciones en USD al momento de cada compra.
+                            </div>
+                        </div>
+                        <!-- ARS -->
+                        <div class="text-lg text-white font-mono tabular-nums mb-1" id="hero-invested-ars">--</div>
+                        <!-- USD -->
+                        <div class="secondary-value">
+                            <span class="currency-label">USD</span> <span id="hero-invested-usd">--</span>
+                            <span class="ml-1 text-[8px] bg-slate-800 text-slate-500 px-1 rounded border border-slate-700 uppercase">Hist</span>
+                        </div>
+                    </div>
+
+                    <!-- 4. PPC -->
+                    <div class="metric-block">
+                        <div class="metric-label">PPC (Promedio)</div>
+                        <!-- ARS -->
+                        <div class="text-lg text-white font-mono tabular-nums mb-1" id="hero-ppc-ars">--</div>
+                        <!-- USD -->
+                        <div class="secondary-value">
+                            <span class="currency-label">USD</span> <span id="hero-ppc-usd">--</span>
+                        </div>
+                    </div>
+
+                    <!-- 5. Resultado -->
+                    <div class="metric-block md:col-span-2 lg:col-span-1">
+                        <div class="metric-label">Resultado Total</div>
+                        
+                        <!-- ARS PnL -->
+                        <div class="flex flex-col mb-2">
+                            <span class="text-[9px] text-slate-500 uppercase font-mono mb-0.5">Nominal (ARS)</span>
+                            <div class="font-mono text-sm tabular-nums font-bold" id="hero-pnl-ars">--</div>
+                        </div>
+                        <!-- USD PnL -->
+                        <div class="flex flex-col pt-2 border-t border-white/5">
+                            <span class="text-[9px] text-slate-500 uppercase font-mono mb-0.5">Real (USD)</span>
+                            <div class="font-mono text-sm tabular-nums" id="hero-pnl-usd">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DIVERGENCE ALERT (Integrated Callout) -->
+                <div id="divergence-alert" class="hidden mt-3 p-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center gap-3 animate-fade-in">
+                    <div class="bg-indigo-500/20 p-1.5 rounded-full shrink-0">
+                         <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div class="text-xs text-slate-300 leading-snug">
+                        <strong class="text-indigo-300">Divergencia detectada:</strong> Ganás en pesos (nominal) por la suba del MEP, pero perdés en dólares (real) por caída del subyacente.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 03. TABS & CONTENT -->
+        <section class="space-y-6">
+            
+            <!-- Controls -->
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                 <!-- Tabs Header -->
+                <nav class="flex space-x-6 border-b border-white/10 w-full md:w-auto" aria-label="Tabs">
+                    <button onclick="switchTab('tab-lotes')" id="btn-tab-lotes" class="border-brand-primary text-brand-primary py-3 px-1 border-b-2 font-medium text-sm transition-colors focus:outline-none">
+                        Compras (Lotes)
+                    </button>
+                    <button onclick="switchTab('tab-simulador')" id="btn-tab-simulador" class="border-transparent text-slate-400 hover:text-slate-200 py-3 px-1 border-b-2 font-medium text-sm transition-colors focus:outline-none">
+                        Simulador Venta
+                    </button>
+                    <button onclick="switchTab('tab-calculo')" id="btn-tab-calculo" class="border-transparent text-slate-400 hover:text-slate-200 py-3 px-1 border-b-2 font-medium text-sm transition-colors focus:outline-none">
+                        Cómo se calcula
+                    </button>
+                </nav>
+            </div>
+
+            <!-- TAB 1: LOTES -->
+            <div id="tab-lotes" class="tab-content animate-fade-in">
+                <div class="glass rounded-xl overflow-hidden border border-white/10">
+                    <div class="overflow-x-auto custom-scroll">
+                        <table class="min-w-full divide-y divide-white/5">
+                            <thead class="bg-slate-900/50">
+                                <tr>
+                                    <th class="px-6 py-4 text-left text-xs font-mono font-medium text-slate-500 uppercase w-24">Fecha</th>
+                                    <th class="px-6 py-4 text-right text-xs font-mono font-medium text-slate-500 uppercase w-20">Cant</th>
+                                    <th class="px-6 py-4 text-right text-xs font-mono font-medium text-slate-500 uppercase">
+                                        Precio Unitario<br>
+                                        <span class="text-[9px] normal-case opacity-50 text-slate-600">ARS / USD Hist</span>
+                                    </th>
+                                    <th class="px-6 py-4 text-right text-xs font-mono font-medium text-slate-500 uppercase bg-white/[0.02]">
+                                        Precio Unitario HOY<br>
+                                        <span class="text-[9px] normal-case opacity-50 text-slate-600">ARS / USD / TC</span>
+                                    </th>
+                                    <th class="px-6 py-4 text-right text-xs font-mono font-medium text-slate-500 uppercase">
+                                        Invertido<br>
+                                        <span class="text-[9px] normal-case opacity-50 text-slate-600">Total Lote</span>
+                                    </th>
+                                    <th class="px-6 py-4 text-right text-xs font-mono font-medium text-slate-500 uppercase">
+                                        Valor Hoy<br>
+                                        <span class="text-[9px] normal-case opacity-50 text-slate-600">Valuado a MEP</span>
+                                    </th>
+                                    <th class="px-6 py-4 text-right text-xs font-mono font-medium text-slate-500 uppercase">
+                                        Resultado<br>
+                                        <span class="text-[9px] normal-case opacity-50 text-slate-600">Nominal / Real</span>
+                                    </th>
+                                    <th class="relative px-6 py-4 w-20"><span class="sr-only">Acciones</span></th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/5 bg-transparent" id="lots-table-body">
+                                <!-- JS Injection -->
+                            </tbody>
+                            <tfoot class="bg-slate-900/80 font-bold border-t border-white/10">
+                                <tr>
+                                    <td class="px-6 py-4 text-xs text-white">TOTALES</td>
+                                    <td class="px-6 py-4 text-right text-xs font-mono text-white tabular-nums" id="tbl-total-qty">--</td>
+                                    <td class="px-6 py-4"></td>
+                                    <td class="px-6 py-4 bg-white/[0.02]"></td>
+                                    <td class="px-6 py-4 text-right">
+                                        <div class="text-xs font-mono text-white tabular-nums" id="tbl-total-inv-ars">--</div>
+                                        <div class="secondary-value justify-end" id="tbl-total-inv-usd">--</div>
+                                    </td>
+                                    <td class="px-6 py-4 text-right">
+                                        <div class="text-xs font-mono text-white tabular-nums" id="tbl-total-val-ars">--</div>
+                                        <div class="secondary-value justify-end" id="tbl-total-val-usd">--</div>
+                                    </td>
+                                    <td class="px-6 py-4 text-right">
+                                        <div class="text-xs font-mono tabular-nums" id="tbl-total-res-ars">--</div>
+                                        <div class="text-[10px] font-mono tabular-nums" id="tbl-total-res-usd">--</div>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: SIMULADOR -->
+            <div id="tab-simulador" class="tab-content hidden animate-fade-in">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    
+                    <!-- Configuración -->
+                    <div class="lg:col-span-5 space-y-6">
+                        <div class="glass p-6 rounded-xl border border-white/10 relative">
+                            <!-- Header Sim -->
+                            <h3 class="text-sm font-display text-white mb-6 flex items-center gap-2">
+                                <svg class="w-4 h-4 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                Configurar Venta
+                            </h3>
+                            
+                            <!-- Cantidad -->
+                            <div class="space-y-2 mb-5">
+                                <label class="text-xs font-mono text-slate-400 uppercase">Cantidad (Nominales)</label>
+                                <div class="relative group">
+                                    <input type="number" id="sim-qty" value="10" min="1" step="1" class="w-full bg-slate-950 border border-white/10 rounded-lg py-3 px-4 text-white font-mono focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition tabular-nums placeholder-slate-700">
+                                    <button onclick="setMaxSim()" class="absolute right-2 top-2 px-2 py-1 bg-slate-800 text-[10px] text-brand-primary font-bold rounded hover:bg-slate-700 transition border border-white/5">MÁX</button>
+                                </div>
+                            </div>
+
+                            <!-- Precio -->
+                            <div class="space-y-2 mb-5">
+                                <div class="flex justify-between">
+                                    <label class="text-xs font-mono text-slate-400 uppercase">Precio Unitario (ARS)</label>
+                                    <label class="flex items-center gap-2 cursor-pointer group">
+                                        <div class="relative">
+                                            <input type="checkbox" checked id="use-market-price" class="sr-only peer" onchange="toggleManualPrice()">
+                                            <div class="w-7 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-brand-primary"></div>
+                                        </div>
+                                        <span class="text-[10px] text-slate-400 group-hover:text-white transition">Precio Mercado</span>
+                                    </label>
+                                </div>
+                                <div class="relative">
+                                     <span class="absolute left-4 top-3 text-slate-500 font-mono text-sm">$</span>
+                                     <input type="text" id="sim-price" disabled class="w-full bg-slate-950/50 border border-white/10 rounded-lg py-3 pl-8 pr-4 text-slate-300 font-mono disabled:cursor-not-allowed disabled:opacity-70 transition tabular-nums focus:border-brand-primary focus:outline-none">
+                                </div>
+                            </div>
+                            
+                            <!-- Método -->
+                            <div class="space-y-3 mb-6">
+                                <div class="flex justify-between items-end">
+                                    <label class="text-xs font-mono text-slate-400 uppercase">Método de Descarga</label>
+                                    <span class="text-[10px] text-slate-600">Afecta cálculo de costo</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button onclick="setSimMethod('PPP')" class="sim-method-btn px-3 py-2 rounded-md text-xs font-medium border transition bg-brand-primary/20 border-brand-primary text-white shadow-[0_0_10px_rgba(99,102,241,0.2)]" data-method="PPP">PPP (Promedio)</button>
+                                    <button onclick="setSimMethod('FIFO')" class="sim-method-btn px-3 py-2 rounded-md text-xs font-medium border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition" data-method="FIFO">PEPS (FIFO)</button>
+                                    <button onclick="setSimMethod('LIFO')" class="sim-method-btn px-3 py-2 rounded-md text-xs font-medium border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition" data-method="LIFO">UEPS (LIFO)</button>
+                                    <button onclick="setSimMethod('CHEAPEST')" class="sim-method-btn px-3 py-2 rounded-md text-xs font-medium border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition" data-method="CHEAPEST">Baratos 1°</button>
+                                </div>
+                            </div>
+
+                            <div class="p-3 bg-slate-900 rounded-lg border border-white/5 flex justify-between items-center mb-6">
+                                <span class="text-xs text-slate-500">TC Aplicable (MEP Venta)</span>
+                                <span class="text-xs font-mono text-white font-bold" id="sim-mep">--</span>
+                            </div>
+
+                            <button onclick="runSimulation()" class="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-medium py-3 rounded-lg shadow-glow-sm transition flex items-center justify-center gap-2 transform active:scale-[0.98]">
+                                Recalcular Resultado
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Resultados -->
+                    <div class="lg:col-span-7 space-y-4">
+                        <div class="flex items-center justify-between">
+                             <h3 class="text-sm font-display text-white">Proyección de Resultado</h3>
+                        </div>
+
+                        <!-- Card Producido -->
+                        <div class="glass p-5 rounded-xl border-l-4 border-l-brand-primary/50 flex justify-between items-center group">
+                            <div>
+                                <div class="text-xs text-slate-500 uppercase font-mono mb-1 group-hover:text-brand-primary transition-colors">Producido (Recibís)</div>
+                                <div class="flex items-baseline gap-1">
+                                    <span class="text-lg font-mono text-white tabular-nums" id="sim-revenue-ars">--</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-[10px] text-slate-500 uppercase mb-1">Equivalente USD</div>
+                                <div class="text-base font-mono text-slate-300 tabular-nums" id="sim-revenue-usd">--</div>
+                            </div>
+                        </div>
+
+                        <!-- Card Costo -->
+                        <div class="glass p-5 rounded-xl border-l-4 border-l-slate-600">
+                            <div class="flex justify-between items-center mb-4">
+                                <div>
+                                    <div class="text-xs text-slate-500 uppercase font-mono mb-1">Costo Asignado (Base)</div>
+                                    <div class="text-lg font-mono text-slate-300 tabular-nums" id="sim-cost-ars">--</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-[10px] text-slate-500 uppercase mb-1">Costo Hist. USD</div>
+                                    <div class="text-base font-mono text-slate-400 tabular-nums" id="sim-cost-usd">--</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Lista lotes consumidos -->
+                            <div class="border-t border-white/10 pt-3">
+                                <div class="flex justify-between items-center mb-2">
+                                    <div class="text-[10px] text-slate-500 uppercase font-bold">Detalle Lotes Consumidos:</div>
+                                    <div class="text-[10px] text-slate-600 italic" id="sim-method-display">PPP</div>
+                                </div>
+                                <ul class="space-y-1 max-h-32 overflow-y-auto custom-scroll pr-2" id="sim-lots-list">
+                                    <!-- JS Fill -->
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Card Resultado -->
+                        <div class="glass p-5 rounded-xl border-l-4 border-l-transparent relative overflow-hidden transition-all duration-500" id="sim-result-card">
+                            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-white/5 pointer-events-none"></div>
+                            
+                            <div class="grid grid-cols-2 gap-8 relative z-10">
+                                <!-- ARS Result -->
+                                <div>
+                                    <div class="text-xs text-slate-400 uppercase font-mono mb-2 flex items-center gap-2">
+                                        Resultado Fiscal
+                                        <span class="px-1 py-0.5 bg-slate-800 rounded text-[9px] border border-white/10">ARS</span>
+                                    </div>
+                                    <div class="text-3xl font-mono font-bold text-white tabular-nums tracking-tight" id="sim-pnl-ars">--</div>
+                                    <div class="text-sm mt-1 font-mono font-bold" id="sim-pct-ars">--</div>
+                                </div>
+                                
+                                <!-- USD Result -->
+                                <div class="text-right border-l border-white/10 pl-8">
+                                    <div class="text-xs text-slate-400 uppercase font-mono mb-2 flex items-center justify-end gap-2">
+                                        Resultado Real
+                                        <span class="px-1 py-0.5 bg-slate-800 rounded text-[9px] border border-white/10">USD</span>
+                                    </div>
+                                    <div class="text-2xl font-mono font-bold text-white tabular-nums tracking-tight" id="sim-pnl-usd">--</div>
+                                    <div class="text-xs mt-1 font-mono font-bold" id="sim-pct-usd">--</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: EDUCACION -->
+            <div id="tab-calculo" class="tab-content hidden animate-fade-in">
+                <div class="max-w-3xl glass p-8 rounded-2xl mx-auto space-y-8 border border-white/10">
+                    <div>
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-primary/10 text-brand-primary text-xs font-bold uppercase tracking-wider mb-4 border border-brand-primary/20">
+                            Modelo Mental Argfolio
+                        </div>
+                        <h3 class="text-2xl font-display text-white mb-4">¿Ganás plata o solo pesos?</h3>
+                        <p class="text-slate-400 text-sm leading-relaxed">
+                            Al operar CEDEARs, intervenimos dos variables: la cotización del activo en EE.UU. y el tipo de cambio local. 
+                            Argfolio utiliza la punta <strong>VENDEDORA</strong> del MEP para todas las conversiones ARS → USD, porque ese es el precio real al que deberías pagar si quisieras reponer esos dólares en el mercado.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4 font-mono text-xs">
+                        <!-- Bloque Invertido -->
+                        <div class="p-5 bg-slate-950 rounded-lg border border-white/10 relative overflow-hidden">
+                            <div class="absolute top-0 left-0 w-1 h-full bg-slate-700"></div>
+                            <h4 class="text-white font-bold mb-3 flex items-center gap-2">
+                                <span class="w-4 h-4 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-[10px]">1</span>
+                                TU COSTO (INVERTIDO)
+                            </h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <div class="text-slate-500 mb-1">En Pesos (Nominal)</div>
+                                    <div class="text-brand-primary bg-brand-primary/5 p-2 rounded border border-brand-primary/10">
+                                        Σ (Cantidad × Precio_Compra_ARS)
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-slate-500 mb-1">En Dólares (Histórico)</div>
+                                    <div class="text-slate-300 bg-slate-900 p-2 rounded border border-white/5">
+                                        Σ (Costo_ARS / MEP_Venta_FechaCompra)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bloque Valor Hoy -->
+                        <div class="p-5 bg-slate-950 rounded-lg border border-white/10 relative overflow-hidden">
+                            <div class="absolute top-0 left-0 w-1 h-full bg-brand-primary"></div>
+                            <h4 class="text-white font-bold mb-3 flex items-center gap-2">
+                                <span class="w-4 h-4 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-[10px]">2</span>
+                                VALOR HOY
+                            </h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <div class="text-slate-500 mb-1">En Pesos</div>
+                                    <div class="text-brand-primary bg-brand-primary/5 p-2 rounded border border-brand-primary/10">
+                                        Tenencia × Precio_Actual_ARS
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-slate-500 mb-1">En Dólares (Actual)</div>
+                                    <div class="text-slate-300 bg-slate-900 p-2 rounded border border-white/5">
+                                        Valor_Hoy_ARS / MEP_Venta_HOY
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 flex gap-3 items-start">
+                         <svg class="w-5 h-5 shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                         <p>
+                             <strong>Dato Clave:</strong> Si ves que ganás 50% en pesos pero estás 0% en dólares, significa que tu CEDEAR solo acompañó la devaluación (suba del MEP) pero el activo subyacente no subió de precio real.
+                         </p>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        // --- DATA ---
+        // Escenario "Divergencia": Gran suba de MEP, pero QQQ bajó un poco en USD.
+        // Resultado: Ganancia en ARS (Verde), Pérdida en USD (Rojo).
+        const MARKET_DATA = {
+            ticker: "QQQ",
+            ars_price: 63450.00,
+            mep_sell: 1215.00, // REFERENCIA DE CONVERSIÓN
+            mep_buy: 1185.00,  // Informativo
+            last_update: "14:45"
+        };
+
+        const MOCK_LOTES = [
+            // Lote viejo: Dólar barato (490). Ganancia enorme en ARS, y ganancia en USD (porque precio subyacente tmb era bajo).
+            { id: 1, date: '2023-06-15', qty: 10, price_ars: 18500.00, mep_hist_sell: 490.00 },
+            
+            // Lote medio: Dólar caro (1120). Empate técnico.
+            { id: 2, date: '2024-01-10', qty: 15, price_ars: 58000.00, mep_hist_sell: 1120.00 },
+            
+            // Lote reciente: Compró en máximos de QQQ. Pierde en USD fuerte, gana poco en ARS por suba de MEP reciente.
+            { id: 3, date: '2024-03-01', qty: 30, price_ars: 68000.00, mep_hist_sell: 1050.00 },
+        ];
+
+        let simMethod = 'PPP';
+
+        // --- FORMATTERS ---
+        // Strict format rules: ARS has $ suffix or prefix. USD has US$ prefix.
+        const fmtARS = (n) => `$ ${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}`;
+        const fmtUSD = (n) => `US$ ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}`;
+        const fmtNum = (n) => new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+        const fmtPct = (n) => {
+            const sign = n > 0 ? '+' : '';
+            return `${sign}${n.toFixed(2)}%`;
+        };
+        const fmtDate = (dateStr) => {
+            // Converts YYYY-MM-DD to DD/MM/YYYY
+            const [y, m, d] = dateStr.split('-');
+            return `${d}/${m}/${y}`;
+        }
+
+        // --- MAIN LOGIC ---
+
+        function init() {
+            renderHeader();
+            calculatePortfolio();
+            renderTable();
+            initSimulator();
+        }
+
+        function renderHeader() {
+            document.getElementById('mep-sell-display').textContent = `$ ${fmtNum(MARKET_DATA.mep_sell)}`;
+            
+            // Hero Prices
+            document.getElementById('hero-price-ars').textContent = fmtARS(MARKET_DATA.ars_price);
+            
+            // Implicit USD = ARS Price / MEP Sell
+            const usdImpl = MARKET_DATA.ars_price / MARKET_DATA.mep_sell;
+            document.getElementById('hero-price-usd').textContent = fmtUSD(usdImpl);
+
+            // Dashboard Current Price Panel
+            document.getElementById('dash-price-ars').textContent = fmtARS(MARKET_DATA.ars_price);
+            document.getElementById('dash-price-usd').textContent = fmtUSD(usdImpl);
+            document.getElementById('dash-tc-ref').textContent = `TC: $ ${fmtNum(MARKET_DATA.mep_sell)}`;
+        }
+
+        function calculatePortfolio() {
+            let totalQty = 0;
+            let invARS = 0;
+            let invUSD = 0;
+
+            MOCK_LOTES.forEach(l => {
+                totalQty += l.qty;
+                const cost_ars = l.qty * l.price_ars;
+                const cost_usd = cost_ars / l.mep_hist_sell; // HISTORICAL COST
+                invARS += cost_ars;
+                invUSD += cost_usd;
+            });
+
+            // Values Today (Valued at Today's MEP Sell)
+            const valARS = totalQty * MARKET_DATA.ars_price;
+            const valUSD = valARS / MARKET_DATA.mep_sell; 
+
+            // PnL
+            const pnlARS = valARS - invARS;
+            const pctARS = invARS > 0 ? (pnlARS / invARS) * 100 : 0;
+            
+            const pnlUSD = valUSD - invUSD;
+            const pctUSD = invUSD > 0 ? (pnlUSD / invUSD) * 100 : 0;
+
+            // --- RENDER HERO ---
+            
+            // 1. Valuation Card (Hierarchy: ARS Big, USD Small)
+            document.getElementById('hero-ars-value').textContent = fmtARS(valARS);
+            updateBadge('hero-badge-usd', pctUSD); // Using USD pct for the sub-badge as reference
+            document.getElementById('hero-usd-value').textContent = fmtUSD(valUSD);
+
+            // 2. Metrics Dashboard
+            document.getElementById('hero-qty').textContent = totalQty;
+            
+            // Invertido
+            document.getElementById('hero-invested-ars').textContent = fmtARS(invARS);
+            document.getElementById('hero-invested-usd').textContent = fmtUSD(invUSD);
+
+            // PPC
+            document.getElementById('hero-ppc-ars').textContent = fmtARS(invARS / totalQty);
+            document.getElementById('hero-ppc-usd').textContent = fmtUSD(invUSD / totalQty);
+
+            // Resultado Total
+            renderDualPnL('hero-pnl-ars', pnlARS, pctARS, fmtARS);
+            renderDualPnL('hero-pnl-usd', pnlUSD, pctUSD, fmtUSD);
+
+            // Divergence Alert
+            const alertBox = document.getElementById('divergence-alert');
+            // Show if signs differ (one pos, one neg) AND significant (>1%)
+            if ((pnlARS > 0 && pnlUSD < 0) || (pnlARS < 0 && pnlUSD > 0)) {
+                alertBox.classList.remove('hidden');
+            } else {
+                alertBox.classList.add('hidden');
+            }
+        }
+
+        function renderDualPnL(id, val, pct, fmtFn) {
+            const el = document.getElementById(id);
+            const color = val >= 0 ? 'text-semantic-up' : 'text-semantic-down';
+            el.textContent = `${fmtFn(val)} (${fmtPct(pct)})`;
+            el.className = `font-mono tabular-nums font-bold ${color}`;
+        }
+
+        function updateBadge(id, pct) {
+            const el = document.getElementById(id);
+            el.textContent = fmtPct(pct);
+            const colorClass = pct >= 0 
+                ? "bg-semantic-up/10 text-semantic-up border border-semantic-up/20" 
+                : "bg-semantic-down/10 text-semantic-down border border-semantic-down/20";
+            el.className = `text-xs font-bold px-2 py-0.5 rounded-md tabular-nums ${colorClass}`;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('lots-table-body');
+            tbody.innerHTML = '';
+
+            let tQty=0, tInvArs=0, tInvUsd=0, tValArs=0, tValUsd=0, tResArs=0, tResUsd=0;
+
+            MOCK_LOTES.forEach(l => {
+                const iArs = l.qty * l.price_ars;
+                const iUsd = iArs / l.mep_hist_sell;
+                
+                const vArs = l.qty * MARKET_DATA.ars_price;
+                const vUsd = vArs / MARKET_DATA.mep_sell;
+
+                const rArs = vArs - iArs;
+                const rUsd = vUsd - iUsd;
+                
+                // % per lot
+                const pctArs = (rArs / iArs) * 100;
+                const pctUsd = (rUsd / iUsd) * 100;
+
+                // Totals
+                tQty += l.qty; tInvArs+=iArs; tInvUsd+=iUsd; tValArs+=vArs; tValUsd+=vUsd; tResArs+=rArs; tResUsd+=rUsd;
+
+                // Unit Price Today (Calculated)
+                const unitPriceArsToday = MARKET_DATA.ars_price;
+                const unitPriceUsdToday = MARKET_DATA.ars_price / MARKET_DATA.mep_sell;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-white/5 transition group border-b border-white/5 last:border-0";
+                tr.innerHTML = `
+                    <td class="px-6 py-4 text-xs font-mono text-white align-top pt-5 whitespace-nowrap">${fmtDate(l.date)}</td>
+                    <td class="px-6 py-4 text-right text-xs font-mono text-white align-top pt-5">${l.qty}</td>
+                    
+                    <!-- Precio Unitario Compra -->
+                    <td class="px-6 py-4 text-right align-top">
+                        <div class="text-xs font-mono text-white mb-1">$ ${fmtNum(l.price_ars)}</div>
+                        <div class="secondary-value justify-end">US$ ${fmtNum(l.price_ars / l.mep_hist_sell)}</div>
+                        <div class="tc-reference">TC: ${fmtNum(l.mep_hist_sell)}</div>
+                    </td>
+
+                    <!-- Precio Unitario HOY (New Column) -->
+                    <td class="px-6 py-4 text-right align-top bg-white/[0.02]">
+                        <div class="text-xs font-mono text-white mb-1">$ ${fmtNum(unitPriceArsToday)}</div>
+                        <div class="secondary-value justify-end">US$ ${fmtNum(unitPriceUsdToday)}</div>
+                        <div class="tc-reference">TC: ${fmtNum(MARKET_DATA.mep_sell)}</div>
+                    </td>
+                    
+                    <!-- Invertido -->
+                    <td class="px-6 py-4 text-right align-top">
+                        <div class="text-xs font-mono text-slate-300 mb-1">${fmtARS(iArs)}</div>
+                        <div class="secondary-value justify-end">${fmtUSD(iUsd)}</div>
+                    </td>
+                    
+                    <!-- Valor Hoy -->
+                    <td class="px-6 py-4 text-right align-top">
+                        <div class="text-xs font-mono text-white mb-1">${fmtARS(vArs)}</div>
+                        <div class="secondary-value justify-end">${fmtUSD(vUsd)}</div>
+                        <div class="tc-reference">TC: ${fmtNum(MARKET_DATA.mep_sell)}</div>
+                    </td>
+                    
+                    <!-- Resultado -->
+                    <td class="px-6 py-4 text-right align-top">
+                        <div class="text-xs font-mono font-bold mb-1 ${rArs>=0?'text-semantic-up':'text-semantic-down'}">
+                            ${fmtARS(rArs)} <span class="opacity-75 text-[10px] font-normal">(${fmtPct(pctArs)})</span>
+                        </div>
+                        <div class="text-xs font-mono font-bold ${rUsd>=0?'text-semantic-up':'text-semantic-down'}">
+                            ${fmtUSD(rUsd)} <span class="opacity-75 text-[10px] font-normal">(${fmtPct(pctUsd)})</span>
+                        </div>
+                    </td>
+                    
+                    <td class="px-6 py-4 text-right align-middle">
+                         <button onclick="openSell(${l.qty})" class="text-[10px] uppercase font-bold text-brand-primary bg-brand-primary/10 px-3 py-1.5 rounded border border-brand-primary/20 opacity-0 group-hover:opacity-100 hover:bg-brand-primary hover:text-white transition">Vender</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Footer Totals
+            document.getElementById('tbl-total-qty').textContent = tQty;
+            document.getElementById('tbl-total-inv-ars').textContent = fmtARS(tInvArs);
+            document.getElementById('tbl-total-inv-usd').textContent = fmtUSD(tInvUsd);
+            document.getElementById('tbl-total-val-ars').textContent = fmtARS(tValArs);
+            document.getElementById('tbl-total-val-usd').textContent = fmtUSD(tValUsd);
+            
+            const rArsEl = document.getElementById('tbl-total-res-ars');
+            rArsEl.textContent = fmtARS(tResArs);
+            rArsEl.className = `text-xs font-mono font-bold tabular-nums ${tResArs>=0?'text-semantic-up':'text-semantic-down'}`;
+            
+            const rUsdEl = document.getElementById('tbl-total-res-usd');
+            rUsdEl.textContent = fmtUSD(tResUsd);
+            rUsdEl.className = `text-[10px] font-mono font-bold tabular-nums ${tResUsd>=0?'text-semantic-up':'text-semantic-down'}`;
+        }
+
+        // --- SIMULATOR ---
+
+        function initSimulator() {
+            document.getElementById('sim-price').value = fmtNum(MARKET_DATA.ars_price);
+            document.getElementById('sim-mep').textContent = `$ ${fmtNum(MARKET_DATA.mep_sell)}`;
+            runSimulation();
+        }
+
+        function setMaxSim() {
+            let total = MOCK_LOTES.reduce((acc, l) => acc + l.qty, 0);
+            document.getElementById('sim-qty').value = total;
+            runSimulation();
+        }
+
+        function toggleManualPrice() {
+            const isAuto = document.getElementById('use-market-price').checked;
+            const input = document.getElementById('sim-price');
+            input.disabled = isAuto;
+            if(isAuto) {
+                input.value = fmtNum(MARKET_DATA.ars_price);
+                input.classList.add('opacity-70');
+            } else {
+                input.classList.remove('opacity-70');
+                input.focus();
+            }
+            runSimulation();
+        }
+
+        function setSimMethod(method) {
+            simMethod = method;
+            document.querySelectorAll('.sim-method-btn').forEach(btn => {
+                if(btn.dataset.method === method) {
+                    btn.className = "sim-method-btn px-3 py-2 rounded-md text-xs font-medium border transition bg-brand-primary/20 border-brand-primary text-white shadow-[0_0_10px_rgba(99,102,241,0.2)]";
+                } else {
+                    btn.className = "sim-method-btn px-3 py-2 rounded-md text-xs font-medium border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition";
+                }
+            });
+            runSimulation();
+        }
+
+        function runSimulation() {
+            const qtyToSell = parseInt(document.getElementById('sim-qty').value) || 0;
+            // Parse custom format input (removes points, replaces comma)
+            let rawPrice = document.getElementById('sim-price').value.replace(/\./g, '').replace(',', '.');
+            const sellPriceArs = parseFloat(rawPrice) || 0;
+
+            // Update Method Display
+            document.getElementById('sim-method-display').textContent = simMethod;
+
+            // 1. Revenue (Producido)
+            const revenueArs = qtyToSell * sellPriceArs;
+            const revenueUsd = revenueArs / MARKET_DATA.mep_sell; // Converted at Today's MEP Sell
+
+            document.getElementById('sim-revenue-ars').textContent = fmtARS(revenueArs);
+            document.getElementById('sim-revenue-usd').textContent = fmtUSD(revenueUsd);
+
+            // 2. Cost (Consumption Logic)
+            let costArs = 0;
+            let costUsd = 0;
+            let remainingQty = qtyToSell;
+            
+            // Clone lots
+            let sortedLots = [...MOCK_LOTES].map(l => ({...l})); 
+
+            // Sort logic
+            if (simMethod === 'FIFO') {
+                sortedLots.sort((a, b) => new Date(a.date) - new Date(b.date));
+            } else if (simMethod === 'LIFO') {
+                sortedLots.sort((a, b) => new Date(b.date) - new Date(a.date));
+            } else if (simMethod === 'CHEAPEST') {
+                // Cheapest by ARS price (nominal)
+                sortedLots.sort((a, b) => a.price_ars - b.price_ars);
+            }
+            // PPP logic is different (Weighted Average)
+
+            const lotsConsumedList = document.getElementById('sim-lots-list');
+            lotsConsumedList.innerHTML = '';
+
+            if (simMethod === 'PPP') {
+                // Average Calculation (Total Invested / Total Qty)
+                let totalH = 0, totalCArs = 0, totalCUsd = 0;
+                MOCK_LOTES.forEach(l => {
+                    totalH += l.qty;
+                    totalCArs += l.qty * l.price_ars;
+                    totalCUsd += (l.qty * l.price_ars) / l.mep_hist_sell;
+                });
+                const avgArs = totalCArs / totalH;
+                const avgUsd = totalCUsd / totalH;
+                
+                costArs = avgArs * qtyToSell;
+                costUsd = avgUsd * qtyToSell;
+                
+                lotsConsumedList.innerHTML = `
+                    <li class="text-[10px] text-slate-400 p-2 bg-slate-900/50 rounded border border-white/5">
+                        <div class="flex justify-between font-mono mb-1">
+                            <span>Precio Promedio Ponderado</span>
+                            <span class="text-white">${fmtARS(avgArs)}</span>
+                        </div>
+                         <div class="flex justify-between font-mono">
+                            <span>Costo Hist. USD Prom.</span>
+                            <span class="text-slate-400">${fmtUSD(avgUsd)}</span>
+                        </div>
+                    </li>`;
+
+            } else {
+                // Lot Consumption
+                for (let lot of sortedLots) {
+                    if (remainingQty <= 0) break;
+                    
+                    const take = Math.min(remainingQty, lot.qty);
+                    const lotCostArs = take * lot.price_ars;
+                    const lotCostUsd = lotCostArs / lot.mep_hist_sell;
+
+                    costArs += lotCostArs;
+                    costUsd += lotCostUsd;
+                    remainingQty -= take;
+
+                    // Add to list
+                    const li = document.createElement('li');
+                    li.className = "flex justify-between text-[10px] text-slate-400 border-b border-white/5 py-2 last:border-0";
+                    li.innerHTML = `
+                        <div class="flex flex-col">
+                            <span class="text-white font-mono">${fmtDate(lot.date)}</span>
+                            <span class="text-[9px]">TC: ${fmtNum(lot.mep_hist_sell)}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="block text-brand-primary font-bold">${take} un.</span>
+                            <span class="block text-[9px] mt-0.5">@ ${fmtARS(lot.price_ars)}</span>
+                        </div>
+                    `;
+                    lotsConsumedList.appendChild(li);
+                }
+            }
+
+            document.getElementById('sim-cost-ars').textContent = fmtARS(costArs);
+            document.getElementById('sim-cost-usd').textContent = fmtUSD(costUsd);
+
+            // 3. Result
+            const resArs = revenueArs - costArs;
+            const pctArs = costArs > 0 ? (resArs / costArs) * 100 : 0;
+
+            const resUsd = revenueUsd - costUsd;
+            const pctUsd = costUsd > 0 ? (resUsd / costUsd) * 100 : 0;
+
+            // Render Result
+            const pnlArsEl = document.getElementById('sim-pnl-ars');
+            pnlArsEl.textContent = fmtARS(resArs);
+            pnlArsEl.className = `text-3xl font-mono font-bold tabular-nums tracking-tight ${resArs >= 0 ? 'text-semantic-up' : 'text-semantic-down'}`;
+            
+            const pctArsEl = document.getElementById('sim-pct-ars');
+            pctArsEl.textContent = fmtPct(pctArs);
+            pctArsEl.className = `text-sm mt-1 font-mono font-bold ${resArs >= 0 ? 'text-semantic-up' : 'text-semantic-down'}`;
+
+            const pnlUsdEl = document.getElementById('sim-pnl-usd');
+            pnlUsdEl.textContent = fmtUSD(resUsd);
+            pnlUsdEl.className = `text-2xl font-mono font-bold tabular-nums tracking-tight ${resUsd >= 0 ? 'text-semantic-up' : 'text-semantic-down'}`;
+
+            const pctUsdEl = document.getElementById('sim-pct-usd');
+            pctUsdEl.textContent = fmtPct(pctUsd);
+            pctUsdEl.className = `text-xs mt-1 font-mono font-bold ${resUsd >= 0 ? 'text-semantic-up' : 'text-semantic-down'}`;
+
+            // Border color
+            const card = document.getElementById('sim-result-card');
+            card.className = `glass p-5 rounded-xl border-l-4 relative overflow-hidden transition-colors duration-500 ${resUsd >= 0 ? 'border-l-semantic-up' : 'border-l-semantic-down'}`;
+        }
+
+
+        // UI Handlers
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            
+            ['tab-lotes', 'tab-simulador', 'tab-calculo'].forEach(id => {
+                const btn = document.getElementById('btn-' + id);
+                btn.className = "border-transparent text-slate-400 hover:text-slate-200 py-3 px-1 border-b-2 font-medium text-sm transition-colors focus:outline-none";
+            });
+            document.getElementById('btn-' + tabId).className = "border-brand-primary text-brand-primary py-3 px-1 border-b-2 font-medium text-sm transition-colors focus:outline-none";
+        }
+
+        function openSell(qty) {
+            switchTab('tab-simulador');
+            document.getElementById('sim-qty').value = qty;
+            window.scrollTo({ top: document.getElementById('tab-simulador').offsetTop - 100, behavior: 'smooth' });
+            runSimulation();
+        }
+
+        init();
+    </script>
+</body>
+</html>
