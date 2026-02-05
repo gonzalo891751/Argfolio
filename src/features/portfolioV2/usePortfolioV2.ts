@@ -93,6 +93,7 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
                 fixedDepositDetails: new Map(),
                 cedearDetails: new Map(),
                 cryptoDetails: new Map(),
+                fciDetails: new Map(),
             }
         }
 
@@ -130,6 +131,7 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
                 fixedDepositDetails: new Map(),
                 cedearDetails: new Map(),
                 cryptoDetails: new Map(),
+                fciDetails: new Map(),
             }
         }
 

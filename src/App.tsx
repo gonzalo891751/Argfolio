@@ -13,6 +13,7 @@ import { WalletDetailPage } from '@/pages/wallet-detail'
 import { PFDetailPage } from '@/pages/pf-detail'
 import { CryptoDetailPage } from '@/pages/crypto-detail'
 import { CedearDetailPage } from '@/pages/cedear-detail'
+import { FciDetailPage } from '@/pages/fci-detail'
 import { AssetDetailPage } from '@/pages/asset-detail'
 import { MovementsPageV2 as MovementsPage } from '@/pages/movements/index'
 import { HistoryPage } from '@/pages/history'
@@ -145,6 +146,15 @@ function App() {
                                                 element={
                                                     <ErrorBoundary>
                                                         <CedearDetailPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* FCI Detail - Subpage */}
+                                            <Route
+                                                path="/mis-activos-v2/fondos/:accountId/:instrumentId"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <FciDetailPage />
                                                     </ErrorBoundary>
                                                 }
                                             />

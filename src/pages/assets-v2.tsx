@@ -247,6 +247,13 @@ export function AssetsPageV2() {
             navigate(`/mis-activos-v2/cedears/${accountId}/${item.symbol}`)
             return
         }
+        // For FCI items, navigate to fci detail subpage
+        if (item.kind === 'fci') {
+            const accountId = item.accountId || provider.id
+            const instrumentId = encodeURIComponent(item.instrumentId || item.symbol)
+            navigate(`/mis-activos-v2/fondos/${accountId}/${instrumentId}`)
+            return
+        }
         // For other items, use overlay
         setSelectedItem(item)
         setSelectedProvider(provider)
@@ -365,13 +372,13 @@ export function AssetsPageV2() {
                     {allProviders.map(provider => (
                         <div key={provider.id} className="border border-border rounded-xl overflow-hidden bg-card">
                             <ProviderSection
-                            provider={provider}
-                            isExpanded={expandedProviders.has(provider.id)}
-                            onToggle={() => toggleProvider(provider.id)}
-                            onItemClick={(item) => openItemDetail(item, provider)}
-                            onSettings={() => openProviderSettings(provider.id)}
-                            onOpenFxOverride={openFxOverride}
-                        />
+                                provider={provider}
+                                isExpanded={expandedProviders.has(provider.id)}
+                                onToggle={() => toggleProvider(provider.id)}
+                                onItemClick={(item) => openItemDetail(item, provider)}
+                                onSettings={() => openProviderSettings(provider.id)}
+                                onOpenFxOverride={openFxOverride}
+                            />
                         </div>
                     ))}
                 </div>

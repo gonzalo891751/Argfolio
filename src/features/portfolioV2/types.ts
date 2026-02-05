@@ -296,6 +296,62 @@ export interface CryptoDetail {
     fxUsed: 'Cripto'
 }
 
+export interface FciLotDetail {
+    id: string
+    dateISO: string
+    qty: number
+    /** Unit cost in ARS at purchase */
+    unitCostArs: number
+    /** Unit cost in USD at purchase (historical: ARS / fxAtTrade) */
+    unitCostUsd: number
+    totalCostArs: number
+    totalCostUsd: number
+    /** Current value in ARS (qty * currentPriceArs) */
+    currentValueArs: number
+    /** Current value in USD (ARS / oficialSell) */
+    currentValueUsd: number
+    pnlArs: number
+    pnlUsd: number
+    pnlPctArs: number
+    pnlPctUsd: number
+    /** FX Oficial at time of purchase */
+    fxAtTrade: number
+    /** True if fxAtTrade was missing and estimated */
+    fxMissing?: boolean
+}
+
+export interface FciDetail {
+    instrumentId: string
+    symbol: string
+    name: string
+    /** Fund house (e.g., "Premier Capital", "Fima") */
+    fundHouse?: string
+    /** Fund class (e.g., "Clase B", "Clase D") */
+    fundClass?: string
+    totalQty: number
+    totalCostArs: number
+    totalCostUsd: number
+    avgCostArs: number
+    avgCostUsd: number
+    /** Current VCP (valor cuotaparte) in ARS */
+    currentPriceArs: number
+    currentPriceUsd: number
+    currentValueArs: number
+    currentValueUsd: number
+    pnlArs: number
+    pnlUsd: number
+    pnlPctArs: number
+    pnlPctUsd: number
+    lots: FciLotDetail[]
+    fxUsed: 'Oficial'
+    /** Pricing metadata for transparency */
+    priceMeta?: {
+        source: 'quote' | 'last_trade' | 'avg_cost' | 'missing'
+        unitPrice?: number
+        asOfISO?: string
+    }
+}
+
 // =============================================================================
 // Main Portfolio V2 Structure
 // =============================================================================
@@ -332,6 +388,7 @@ export interface PortfolioV2 {
     fixedDepositDetails: Map<string, FixedDepositDetail>
     cedearDetails: Map<string, CedearDetail>
     cryptoDetails: Map<string, CryptoDetail>
+    fciDetails: Map<string, FciDetail>
 }
 
 // =============================================================================

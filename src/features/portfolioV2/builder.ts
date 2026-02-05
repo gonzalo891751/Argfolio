@@ -20,6 +20,8 @@ import type {
     CedearLotDetail,
     CryptoDetail,
     LotDetail,
+    FciDetail,
+    FciLotDetail,
     ItemKind,
     MoneyPair,
     FxMeta,
@@ -1426,6 +1428,117 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
         }
     }
 
+    // Build FCI details from movements + FIFO lots
+    const fciDetails = new Map<string, FciDetail>()
+    const fciRubro = rubros.find(r => r.id === 'fci')
+    if (fciRubro) {
+        const oficialSellRate = fxSnapshot.officialSell || 1
+
+        for (const provider of fciRubro.providers) {
+            for (const item of provider.items) {
+                if (item.kind !== 'fci') continue
+                if (!item.instrumentId && !item.symbol) continue
+
+                // Filter movements for this FCI + account
+                const assetMovements = movements.filter(m =>
+                    m.accountId === item.accountId &&
+                    (m.instrumentId === item.instrumentId ||
+                        (!m.instrumentId && m.ticker === item.symbol)) &&
+                    (m.assetClass === 'fci')
+                )
+
+                if (assetMovements.length === 0) continue
+
+                // Build FIFO lots
+                const fifoResult = buildFifoLots(assetMovements)
+
+                // Current VCP (valor cuotaparte): derive from item value / qty
+                const currentPriceArs = (item.qty && item.qty > 0)
+                    ? item.valArs / item.qty
+                    : 0
+                const currentPriceUsd = oficialSellRate > 0 ? currentPriceArs / oficialSellRate : 0
+
+                // Map FIFO lots to FciLotDetail with dual-currency
+                const lots: FciLotDetail[] = fifoResult.lots.map((lot, idx) => {
+                    const fxMissing = !lot.fxAtTrade || lot.fxAtTrade <= 1
+                    const fxHist = lot.fxAtTrade > 0 ? lot.fxAtTrade : oficialSellRate
+
+                    const unitCostArs = lot.unitCostArs
+                    const unitCostUsd = fxHist > 0 ? unitCostArs / fxHist : 0
+                    const totalCostArs = lot.quantity * unitCostArs
+                    const totalCostUsd = lot.quantity * unitCostUsd
+
+                    const currentValueArs = lot.quantity * currentPriceArs
+                    const currentValueUsd = oficialSellRate > 0 ? currentValueArs / oficialSellRate : 0
+
+                    const pnlArs = currentValueArs - totalCostArs
+                    const pnlUsd = currentValueUsd - totalCostUsd
+                    const pnlPctArs = totalCostArs > 0 ? pnlArs / totalCostArs : 0
+                    const pnlPctUsd = totalCostUsd > 0 ? pnlUsd / totalCostUsd : 0
+
+                    return {
+                        id: `${item.id}-lot-${idx}`,
+                        dateISO: lot.date,
+                        qty: lot.quantity,
+                        unitCostArs,
+                        unitCostUsd,
+                        totalCostArs,
+                        totalCostUsd,
+                        currentValueArs,
+                        currentValueUsd,
+                        pnlArs,
+                        pnlUsd,
+                        pnlPctArs,
+                        pnlPctUsd,
+                        fxAtTrade: lot.fxAtTrade,
+                        fxMissing: fxMissing ? true : undefined,
+                    }
+                })
+
+                const totalQty = fifoResult.totalQuantity
+                const totalCostArs = lots.reduce((s, l) => s + l.totalCostArs, 0)
+                const totalCostUsd = lots.reduce((s, l) => s + l.totalCostUsd, 0)
+                const avgCostArs = totalQty > 0 ? totalCostArs / totalQty : 0
+                const avgCostUsd = totalQty > 0 ? totalCostUsd / totalQty : 0
+                const currentValueArs = totalQty * currentPriceArs
+                const currentValueUsd = oficialSellRate > 0 ? currentValueArs / oficialSellRate : 0
+                const pnlArs = currentValueArs - totalCostArs
+                const pnlUsd = currentValueUsd - totalCostUsd
+                const pnlPctArs = totalCostArs > 0 ? pnlArs / totalCostArs : 0
+                const pnlPctUsd = totalCostUsd > 0 ? pnlUsd / totalCostUsd : 0
+
+                // Extract fund house and class from name if present (e.g., "Premier Capital - Clase D")
+                const nameParts = item.label.split(' - ')
+                const fundHouse = nameParts.length > 1 ? nameParts[0] : undefined
+                const fundClass = nameParts.length > 1 ? nameParts.slice(1).join(' - ') : undefined
+
+                fciDetails.set(item.id, {
+                    instrumentId: item.instrumentId || item.symbol,
+                    symbol: item.symbol,
+                    name: item.label,
+                    fundHouse,
+                    fundClass,
+                    totalQty,
+                    totalCostArs,
+                    totalCostUsd,
+                    avgCostArs,
+                    avgCostUsd,
+                    currentPriceArs,
+                    currentPriceUsd,
+                    currentValueArs,
+                    currentValueUsd,
+                    pnlArs,
+                    pnlUsd,
+                    pnlPctArs,
+                    pnlPctUsd,
+                    lots,
+                    fxUsed: 'Oficial',
+                    priceMeta: item.priceMeta,
+                })
+            }
+        }
+    }
+
     return {
         isLoading: false,
         asOfISO: fxRates.updatedAtISO,
@@ -1442,5 +1555,6 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
         fixedDepositDetails,
         cedearDetails,
         cryptoDetails,
+        fciDetails,
     }
 }
