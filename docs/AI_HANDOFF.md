@@ -810,3 +810,20 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 **Next steps:**
 - Usar este archivo para priorizar fixes de discrepancia de fechas (P0).
 - Actualizar sección "Current Focus" al cerrar tickets de auditoría.
+
+### 2026-02-05 — Antigravity — Auditoría Mis Activos V2
+**Goal:** Auditar y documentar causas raíz de bugs en Mis Activos V2 (Saldo USD, Duplicados, Toggle, Chips).
+**Scope touched:** Documentation Only
+**Changes (files):**
+- docs/audits/AUDIT_MIS_ACTIVOS_V2_2026-02-05.md — [NEW] Reporte detallado de hallazgos.
+- docs/AI_HANDOFF.md — [MOD] Checkpoint agregado.
+**Key Findings:**
+- **Saldo USD:** Proviene de ítems `CASH_USD` legítimos en el ledger (fiat), no de stablecoins mal clasificadas.
+- **Duplicados:** Causados por el split de providers (Cripto vs Liquidez) en la lógica de `builder.ts`.
+- **Toggle Quilombo:** Desincronización de IDs (`-cash`) al expandir providers split.
+- **Chips Missing:** Falta de metadata `cashYield` en cuentas específicas (Carrefour, Fiwind).
+**Next steps:**
+1. Implementar `getDisplayName` unificado en `assets-v2.tsx` para agrupar visualmente los providers en vista "Cuentas".
+2. Sincronizar el toggle de expansión para abrir ambos providers (Activo + Liquidez) simultáneamente.
+3. Habilitar metadata `cashYield` en cuentas faltantes.
+4. (Opcional) Renombrar "Saldo USD" a "Saldo Fiat" para reducir ambigüedad.
