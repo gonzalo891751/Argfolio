@@ -45,6 +45,67 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-05 — Antigravity — Fix: FX for Broker/Exchange Cash + TEA Chip
+**Goal:** Fix missing `fxMeta` on broker/exchange cash providers and add TEA chip alongside TNA in list view.
+
+**Root Cause:**
+- Broker/exchange cash providers created in `buildRubros()` had no `fxMeta` attached (only items had it)
+- `ItemRow` displayed TNA chip but not TEA chip (prototype shows both)
+
+**Fix Applied:**
+- `src/features/portfolioV2/builder.ts`:
+  - Compute `fxMeta` from items for broker/exchange cash providers
+  - Use corrected totals (recalculated from items with proper FX) instead of original metrics
+- `src/pages/assets-v2.tsx`:
+  - Added TEA chip alongside TNA chip in `ItemRow` for remunerated accounts
+
+**Estado:** ✅ Build passing, 49 tests passing.
+
+---
+
+### 2026-02-04 — Claude — Fix: FX Valuation Discrepancy in Billeteras V2
+**Goal:** Fix FX rate mismatch where chip showed "TC Cripto V" but valuation used Oficial rate.
+
+**Root Cause:** 
+- `src/domain/assets/valuation.ts` → `getFxKeyForAsset()` hardcodes CASH_ARS/USD to `'oficial'`
+- `buildItemFromMetrics()` computed correct `fxMeta` based on account type but passed through upstream `valArs`/`valUsd` unchanged
+
+**Fix Applied:**
+- `src/features/portfolioV2/builder.ts`: 
+  - `buildItemFromMetrics()` now recalculates `valArs`/`valUsd` using `fxMeta.rate` for cash items
+  - `buildProviderFromGroup()` computes totals from corrected items, adds provider `fxMeta`
+  - Rubro-level `fxMeta` computed from providers (single TC or undefined for mixed)
+- `src/features/portfolioV2/types.ts`: Added `fxMeta?: FxMeta` to `ProviderV2` and `RubroV2`
+- `src/pages/assets-v2.tsx`: 
+  - RubroCard header shows actual TC rate or fxPolicy label, green secondary value
+  - ProviderSection header shows TC chip next to secondary value
+
+**FX Rules Implemented:**
+- EXCHANGE (Binance) → `fxFamily='Cripto'`
+- BROKER (InvertirOnline) → `fxFamily='MEP'`
+- WALLET/BANK (Carrefour) → `fxFamily='Oficial'`
+- USD→ARS: use Venta (V), ARS→USD: use Compra (C)
+
+**Estado:** ✅ Build passing, 49 tests passing.
+
+---
+
+### 2026-02-04 — Claude — Fix: Auto-Refresh/Scroll-Top Bug
+**Goal:** Eliminar el "pestañeo" y scroll-reset automático en /mis-activos-v2 y otras páginas.
+
+**Root Cause:** `useAutoRefresh` defaulteaba a `true`, causando `refetchInterval` de 5 min en hooks de FX/crypto/portfolio. Además `use-crypto-prices.ts` y `use-fx-rates.ts` tenían fallback hardcodeado de 5 min.
+
+**Cambios:**
+- `src/hooks/use-auto-refresh.tsx`: default de `true` → `false` (opt-in)
+- `src/hooks/use-crypto-prices.ts`: removido fallback `?? 5*60*1000`
+- `src/hooks/use-fx-rates.ts`: removido fallback `?? 5*60*1000`
+
+**Estado:** ✅ Build passing, tests passing.
+
+**Doc:** `docs/audits/AUDIT_AUTO_REFRESH_SCROLL_TOP.md`
+
+---
+
 ### 2026-02-05 — Antigravity — Feat: Smart TC Valuation + Chips (Billeteras V2)
 **Objetivo:** Implementar valuación inteligente por tipo de cambio según plataforma (Cripto/MEP/Oficial) + lado Compra/Venta, mostrar chips de TC en UI, y secundario en verde.
 

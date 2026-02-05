@@ -67,7 +67,7 @@ export function useCryptoPrices(symbols: string[]) {
                 return cache
             }
         },
-        refetchInterval: refreshInterval ?? 5 * 60 * 1000, // Def 5 mins
+        refetchInterval: refreshInterval, // 0 when auto-refresh disabled
         staleTime: 60000,
         enabled: symbols.length > 0
     })

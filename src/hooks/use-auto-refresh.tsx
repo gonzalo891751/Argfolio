@@ -16,7 +16,7 @@ const DEFAULT_INTERVAL = 5 * 60 * 1000 // 5 minutes
 export function RefreshProvider({ children }: { children: React.ReactNode }) {
     const [isAutoRefreshEnabled, setAutoRefreshEnabledState] = useState(() => {
         const stored = localStorage.getItem(STORAGE_KEY)
-        return stored !== 'false' // Default to true
+        return stored === 'true' // Default to false (opt-in)
     })
     const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
 

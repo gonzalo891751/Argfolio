@@ -309,11 +309,28 @@ function buildItemFromMetrics(
 
     // Compute fxMeta for cash items if FX info is available
     let fxMeta: FxMeta | undefined
+    let valArs = metrics.valArs ?? 0
+    let valUsd = metrics.valUsdEq ?? 0
+
     if (fxSnapshot && (kind === 'cash_ars' || kind === 'cash_usd' || kind === 'wallet_yield')) {
         // CASH_USD: US dollar balance valued to ARS → USD→ARS = Venta
         // CASH_ARS: ARS balance valued to USD → ARS→USD = Compra
         const isUsdToArs = kind === 'cash_usd'
         fxMeta = buildFxMeta(account, fxSnapshot, isUsdToArs)
+
+        // CRITICAL FIX: Recalculate valArs/valUsd with the correct FX rate
+        // The upstream metrics use a generic 'oficial' rate, but we need to use
+        // the account-specific rate (Cripto for exchanges, MEP for brokers, Oficial for wallets)
+        const qty = metrics.quantity ?? 0
+        if (kind === 'cash_usd') {
+            // USD balance: valUsd = qty, valArs = qty * rate(Venta)
+            valUsd = qty
+            valArs = qty * fxMeta.rate
+        } else {
+            // ARS balance (cash_ars or wallet_yield): valArs = qty, valUsd = qty / rate(Compra)
+            valArs = qty
+            valUsd = fxMeta.rate > 0 ? qty / fxMeta.rate : 0
+        }
     }
 
     return {
@@ -322,8 +339,8 @@ function buildItemFromMetrics(
         symbol: metrics.symbol,
         label: metrics.name || metrics.symbol,
         qty: metrics.quantity,
-        valArs: metrics.valArs ?? 0,
-        valUsd: metrics.valUsdEq ?? 0,
+        valArs,
+        valUsd,
         pnlArs: metrics.pnlArs ?? undefined,
         pnlUsd: metrics.pnlUsdEq ?? undefined,
         pnlPct: metrics.pnlPct ?? undefined,
@@ -332,6 +349,7 @@ function buildItemFromMetrics(
         fxMeta,
     }
 }
+
 
 function buildProviderFromGroup(
     accountId: string,
@@ -356,12 +374,24 @@ function buildProviderFromGroup(
         return it
     })
 
-    // Calculate totals from filtered items
+    // Calculate totals from enriched items (with corrected FX values)
     const totals = {
-        valArs: filteredMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
-        valUsd: filteredMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-        pnlArs: filteredMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-        pnlUsd: filteredMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
+        valArs: enrichedItems.reduce((s, it) => s + it.valArs, 0),
+        valUsd: enrichedItems.reduce((s, it) => s + it.valUsd, 0),
+        pnlArs: enrichedItems.reduce((s, it) => s + (it.pnlArs ?? 0), 0),
+        pnlUsd: enrichedItems.reduce((s, it) => s + (it.pnlUsd ?? 0), 0),
+    }
+
+    // Compute provider-level fxMeta (if all items share the same fxMeta family)
+    let providerFxMeta: FxMeta | undefined
+    const itemsWithFx = enrichedItems.filter(it => it.fxMeta)
+    if (itemsWithFx.length > 0) {
+        const families = new Set(itemsWithFx.map(it => it.fxMeta!.family))
+        if (families.size === 1) {
+            // All items share the same FX family - use first item's fxMeta
+            providerFxMeta = itemsWithFx[0].fxMeta
+        }
+        // If mixed, providerFxMeta stays undefined (UI can show "TC Mixto")
     }
 
     return {
@@ -370,8 +400,10 @@ function buildProviderFromGroup(
         totals: { ars: totals.valArs, usd: totals.valUsd },
         pnl: { ars: totals.pnlArs, usd: totals.pnlUsd },
         items: enrichedItems,
+        fxMeta: providerFxMeta,
     }
 }
+
 
 interface GroupedRowEntry {
     accountName: string
@@ -554,13 +586,6 @@ export function buildRubros(
                         )
                         if (cashMetrics.length === 0) continue
 
-                        const itemsTotals = {
-                            valArs: cashMetrics.reduce((s, m) => s + (m.valArs ?? 0), 0),
-                            valUsd: cashMetrics.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-                            pnlArs: cashMetrics.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-                            pnlUsd: cashMetrics.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
-                        }
-
                         // Create provider with suffix to differentiate from main rubro
                         const providerName = getDisplayName(accountId, account?.name, settingsMap)
                         const items = cashMetrics.map(m => {
@@ -570,19 +595,39 @@ export function buildRubros(
                             }
                             return base
                         })
+
+                        // Recalculate totals from items (with corrected FX values)
+                        const correctedTotals = {
+                            valArs: items.reduce((s, it) => s + it.valArs, 0),
+                            valUsd: items.reduce((s, it) => s + it.valUsd, 0),
+                            pnlArs: items.reduce((s, it) => s + (it.pnlArs ?? 0), 0),
+                            pnlUsd: items.reduce((s, it) => s + (it.pnlUsd ?? 0), 0),
+                        }
+
+                        // Compute provider fxMeta from items
+                        let cashProviderFxMeta: FxMeta | undefined
+                        const itemsWithFx = items.filter(it => it.fxMeta)
+                        if (itemsWithFx.length > 0) {
+                            const families = new Set(itemsWithFx.map(it => it.fxMeta!.family))
+                            if (families.size === 1) {
+                                cashProviderFxMeta = itemsWithFx[0].fxMeta
+                            }
+                        }
+
                         const provider: ProviderV2 = {
                             id: `${accountId}-cash`,
                             name: `${providerName} (Liquidez)`,
-                            totals: { ars: itemsTotals.valArs, usd: itemsTotals.valUsd },
-                            pnl: { ars: itemsTotals.pnlArs, usd: itemsTotals.pnlUsd },
+                            totals: { ars: correctedTotals.valArs, usd: correctedTotals.valUsd },
+                            pnl: { ars: correctedTotals.pnlArs, usd: correctedTotals.pnlUsd },
                             items,
+                            fxMeta: cashProviderFxMeta,
                         }
 
                         providers.push(provider)
-                        rubroTotals.ars += itemsTotals.valArs
-                        rubroTotals.usd += itemsTotals.valUsd
-                        rubroPnl.ars += itemsTotals.pnlArs
-                        rubroPnl.usd += itemsTotals.pnlUsd
+                        rubroTotals.ars += correctedTotals.valArs
+                        rubroTotals.usd += correctedTotals.valUsd
+                        rubroPnl.ars += correctedTotals.pnlArs
+                        rubroPnl.usd += correctedTotals.pnlUsd
                         continue
                     }
 
@@ -725,6 +770,18 @@ export function buildRubros(
 
         // Only add rubro if it has providers
         if (providers.length > 0) {
+            // Compute rubro-level fxMeta (if all providers share the same fxMeta family)
+            let rubroFxMeta: FxMeta | undefined
+            const providersWithFx = providers.filter(p => p.fxMeta)
+            if (providersWithFx.length > 0) {
+                const families = new Set(providersWithFx.map(p => p.fxMeta!.family))
+                if (families.size === 1) {
+                    // All providers share the same FX family
+                    rubroFxMeta = providersWithFx[0].fxMeta
+                }
+                // If mixed, rubroFxMeta stays undefined (UI can show "TC Mixto")
+            }
+
             rubros.push({
                 id: config.id,
                 name: config.name,
@@ -733,6 +790,7 @@ export function buildRubros(
                 totals: rubroTotals,
                 pnl: rubroPnl,
                 providers,
+                fxMeta: rubroFxMeta,
             })
         }
     }

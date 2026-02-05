@@ -47,7 +47,7 @@ export function useFxRates() {
                 throw error
             }
         },
-        refetchInterval: refreshInterval ?? 5 * 60 * 1000, // Def 5 mins if auto-refresh logic allows
+        refetchInterval: refreshInterval, // 0 when auto-refresh disabled
         staleTime: 60000, // 1 minute
         retry: 2
     })

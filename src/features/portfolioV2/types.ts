@@ -91,6 +91,8 @@ export interface RubroV2 {
     totals: MoneyPair
     pnl: MoneyPair
     providers: ProviderV2[]
+    /** FX metadata for the rubro (if single TC) or undefined (mixed) */
+    fxMeta?: FxMeta
 }
 
 export interface ProviderV2 {
@@ -100,6 +102,8 @@ export interface ProviderV2 {
     pnl: MoneyPair
     commissions?: CommissionSettings
     items: ItemV2[]
+    /** FX metadata for the provider (if single TC) or undefined (mixed) */
+    fxMeta?: FxMeta
 }
 
 export interface CommissionSettings {

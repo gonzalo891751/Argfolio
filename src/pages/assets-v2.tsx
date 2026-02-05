@@ -441,15 +441,18 @@ function RubroCard({
                     <div className="text-left">
                         <h3 className="font-semibold">{rubro.name}</h3>
                         <p className="text-xs text-muted-foreground">
-                            TC: {rubro.fxPolicy}
+                            {rubro.fxMeta
+                                ? `TC ${rubro.fxMeta.family} ${rubro.fxMeta.side} $${rubro.fxMeta.rate.toFixed(2)}`
+                                : rubro.fxPolicy
+                            }
                         </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="text-right">
                         <p className="font-mono font-semibold">{formatMoneyARS(rubro.totals.ars)}</p>
-                        <p className="text-xs text-muted-foreground font-mono">
-                            {formatMoneyUSD(rubro.totals.usd)}
+                        <p className="text-xs text-emerald-400 font-mono">
+                            ≈ {formatMoneyUSD(rubro.totals.usd)}
                         </p>
                     </div>
                     {isExpanded ? (
@@ -520,7 +523,14 @@ function ProviderSection({
                 <div className="flex items-center gap-4">
                     <div className="text-right">
                         <p className="font-mono text-sm font-semibold">{primary}</p>
-                        <p className="text-xs text-muted-foreground font-mono">≈ {secondary}</p>
+                        <div className="flex items-center justify-end gap-1.5">
+                            <p className="text-xs text-emerald-400 font-mono">≈ {secondary}</p>
+                            {provider.fxMeta && provider.fxMeta.rate > 0 && (
+                                <span className="text-[9px] font-mono text-muted-foreground bg-muted/50 px-1 py-0.5 rounded whitespace-nowrap">
+                                    TC {provider.fxMeta.family} {provider.fxMeta.side}
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <button
                         onClick={(e) => {
@@ -584,15 +594,22 @@ function ItemRow({ item, onClick }: ItemRowProps) {
                 <div>
                     <div className="flex items-center gap-2">
                         <p className="font-medium text-sm group-hover:text-primary transition-colors">{item.label}</p>
-                        {/* TNA Chip */}
+                        {/* TNA + TEA Chips */}
                         {hasTna && (
-                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                                TNA {item.yieldMeta!.tna}%
-                            </span>
+                            <>
+                                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                    TNA {item.yieldMeta!.tna.toFixed(0)}%
+                                </span>
+                                {item.yieldMeta!.tea && item.yieldMeta!.tea > 0 && (
+                                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                        TEA {item.yieldMeta!.tea.toFixed(1)}%
+                                    </span>
+                                )}
+                            </>
                         )}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        {isUsdCash ? 'Tenencia en USD' : isWalletOrCash ? 'Liquidez inmediata' :
+                        {isUsdCash ? 'Tenencia en USD' : hasTna ? '' : isWalletOrCash ? 'Liquidez inmediata' :
                             item.qty ? `${item.qty.toLocaleString('es-AR', { maximumFractionDigits: 4 })} unidades` : ''}
                     </p>
                 </div>
