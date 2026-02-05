@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Detalle FCI</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Configuración Argfolio -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a', 
+                            800: '#1e293b', 
+                            700: '#334155', 
+                            primary: '#6366f1', // Indigo
+                            accent: '#0ea5e9', // Sky
+                        },
+                        semantic: {
+                            up: '#10b981', // Emerald
+                            down: '#f43f5e', // Rose
+                            warn: '#f59e0b', // Amber
+                            info: '#3b82f6', // Blue
+                        }
+                    },
+                    backgroundImage: {
+                        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-sm': '0 0 10px -2px rgba(99, 102, 241, 0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-surface: rgba(30, 41, 59, 0.4);
+        }
+
+        body {
+            background-color: var(--bg-app);
+            color: #F8FAFC;
+        }
+
+        /* Glass Utility */
+        .glass-panel {
+            background: var(--glass-surface);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+        }
+
+        /* Custom Scrollbar for tables */
+        .custom-scroll::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.02);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        /* Hide number input arrows */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        
+        /* Smooth transitions */
+        .tab-content {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans selection:bg-brand-primary/30 selection:text-white pb-20">
+
+    <!-- Ambient Glow Background -->
+    <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <div class="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-brand-primary/10 rounded-full blur-[100px]"></div>
+        <div class="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-brand-accent/5 rounded-full blur-[120px]"></div>
+    </div>
+
+    <!-- HEADER / NAV -->
+    <header class="border-b border-white/5 bg-brand-900/80 backdrop-blur-md sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <a href="#" class="p-2 -ml-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </a>
+                
+                <nav class="hidden md:flex text-sm font-medium text-slate-500 gap-2 items-center">
+                    <span class="hover:text-slate-300 cursor-pointer transition">Mis Activos</span>
+                    <span class="text-slate-700">/</span>
+                    <span class="hover:text-slate-300 cursor-pointer transition">Fondos (FCI)</span>
+                    <span class="text-slate-700">/</span>
+                    <span class="text-brand-primary px-2 py-0.5 bg-brand-primary/10 rounded border border-brand-primary/20">Premier Capital - Clase B</span>
+                </nav>
+            </div>
+
+            <!-- Ticker / Market Context -->
+            <div class="flex items-center gap-4">
+                <div class="hidden md:flex flex-col items-end">
+                    <div class="flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-semantic-up animate-pulse"></span>
+                        <span class="text-xs font-mono text-slate-400">TC Oficial (C)</span>
+                        <span class="text-xs font-mono text-white font-bold">$1.065,50</span>
+                    </div>
+                    <span class="text-[10px] text-slate-600">Actualizado hace 2m</span>
+                </div>
+                <div class="h-8 w-px bg-white/10 mx-2 hidden md:block"></div>
+                <button onclick="scrollToCalculo()" class="text-xs font-medium text-slate-400 hover:text-white flex items-center gap-1.5 transition">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Cómo se calcula
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 w-full space-y-8">
+
+        <!-- HERO SECTION -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- LEFT CARD: VALUATION -->
+            <div class="lg:col-span-5 glass-panel rounded-2xl p-6 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <svg class="w-32 h-32 text-brand-primary" fill="currentColor" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+                </div>
+
+                <div class="relative z-10">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-sm font-display text-slate-400 uppercase tracking-wider">Valuación Actual</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-primary/10 text-brand-primary border border-brand-primary/20">FCI</span>
+                    </div>
+                    
+                    <!-- ARS Value -->
+                    <div class="flex items-baseline gap-1 mt-2">
+                        <span class="text-2xl text-slate-500 font-light">$</span>
+                        <span class="text-5xl md:text-6xl font-display font-bold text-white tracking-tight">21.450.320</span>
+                        <span class="text-xl text-slate-500 font-light">,00</span>
+                    </div>
+
+                    <!-- USD Equivalent -->
+                    <div class="mt-3 flex items-center gap-2">
+                        <span class="text-lg font-mono text-semantic-up font-medium">≈ US$ 20.131,70</span>
+                        <span class="text-xs text-slate-500">(Equivalente Oficial)</span>
+                    </div>
+
+                    <!-- Performance Pills -->
+                    <div class="flex flex-wrap gap-2 mt-6">
+                        <div class="px-3 py-1.5 rounded-lg bg-semantic-up/10 border border-semantic-up/20 flex items-center gap-2">
+                            <span class="text-xs text-slate-400 uppercase font-bold">Diaria</span>
+                            <span class="text-sm font-mono font-bold text-semantic-up">▲ 1.24%</span>
+                        </div>
+                        <div class="px-3 py-1.5 rounded-lg bg-semantic-up/10 border border-semantic-up/20 flex items-center gap-2">
+                            <span class="text-xs text-slate-400 uppercase font-bold">30D</span>
+                            <span class="text-sm font-mono font-bold text-semantic-up">▲ 5.80%</span>
+                        </div>
+                         <div class="px-3 py-1.5 rounded-lg bg-semantic-up/10 border border-semantic-up/20 flex items-center gap-2">
+                            <span class="text-xs text-slate-400 uppercase font-bold">YTD</span>
+                            <span class="text-sm font-mono font-bold text-semantic-up">▲ 42.1%</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 pt-4 border-t border-white/5 flex justify-between items-end">
+                        <div>
+                            <div class="text-[10px] text-slate-500 font-mono uppercase mb-1">Valor Cuotaparte (Hoy)</div>
+                            <div class="font-mono text-white text-lg">$ 14.250,32</div>
+                            <div class="font-mono text-semantic-up text-xs">US$ 13,37</div>
+                        </div>
+                        <div class="text-right">
+                             <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-slate-800/50 border border-white/5">
+                                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                <span class="text-[10px] text-slate-400 font-medium">Fuente: CAFCI / Mercado</span>
+                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT CARD: DATA GRID & KPI -->
+            <div class="lg:col-span-7 grid grid-rows-[auto_1fr] gap-6">
+                
+                <!-- Divergence Alert -->
+                <div class="glass-panel bg-amber-500/5 border-amber-500/20 rounded-xl p-4 flex items-start gap-4">
+                    <div class="p-2 bg-amber-500/10 rounded-lg shrink-0 text-amber-500">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-amber-500 mb-1">Divergencia Nominal vs Real</h4>
+                        <p class="text-sm text-slate-400 leading-relaxed">
+                            Tu posición subió un <span class="text-semantic-up font-mono">+12% en Pesos</span> este mes, pero bajó un <span class="text-semantic-down font-mono">-1.5% en Dólares</span> debido a la devaluación del oficial.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- KPI Grid -->
+                <div class="glass-panel rounded-2xl p-6 grid grid-cols-2 md:grid-cols-3 gap-y-8 gap-x-4">
+                    
+                    <!-- KPI 1 -->
+                    <div class="space-y-1">
+                        <div class="text-xs font-mono text-slate-500 uppercase tracking-wide">Tenencia</div>
+                        <div class="text-xl font-display font-medium text-white">1.505,25</div>
+                        <div class="text-xs text-slate-500">Cuotapartes</div>
+                    </div>
+
+                    <!-- KPI 2 -->
+                    <div class="space-y-1">
+                         <div class="text-xs font-mono text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                            PPC Promedio
+                            <span class="text-slate-600 cursor-help" title="Precio Promedio de Compra">ⓘ</span>
+                        </div>
+                        <div class="text-lg font-mono text-white">$ 12.100,50</div>
+                        <div class="text-xs font-mono text-slate-400">US$ 11,35 <span class="opacity-50">(Hist)</span></div>
+                    </div>
+
+                    <!-- KPI 3 -->
+                    <div class="space-y-1">
+                        <div class="text-xs font-mono text-slate-500 uppercase tracking-wide">Total Invertido</div>
+                        <div class="text-lg font-mono text-white">$ 18.214.300</div>
+                        <div class="text-xs font-mono text-slate-400">US$ 17.094,60 <span class="opacity-50">(Hist)</span></div>
+                    </div>
+
+                    <!-- Divider for Result -->
+                    <div class="col-span-2 md:col-span-3 h-px bg-white/5 my-2"></div>
+
+                    <!-- RESULTADO NOMINAL -->
+                    <div class="space-y-1 relative">
+                        <div class="absolute -left-3 top-1 bottom-1 w-0.5 bg-brand-primary/50 rounded-full"></div>
+                        <div class="text-xs font-mono text-brand-primary uppercase tracking-wide font-bold pl-1">Resultado Nominal (ARS)</div>
+                        <div class="text-xl font-mono text-semantic-up font-medium pl-1">+$ 3.236.020</div>
+                        <div class="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-semantic-up/10 text-semantic-up border border-semantic-up/20 ml-1">
+                            ▲ 17,76%
+                        </div>
+                    </div>
+
+                    <!-- RESULTADO REAL -->
+                    <div class="space-y-1 relative col-span-1 md:col-span-2">
+                        <div class="absolute -left-3 top-1 bottom-1 w-0.5 bg-brand-accent/50 rounded-full"></div>
+                        <div class="text-xs font-mono text-brand-accent uppercase tracking-wide font-bold pl-1">Resultado Real (USD)</div>
+                        <div class="flex flex-wrap items-baseline gap-2">
+                            <div class="text-xl font-mono text-semantic-up font-medium pl-1">+US$ 3.037,10</div>
+                            <div class="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-semantic-up/10 text-semantic-up border border-semantic-up/20">
+                                ▲ 17,76%
+                            </div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 pl-1 max-w-[200px] leading-tight mt-1">
+                            Medido contra USD Oficial al momento de cada aporte.
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- SETTINGS BAR -->
+        <section class="flex flex-wrap items-center justify-between gap-4 pt-4">
+            <div class="flex items-center gap-3 p-1 bg-slate-900/50 border border-white/5 rounded-lg">
+                <span class="px-3 text-xs font-mono text-slate-500 uppercase">Método:</span>
+                <button class="px-3 py-1.5 text-xs font-medium bg-white/10 text-white rounded shadow-sm border border-white/10 transition">Histórico (Compras)</button>
+                <button class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 rounded transition">Valuación Simple</button>
+            </div>
+            
+            <button onclick="openRescueModal()" class="ml-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                Simular Rescate
+            </button>
+        </section>
+
+        <!-- TABS & CONTENT -->
+        <section class="space-y-6">
+            
+            <!-- Tab Nav -->
+            <div class="border-b border-white/10">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onclick="switchTab('posicion')" id="btn-posicion" class="border-brand-primary text-brand-primary whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        Posición
+                    </button>
+                    <button onclick="switchTab('aportes')" id="btn-aportes" class="border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-700 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        Aportes (Lotes)
+                    </button>
+                    <button onclick="switchTab('proyeccion')" id="btn-proyeccion" class="border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-700 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        Proyección
+                    </button>
+                    <button onclick="switchTab('educacion')" id="btn-educacion" class="border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-700 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        Cómo se calcula
+                    </button>
+                </nav>
+            </div>
+
+            <!-- TAB 1: POSICIÓN (Chart) -->
+            <div id="tab-posicion" class="tab-content block space-y-6">
+                <div class="glass-panel rounded-2xl p-6 h-[400px] w-full relative">
+                    <div class="absolute top-6 right-6 z-10 flex gap-2">
+                        <button class="px-2 py-1 text-xs font-mono rounded bg-white/10 text-white">30D</button>
+                        <button class="px-2 py-1 text-xs font-mono rounded text-slate-500 hover:bg-white/5 transition">YTD</button>
+                        <button class="px-2 py-1 text-xs font-mono rounded text-slate-500 hover:bg-white/5 transition">1A</button>
+                    </div>
+                    <canvas id="evolutionChart"></canvas>
+                </div>
+            </div>
+
+            <!-- TAB 2: APORTES (Table) -->
+            <div id="tab-aportes" class="tab-content hidden">
+                <div class="glass-panel rounded-2xl overflow-hidden border border-white/10">
+                    <div class="overflow-x-auto custom-scroll">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-white/10 bg-slate-900/50 text-xs text-slate-500 font-mono uppercase tracking-wider">
+                                    <th class="px-6 py-4 font-medium">Fecha</th>
+                                    <th class="px-6 py-4 font-medium text-right">Cuotapartes</th>
+                                    <th class="px-6 py-4 font-medium text-right">Precio Compra</th>
+                                    <th class="px-6 py-4 font-medium text-right">Invertido</th>
+                                    <th class="px-6 py-4 font-medium text-right">Valor Hoy</th>
+                                    <th class="px-6 py-4 font-medium text-right">Resultado</th>
+                                    <th class="px-6 py-4 font-medium text-center">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/5 text-sm">
+                                <!-- Row 1 -->
+                                <tr class="hover:bg-white/[0.02] transition group">
+                                    <td class="px-6 py-4 text-slate-300 whitespace-nowrap">15/01/2026</td>
+                                    <td class="px-6 py-4 text-right font-mono text-white">500,00</td>
+                                    
+                                    <!-- Price -->
+                                    <td class="px-6 py-4 text-right font-mono">
+                                        <div class="text-white">$ 13.800,00</div>
+                                        <div class="text-[10px] text-slate-500">US$ 13,01 (TC 1.060)</div>
+                                    </td>
+
+                                    <!-- Invested -->
+                                    <td class="px-6 py-4 text-right font-mono">
+                                        <div class="text-slate-300">$ 6.900.000</div>
+                                        <div class="text-[10px] text-slate-500">US$ 6.509,43</div>
+                                    </td>
+
+                                    <!-- Current -->
+                                    <td class="px-6 py-4 text-right font-mono">
+                                        <div class="text-white font-medium">$ 7.125.160</div>
+                                        <div class="text-[10px] text-semantic-up">US$ 6.687,15</div>
+                                    </td>
+
+                                    <!-- ROI -->
+                                    <td class="px-6 py-4 text-right font-mono">
+                                        <div class="text-semantic-up font-bold">+3,2% <span class="text-slate-500 font-normal text-[10px]">ARS</span></div>
+                                        <div class="text-semantic-up text-[10px]">+2,7% <span class="text-slate-600">USD</span></div>
+                                    </td>
+
+                                    <td class="px-6 py-4 text-center">
+                                        <button onclick="openRescueModal()" class="text-slate-500 hover:text-brand-primary transition p-2">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                                        </button>
+                                    </td>
+                                </tr>
+                                <!-- Row 2 -->
+                                <tr class="hover:bg-white/[0.02] transition group">
+                                    <td class="px-6 py-4 text-slate-300 whitespace-nowrap">10/12/2025</td>
+                                    <td class="px-6 py-4 text-right font-mono text-white">1.005,25</td>
+                                    
+                                    <!-- Price -->
+                                    <td class="px-6 py-4 text-right font-mono">
+                                        <div class="text-white">$ 11.250,00</div>
+                                        <div class="text-[10px] text-slate-500">US$ 10,81 (TC 1.040)</div>
+                                    </td>
+
+                                    <!-- Invested -->
+                                    <td class="px-6 py-4 text-right font-mono">
+                                        <div class="text-slate-300">$ 11.309.062</div>
+                                        <div class="text-[10px] text-slate-500">US$ 10.874,09</div>
+                                    </td>
+
+                                    <!-- Current -->
+                                    <td class="px-6 py-4 text-right font-mono">
+                                        <div class="text-white font-medium">$ 14.325.160</div>
+                                        <div class="text-[10px] text-semantic-up">US$ 13.444,55</div>
+                                    </td>
+
+                                    <!-- ROI -->
+                                    <td class="px-6 py-4 text-right font-mono">
+                                        <div class="text-semantic-up font-bold">+26,6% <span class="text-slate-500 font-normal text-[10px]">ARS</span></div>
+                                        <div class="text-semantic-up text-[10px]">+23,6% <span class="text-slate-600">USD</span></div>
+                                    </td>
+
+                                    <td class="px-6 py-4 text-center">
+                                        <button onclick="openRescueModal()" class="text-slate-500 hover:text-brand-primary transition p-2">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: PROYECCIÓN -->
+            <div id="tab-proyeccion" class="tab-content hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Mañana -->
+                    <div class="glass-panel p-6 rounded-xl border-l-4 border-l-brand-primary">
+                        <h3 class="text-sm font-display text-slate-400 mb-2">Estimado 24hs</h3>
+                        <div class="text-2xl font-mono text-white mb-1">$ 21.493.220</div>
+                        <div class="text-sm font-mono text-semantic-up">+ $42.900 <span class="opacity-50">(~TNA actual)</span></div>
+                    </div>
+                    <!-- 30 Días -->
+                    <div class="glass-panel p-6 rounded-xl border-l-4 border-l-brand-accent">
+                        <h3 class="text-sm font-display text-slate-400 mb-2">Proyección 30 Días</h3>
+                        <div class="text-2xl font-mono text-white mb-1">$ 22.560.000</div>
+                        <div class="text-sm font-mono text-semantic-up">+ 5.2% <span class="opacity-50">(Base último mes)</span></div>
+                    </div>
+                    <!-- 1 Año -->
+                    <div class="glass-panel p-6 rounded-xl border-l-4 border-l-semantic-up">
+                        <h3 class="text-sm font-display text-slate-400 mb-2">Proyección 1 Año</h3>
+                        <div class="text-2xl font-mono text-white mb-1">$ 35.800.000</div>
+                        <div class="text-sm font-mono text-semantic-up">+ 67% <span class="opacity-50">(TEA estimada)</span></div>
+                    </div>
+                </div>
+                <div class="mt-4 p-4 rounded-lg bg-blue-500/5 border border-blue-500/10 text-xs text-blue-300 flex items-start gap-2">
+                    <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <p>Las proyecciones se basan en el rendimiento pasado inmediato y asumen reinversión constante. No garantizan rendimientos futuros.</p>
+                </div>
+            </div>
+
+            <!-- TAB 4: EDUCACIÓN -->
+            <div id="tab-educacion" class="tab-content hidden">
+                <div class="glass-panel rounded-2xl p-8 max-w-3xl mx-auto">
+                    <h3 class="font-display text-2xl font-bold text-white mb-6">Entendiendo tus métricas FCI</h3>
+                    
+                    <div class="space-y-8">
+                        <div>
+                            <h4 class="font-bold text-brand-primary mb-2">Cuotapartes</h4>
+                            <p class="text-slate-400 text-sm leading-relaxed">
+                                Es la unidad de medida. Cuando invertís plata, comprás "pedacitos" del fondo llamados cuotapartes. Tu ganancia depende de que suba el valor de cada cuotaparte.
+                            </p>
+                            <div class="mt-2 p-3 bg-slate-900 rounded border border-white/10 font-mono text-xs text-slate-300">
+                                Total Invertido = Cantidad Cuotapartes × Valor Cuotaparte
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="font-bold text-brand-primary mb-2">USD Equivalente vs Histórico</h4>
+                            <ul class="space-y-3 text-sm text-slate-400">
+                                <li class="flex gap-3">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-600 mt-2 shrink-0"></span>
+                                    <div>
+                                        <strong class="text-white">USD Histórico:</strong> La suma de los dólares que pusiste en cada momento. Si pusiste $1.000 cuando el dólar estaba $10, invertiste US$ 100 históricos.
+                                    </div>
+                                </li>
+                                <li class="flex gap-3">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-semantic-up mt-2 shrink-0"></span>
+                                    <div>
+                                        <strong class="text-white">USD Equivalente (Hoy):</strong> Cuántos dólares te darían hoy si rescatás todo y comprás divisas al TC Oficial actual.
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h4 class="font-bold text-amber-500 mb-2">Divergencia</h4>
+                            <p class="text-slate-400 text-sm leading-relaxed">
+                                Ocurre cuando el fondo gana en pesos (por intereses) pero el dólar sube más rápido (devaluación). Podés tener más pesos que antes, pero comprar menos dólares.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- MODAL: RESCATE (Native Dialog) -->
+    <dialog id="rescueModal" class="bg-transparent p-0 w-full max-w-md backdrop:bg-slate-950/80 backdrop:backdrop-blur-sm">
+        <div class="glass-panel border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <!-- Header -->
+            <div class="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-slate-900/50">
+                <h3 class="font-display font-bold text-white">Simular Rescate</h3>
+                <button onclick="closeRescueModal()" class="text-slate-400 hover:text-white transition">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="p-6 space-y-6 bg-[#0f172a]">
+                
+                <!-- Input Group -->
+                <div class="space-y-2">
+                    <label class="text-xs font-mono text-slate-400 uppercase">Cuotapartes a rescatar</label>
+                    <div class="relative">
+                        <input type="number" value="1505.25" class="w-full bg-slate-900 border border-white/10 rounded-lg py-3 px-4 text-white font-mono focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition">
+                        <button class="absolute right-2 top-2 px-2 py-1 text-[10px] font-bold bg-brand-primary/20 text-brand-primary rounded uppercase hover:bg-brand-primary/30 transition">Máx</button>
+                    </div>
+                    <div class="text-xs text-slate-500 text-right">Disponible: 1.505,25</div>
+                </div>
+
+                <!-- Preview Box -->
+                <div class="bg-slate-800/50 rounded-lg p-4 space-y-3 border border-white/5">
+                    <div class="flex justify-between items-end border-b border-white/5 pb-3">
+                        <span class="text-sm text-slate-400">Recibís estimado</span>
+                        <div class="text-right">
+                            <div class="text-xl font-mono font-bold text-white">$ 21.450.320</div>
+                            <div class="text-xs font-mono text-semantic-up">≈ US$ 20.131,70</div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-slate-500">Plazo de acreditación</span>
+                        <span class="text-slate-300 font-medium">48hs hábiles (T+2)</span>
+                    </div>
+                </div>
+
+                <!-- Warning -->
+                <div class="flex gap-3 p-3 bg-amber-500/5 border border-amber-500/10 rounded-lg">
+                    <svg class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <p class="text-[10px] text-slate-400 leading-relaxed">
+                        El valor final de la cuotaparte se determinará al cierre del mercado del día de la solicitud. El monto final puede variar.
+                    </p>
+                </div>
+
+                <!-- Actions -->
+                <button class="w-full py-3 bg-brand-primary hover:bg-brand-primary/90 text-white font-medium rounded-lg shadow-glow-sm transition transform active:scale-[0.98]">
+                    Confirmar Rescate
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <script>
+        // --- TABS LOGIC ---
+        function switchTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('block'));
+            
+            // Show selected
+            const selected = document.getElementById('tab-' + tabId);
+            selected.classList.remove('hidden');
+            selected.classList.add('block');
+
+            // Update Buttons style
+            document.querySelectorAll('nav button').forEach(btn => {
+                btn.className = "border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-700 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors";
+            });
+            
+            const activeBtn = document.getElementById('btn-' + tabId);
+            activeBtn.className = "border-brand-primary text-brand-primary whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors";
+        }
+
+        function scrollToCalculo() {
+            switchTab('educacion');
+            document.getElementById('tab-educacion').scrollIntoView({behavior: 'smooth'});
+        }
+
+        // --- MODAL LOGIC ---
+        const modal = document.getElementById('rescueModal');
+
+        function openRescueModal() {
+            modal.showModal();
+            // Close on backdrop click
+            modal.addEventListener('click', (e) => {
+                const dialogDimensions = modal.getBoundingClientRect();
+                if (
+                    e.clientX < dialogDimensions.left ||
+                    e.clientX > dialogDimensions.right ||
+                    e.clientY < dialogDimensions.top ||
+                    e.clientY > dialogDimensions.bottom
+                ) {
+                    modal.close();
+                }
+            });
+        }
+
+        function closeRescueModal() {
+            modal.close();
+        }
+
+        // --- CHART.JS SETUP ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('evolutionChart').getContext('2d');
+            
+            // Gradient fill
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.4)'); // Brand Primary
+            gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['1 Ene', '5 Ene', '10 Ene', '15 Ene', '20 Ene', '25 Ene', 'Hoy'],
+                    datasets: [{
+                        label: 'Valor Cuotaparte (ARS)',
+                        data: [13200, 13450, 13300, 13800, 13950, 14100, 14250],
+                        borderColor: '#6366f1',
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        pointBackgroundColor: '#1e293b',
+                        pointBorderColor: '#6366f1',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1e293b',
+                            titleColor: '#94a3b8',
+                            bodyColor: '#fff',
+                            bodyFont: { family: 'JetBrains Mono' },
+                            padding: 12,
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    return '$ ' + context.parsed.y.toLocaleString('es-AR');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false, drawBorder: false },
+                            ticks: { color: '#64748b', font: { family: 'Inter', size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

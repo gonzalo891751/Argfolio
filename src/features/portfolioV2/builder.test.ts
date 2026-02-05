@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildPortfolioV2 } from './builder'
 import type { AssetRowMetrics } from '@/domain/assets/types'
-import type { Account, FxRates } from '@/domain/types'
+import type { Account, FxRates, Movement } from '@/domain/types'
 
 function makeMetrics(overrides: Partial<AssetRowMetrics>): AssetRowMetrics {
     const base: AssetRowMetrics = {
@@ -124,7 +124,7 @@ describe('portfolioV2 builder - rubro classification', () => {
 
         // Totals must not double-count the FCI
         expect(portfolio.kpis.totalArs).toBe(3000)
-        expect(portfolio.kpis.totalUsd).toBeCloseTo(0.83 + 1.98, 10)
+        expect(portfolio.kpis.totalUsd).toBeCloseTo((1000 / 1210) + (2000 / 1010), 10)
         expect(portfolio.kpis.totalUsdEq).toBeCloseTo(portfolio.kpis.totalUsd, 10)
 
         // Hard guard: same account+instrument must not be present in more than one rubro
@@ -147,5 +147,186 @@ describe('portfolioV2 builder - rubro classification', () => {
         const duplicated = [...allKeys.entries()].filter(([, rubroIds]) => rubroIds.size > 1)
         expect(duplicated).toEqual([])
     })
-})
 
+    it('values FCI as qty * currentPrice (quote) and sets priceMeta.source=quote', () => {
+        const broker: Account = {
+            id: 'iol',
+            name: 'InvertirOnline',
+            kind: 'BROKER',
+            defaultCurrency: 'ARS',
+        }
+
+        const qty = 1167.9121
+        const unit = 145.9
+        const expected = qty * unit
+
+        const fci = makeMetrics({
+            accountId: broker.id,
+            accountName: broker.name,
+            instrumentId: 'fci-premier-d',
+            symbol: 'PREMIERD',
+            name: 'Premier Capital - Clase D',
+            category: 'FCI',
+            nativeCurrency: 'ARS',
+            quantity: qty,
+            // Simulate the bug: upstream valArs looked like qty due to price=1 fallback
+            valArs: qty,
+            valUsdEq: 0,
+            currentPrice: unit,
+        })
+
+        const groupedRows = {
+            [broker.id]: {
+                accountName: broker.name,
+                metrics: [fci],
+                totals: { valArs: 0, valUsd: 0, pnlArs: 0, pnlUsd: 0 },
+            },
+        }
+
+        const portfolio = buildPortfolioV2({
+            groupedRows: groupedRows as any,
+            accounts: [broker],
+            fxRates,
+            movements: [],
+        })
+
+        const fondos = portfolio.rubros.find(r => r.id === 'fci')
+        const item = fondos?.providers.flatMap(p => p.items)[0]
+
+        expect(item).toBeTruthy()
+        expect(item!.valArs).toBeCloseTo(expected, 2)
+        expect(item!.priceMeta?.source).toBe('quote')
+        expect(item!.priceMeta?.unitPrice).toBe(unit)
+    })
+
+    it('falls back to last_trade price for FCI when quote is missing (never price=1 silently)', () => {
+        const broker: Account = {
+            id: 'iol',
+            name: 'InvertirOnline',
+            kind: 'BROKER',
+            defaultCurrency: 'ARS',
+        }
+
+        const qty = 1167.9121
+        const lastTradeUnit = 145.9
+        const expected = qty * lastTradeUnit
+
+        const fci = makeMetrics({
+            accountId: broker.id,
+            accountName: broker.name,
+            instrumentId: 'fci-premier-d',
+            symbol: 'PREMIERD',
+            name: 'Premier Capital - Clase D',
+            category: 'FCI',
+            nativeCurrency: 'ARS',
+            quantity: qty,
+            // Simulate the bug: upstream valArs looked like qty due to price=1 fallback
+            valArs: qty,
+            valUsdEq: 0,
+            currentPrice: null,
+        })
+
+        const movements: Movement[] = [{
+            id: 'm1',
+            datetimeISO: '2026-02-01T10:00:00.000Z',
+            type: 'BUY',
+            assetClass: 'fci',
+            instrumentId: 'fci-premier-d',
+            accountId: broker.id,
+            quantity: qty,
+            unitPrice: lastTradeUnit,
+            tradeCurrency: 'ARS',
+            totalAmount: expected,
+        }]
+
+        const groupedRows = {
+            [broker.id]: {
+                accountName: broker.name,
+                metrics: [fci],
+                totals: { valArs: 0, valUsd: 0, pnlArs: 0, pnlUsd: 0 },
+            },
+        }
+
+        const portfolio = buildPortfolioV2({
+            groupedRows: groupedRows as any,
+            accounts: [broker],
+            fxRates,
+            movements,
+        })
+
+        const fondos = portfolio.rubros.find(r => r.id === 'fci')
+        const item = fondos?.providers.flatMap(p => p.items)[0]
+
+        expect(item).toBeTruthy()
+        expect(item!.valArs).toBeCloseTo(expected, 2)
+        expect(item!.priceMeta?.source).toBe('last_trade')
+        expect(item!.priceMeta?.unitPrice).toBe(lastTradeUnit)
+        expect(item!.priceMeta?.asOfISO).toBe('2026-02-01T10:00:00.000Z')
+    })
+
+    it('computes KPI totalUsd as sum of item valuations (no global totalArs/TC conversion)', () => {
+        const wallet: Account = {
+            id: 'bank',
+            name: 'Banco',
+            kind: 'BANK',
+            defaultCurrency: 'ARS',
+        }
+
+        const broker: Account = {
+            id: 'iol',
+            name: 'InvertirOnline',
+            kind: 'BROKER',
+            defaultCurrency: 'ARS',
+        }
+
+        const cash = makeMetrics({
+            accountId: wallet.id,
+            accountName: wallet.name,
+            instrumentId: 'cash-ars',
+            symbol: 'ARS',
+            name: 'Pesos',
+            category: 'CASH_ARS',
+            nativeCurrency: 'ARS',
+            quantity: 1000,
+            valArs: 1000,
+            valUsdEq: 0,
+        })
+
+        const cedear = makeMetrics({
+            accountId: broker.id,
+            accountName: broker.name,
+            instrumentId: 'cedear-aapl',
+            symbol: 'AAPL',
+            name: 'Apple CEDEAR',
+            category: 'CEDEAR',
+            nativeCurrency: 'ARS',
+            quantity: 1,
+            valArs: 1210,
+            valUsdEq: 0,
+        })
+
+        const groupedRows = {
+            [wallet.id]: {
+                accountName: wallet.name,
+                metrics: [cash],
+                totals: { valArs: 0, valUsd: 0, pnlArs: 0, pnlUsd: 0 },
+            },
+            [broker.id]: {
+                accountName: broker.name,
+                metrics: [cedear],
+                totals: { valArs: 0, valUsd: 0, pnlArs: 0, pnlUsd: 0 },
+            },
+        }
+
+        const portfolio = buildPortfolioV2({
+            groupedRows: groupedRows as any,
+            accounts: [wallet, broker],
+            fxRates,
+            movements: [],
+        })
+
+        const expectedUsd = (1000 / 1010) + (1210 / 1210)
+        expect(portfolio.kpis.totalArs).toBe(2210)
+        expect(portfolio.kpis.totalUsd).toBeCloseTo(expectedUsd, 10)
+    })
+})

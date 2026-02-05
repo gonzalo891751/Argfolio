@@ -63,6 +63,24 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 - `npm test` ✅
 - `npm run build` ✅
 
+### 2026-02-05 — Codex — Fix P0: Valuación absurda de FCI (precio=1) en `/mis-activos-v2`
+**Bug:** Un FCI (ej: “Premier Capital - Clase B/D”) se mostraba con valuación ≈ `qty` (ej: `$ 1.167,91`) y USD ≈ `0,80`, pese a existir una compra real por ~$170.398 (qty ~1167,91 y unitPrice ~$145,90).
+
+**Causa raíz:**
+- `computeAssetMetrics()` (`src/domain/assets/valuation.ts`) caía en fallback genérico `price ?? 1` para `FCI` cuando faltaba quote → `valArs = qty * 1`.
+- Los quotes de FCI llegaban desde Mercado (`useMarketFci`) pero no siempre matcheaban el `instrumentId` (IDs legacy/import) → `currentPrice` nulo.
+- En V2, el builder podía mezclar FX porque tomaba `valUsdEq` upstream sin recalcular siempre con la política `fxMeta`.
+
+**Fix:**
+- `src/hooks/use-computed-portfolio.ts`: mapea precios/cambios de FCI a **instrument IDs reales** (match por `instrumentId`, fallback por `name+currency` y parse de `fci:...|...`).
+- `src/domain/assets/valuation.ts`: `FCI` usa **FX Oficial** y elimina `price=1` silencioso (fallback a avg cost si falta quote).
+- `src/features/portfolioV2/builder.ts`: alinea `C/V` con compra/venta, recalcula equivalentes ARS/USD con `fxMeta`, y para `FCI` aplica fallback seguro `last_trade` + `item.priceMeta.source`.
+- `src/pages/assets-v2.tsx`: chip “Estimado / Sin precio” cuando el FCI no viene de quote.
+
+**Validación:**
+- `npm test`
+- `npm run build`
+
 ### 2026-02-05 — Claude Opus 4.5 — Feat: CEDEAR Detail Subpágina (Dual ARS/USD)
 **Goal:** Implementar subpágina de detalle CEDEAR con valuación dual ARS/USD, tabla de lotes con doble moneda, selector de método de costeo, y simulador de venta con acreditación de liquidez ARS.
 

@@ -29,6 +29,16 @@ const mockPrices: Record<string, number> = {
     usd: 1,
 }
 
+function normalizeFciNameKey(input: string): string {
+    return input
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ')
+}
+
 function getUserPreferences(): { baseFx: FxType; stableFx: FxType; cedearAuto: boolean; trackCash: boolean } {
     const storedFx = localStorage.getItem('argfolio-fx-preference')
     const storedCedear = localStorage.getItem('argfolio-settings-cedear-auto')
@@ -124,12 +134,48 @@ export function useComputedPortfolio() {
             })
 
             // Add FCI Prices
-            if (fciPrices) {
-                fciPrices.forEach((price, id) => {
-                    if (price.vcp) {
-                        pricesMap.set(id, price.vcp)
+            if (fciPrices && fciPrices.size > 0) {
+                // Build index by (normalized name + currency) to handle legacy/imported instrumentIds
+                // that don't match the current `generateFciSlug()` scheme.
+                const byNameCurrency = new Map<string, number>()
+                for (const p of fciPrices.values()) {
+                    if (!p?.vcp || p.vcp <= 0) continue
+                    const key = `${normalizeFciNameKey(p.name)}|${p.currency}`
+                    if (!byNameCurrency.has(key)) byNameCurrency.set(key, p.vcp)
+                }
+
+                // Attach FCI prices to actual instrument IDs (computeTotals expects instrumentId keys).
+                for (const instr of instrumentsList) {
+                    if (instr.category !== 'FCI') continue
+
+                    let vcp: number | null = null
+
+                    // 1) Exact match (new scheme)
+                    const direct = fciPrices.get(instr.id)
+                    if (direct?.vcp && direct.vcp > 0) vcp = direct.vcp
+
+                    // 2) Name+currency match (legacy/import instruments)
+                    if (!vcp) {
+                        const cur = instr.nativeCurrency === 'USD' ? 'USD' : 'ARS'
+                        const key = `${normalizeFciNameKey(instr.name)}|${cur}`
+                        vcp = byNameCurrency.get(key) ?? null
                     }
-                })
+
+                    // 3) If instrumentId looks like "fci:manager|name|curr", try parsing name segment
+                    if (!vcp && instr.id.startsWith('fci:') && instr.id.includes('|')) {
+                        const parts = instr.id.split('|')
+                        if (parts.length >= 2) {
+                            const rawName = parts[1].replace(/-/g, ' ')
+                            const cur = (parts[2] || '').toUpperCase() === 'USD' ? 'USD' : 'ARS'
+                            const key = `${normalizeFciNameKey(rawName)}|${cur}`
+                            vcp = byNameCurrency.get(key) ?? null
+                        }
+                    }
+
+                    if (vcp && vcp > 0) {
+                        pricesMap.set(instr.id, vcp)
+                    }
+                }
             }
 
             // Build price changes map (Phase 2.1)
@@ -148,12 +194,44 @@ export function useComputedPortfolio() {
             })
 
             // Add FCI Changes
-            if (fciPrices) {
-                fciPrices.forEach((price, id) => {
-                    if (price.changePct) {
-                        priceChangesMap.set(id, price.changePct)
+            if (fciPrices && fciPrices.size > 0) {
+                const byNameCurrencyChange = new Map<string, number>()
+                for (const p of fciPrices.values()) {
+                    if (typeof p.changePct !== 'number' || !Number.isFinite(p.changePct)) continue
+                    const key = `${normalizeFciNameKey(p.name)}|${p.currency}`
+                    if (!byNameCurrencyChange.has(key)) byNameCurrencyChange.set(key, p.changePct)
+                }
+
+                for (const instr of instrumentsList) {
+                    if (instr.category !== 'FCI') continue
+
+                    let changePct: number | null = null
+
+                    const direct = fciPrices.get(instr.id)
+                    if (typeof direct?.changePct === 'number' && Number.isFinite(direct.changePct)) {
+                        changePct = direct.changePct
                     }
-                })
+
+                    if (changePct == null) {
+                        const cur = instr.nativeCurrency === 'USD' ? 'USD' : 'ARS'
+                        const key = `${normalizeFciNameKey(instr.name)}|${cur}`
+                        changePct = byNameCurrencyChange.get(key) ?? null
+                    }
+
+                    if (changePct == null && instr.id.startsWith('fci:') && instr.id.includes('|')) {
+                        const parts = instr.id.split('|')
+                        if (parts.length >= 2) {
+                            const rawName = parts[1].replace(/-/g, ' ')
+                            const cur = (parts[2] || '').toUpperCase() === 'USD' ? 'USD' : 'ARS'
+                            const key = `${normalizeFciNameKey(rawName)}|${cur}`
+                            changePct = byNameCurrencyChange.get(key) ?? null
+                        }
+                    }
+
+                    if (changePct != null) {
+                        priceChangesMap.set(instr.id, changePct)
+                    }
+                }
             }
 
             const { baseFx, stableFx } = getUserPreferences()

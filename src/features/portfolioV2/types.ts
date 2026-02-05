@@ -169,6 +169,16 @@ export interface ItemV2 {
     /** FX metadata for TC chip display */
     fxMeta?: FxMeta
 
+    /** Pricing metadata (e.g. estimated last trade fallback) */
+    priceMeta?: {
+        /** Where the unit price came from */
+        source: 'quote' | 'last_trade' | 'avg_cost' | 'missing'
+        /** Unit price used for valuation (native currency for the instrument) */
+        unitPrice?: number
+        /** Timestamp for last trade fallback (if applicable) */
+        asOfISO?: string
+    }
+
     /** Reference to source data */
     accountId: string
     instrumentId?: string

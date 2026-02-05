@@ -23,6 +23,8 @@ export function getFxKeyForAsset(category: string): FxKey {
     switch (category) {
         case 'CEDEAR':
             return 'mep'
+        case 'FCI':
+            return 'oficial'
         case 'CRYPTO':
         case 'STABLE':
             return 'cripto'
@@ -125,6 +127,57 @@ export function computeAssetMetrics(
                 prices.underlyingUsd ?? null,
                 asset.cedearRatio ?? 1
             )
+            break
+        }
+
+        case 'FCI': {
+            // FCI: Native price is typically ARS (VCP) and should use Oficial FX for USD equivalent.
+            // IMPORTANT: never default price to 1. If market quote is missing, fallback to average cost
+            // so we don't show absurdly low valuations (qty * 1) in dashboards.
+            const qty = asset.quantity
+            const costArs = asset.costBasisArs
+
+            const fallbackUnit = (() => {
+                const avg = asset.avgCostNative
+                if (avg != null && Number.isFinite(avg) && avg > 0) return avg
+                // For ARS-native FCI, we can derive an average unit cost from ARS basis.
+                if (asset.nativeCurrency !== 'USD' && qty > 0 && costArs != null && Number.isFinite(costArs) && costArs > 0) {
+                    return costArs / qty
+                }
+                return null
+            })()
+
+            if (asset.nativeCurrency === 'USD') {
+                const priceUsd = (prices.currentPrice != null && Number.isFinite(prices.currentPrice) && prices.currentPrice > 0)
+                    ? prices.currentPrice
+                    : fallbackUnit
+
+                if (priceUsd != null && Number.isFinite(priceUsd)) {
+                    valUsdEq = qty * priceUsd
+                    valArs = toArsFromUsd(valUsdEq, fx)
+                }
+
+                // Prefer historical USD cost if available, otherwise derive from ARS basis
+                if (asset.costBasisUsdEq != null && asset.costBasisUsdEq !== 0) {
+                    costUsdEq = asset.costBasisUsdEq
+                } else {
+                    costUsdEq = toUsdFromArs(costArs, fx)
+                }
+            } else {
+                const priceArs = (prices.currentPrice != null && Number.isFinite(prices.currentPrice) && prices.currentPrice > 0)
+                    ? prices.currentPrice
+                    : fallbackUnit
+
+                if (priceArs != null && Number.isFinite(priceArs)) {
+                    valArs = qty * priceArs
+                }
+
+                // Convert to USD using Oficial (Liquidation: Ask/Sell)
+                valUsdEq = toUsdFromArs(valArs, fx)
+
+                // Force Oficial conversion for USD-equivalent cost (avoid mixing MEP here).
+                costUsdEq = toUsdFromArs(costArs, fx)
+            }
             break
         }
 

@@ -167,6 +167,12 @@ const ZERO_BALANCE_THRESHOLD = 1
 
 /** Check if item has significant value (not near zero) */
 function hasSignificantValue(valArs: number, qty?: number, category?: string): boolean {
+    // For FCI, never hide positions just because the price feed is missing.
+    // We prefer rendering the row and letting the UI show a pricing warning badge.
+    if (category === 'FCI') {
+        const q = qty ?? 0
+        if (q > 0) return true
+    }
     // For CASH items, always require significant ARS value (no qty bypass)
     if (category === 'CASH_ARS') {
         return Math.abs(valArs) >= ZERO_BALANCE_THRESHOLD
@@ -268,14 +274,17 @@ function getFxRate(
     family: FxFamily,
     side: 'C' | 'V'
 ): number {
+    // Convention in V2:
+    // - Side C (Compra): buying USD -> you pay "venta" (ask/sell)
+    // - Side V (Venta): selling USD -> you receive "compra" (bid/buy)
     switch (family) {
         case 'Cripto':
-            return side === 'V' ? fx.cryptoSell : fx.cryptoBuy
+            return side === 'C' ? fx.cryptoSell : fx.cryptoBuy
         case 'MEP':
-            return side === 'V' ? fx.mepSell : fx.mepBuy
+            return side === 'C' ? fx.mepSell : fx.mepBuy
         case 'Oficial':
         default:
-            return side === 'V' ? fx.officialSell : fx.officialBuy
+            return side === 'C' ? fx.officialSell : fx.officialBuy
     }
 }
 
@@ -287,8 +296,8 @@ function buildFxMeta(
     manualOverride?: FxOverride
 ): FxMeta {
     const autoFamily = getFxFamilyForAccount(account)
-    // USD->ARS: selling USD, get Venta (bid)
-    // ARS->USD: buying USD, pay Compra (ask)
+    // USD->ARS: selling USD -> side V
+    // ARS->USD: buying USD -> side C
     const autoSide: 'C' | 'V' = isUsdToArs ? 'V' : 'C'
     const autoRate = getFxRate(fx, autoFamily, autoSide)
 
@@ -348,7 +357,8 @@ function buildItemFromMetrics(
     accountId: string,
     fxSnapshot?: FxRatesSnapshot,
     account?: Account,
-    fxOverrides?: FxOverridesMap
+    fxOverrides?: FxOverridesMap,
+    lastTrades?: Map<string, { unitPrice: number; asOfISO: string; tradeCurrency: Movement['tradeCurrency'] }>
 ): ItemV2 {
     const kind = mapCategoryToKind(metrics.category)
 
@@ -356,6 +366,7 @@ function buildItemFromMetrics(
     let fxMeta: FxMeta | undefined
     let valArs = metrics.valArs ?? 0
     let valUsd = metrics.valUsdEq ?? 0
+    let priceMeta: ItemV2['priceMeta'] | undefined
 
     if (fxSnapshot) {
         const isCashItem = kind === 'cash_ars' || kind === 'cash_usd' || kind === 'wallet_yield'
@@ -390,7 +401,7 @@ function buildItemFromMetrics(
             const family = getFxFamilyForCategory(metrics.category, account)
 
             // Determine if this is a USD-native asset
-            const isUsdNative = metrics.category === 'CRYPTO' || metrics.category === 'STABLE'
+            const isUsdNative = metrics.nativeCurrency === 'USD' || metrics.category === 'CRYPTO' || metrics.category === 'STABLE'
 
             // For USD-native: USD→ARS uses Venta (V)
             // For ARS-native: ARS→USD uses Compra (C)
@@ -405,17 +416,68 @@ function buildItemFromMetrics(
                 const manualRate = getFxRate(fxSnapshot, manualOverride.family, manualOverride.side)
                 if (Number.isFinite(manualRate) && manualRate > 0) {
                     fxMeta = { family: manualOverride.family, side: manualOverride.side, rate: manualRate }
-                    // Recalculate with manual rate
-                    if (isUsdNative) {
-                        valArs = valUsd * manualRate
-                    } else {
-                        valUsd = manualRate > 0 ? valArs / manualRate : 0
-                    }
                 } else {
                     fxMeta = { family, side, rate }
                 }
             } else {
                 fxMeta = { family, side, rate }
+            }
+
+            // Recalculate USD/ARS equivalents to guarantee consistency with fxMeta
+            // (and to avoid mixing upstream metrics FX policies across rubros).
+            if (fxMeta && fxMeta.rate > 0) {
+                if (isUsdNative) {
+                    valUsd = metrics.valUsdEq ?? 0
+                    valArs = valUsd * fxMeta.rate
+                } else {
+                    valArs = metrics.valArs ?? 0
+                    valUsd = valArs / fxMeta.rate
+                }
+            }
+
+            // FCI pricing safety: never allow implicit "price=1" valuations.
+            if (metrics.category === 'FCI') {
+                const qty = metrics.quantity ?? 0
+                const key = `${accountId}:${metrics.instrumentId ?? metrics.symbol}`
+                const last = lastTrades?.get(key)
+
+                const quoteUnit = (metrics.currentPrice != null && Number.isFinite(metrics.currentPrice) && metrics.currentPrice > 0)
+                    ? metrics.currentPrice
+                    : null
+
+                const lastTradeUnit = (last?.unitPrice != null
+                    && Number.isFinite(last.unitPrice)
+                    && last.unitPrice > 0
+                    && (!last.tradeCurrency || last.tradeCurrency === metrics.nativeCurrency))
+                    ? last.unitPrice
+                    : null
+
+                const avgCostUnit = (metrics.avgCost != null && Number.isFinite(metrics.avgCost) && metrics.avgCost > 0)
+                    ? metrics.avgCost
+                    : (qty > 0 && metrics.costArs != null && Number.isFinite(metrics.costArs) && metrics.costArs > 0)
+                        ? metrics.costArs / qty
+                        : null
+
+                const unit = quoteUnit ?? lastTradeUnit ?? avgCostUnit ?? 0
+                const source: NonNullable<ItemV2['priceMeta']>['source'] =
+                    quoteUnit ? 'quote' : lastTradeUnit ? 'last_trade' : avgCostUnit ? 'avg_cost' : 'missing'
+
+                priceMeta = {
+                    source,
+                    unitPrice: unit > 0 ? unit : undefined,
+                    asOfISO: source === 'last_trade' ? last?.asOfISO : undefined,
+                }
+
+                if (fxMeta && fxMeta.rate > 0 && qty > 0 && unit > 0) {
+                    const isFciUsd = metrics.nativeCurrency === 'USD'
+                    if (isFciUsd) {
+                        valUsd = qty * unit
+                        valArs = valUsd * fxMeta.rate
+                    } else {
+                        valArs = qty * unit
+                        valUsd = valArs / fxMeta.rate
+                    }
+                }
             }
         }
     }
@@ -428,12 +490,20 @@ function buildItemFromMetrics(
         qty: metrics.quantity,
         valArs,
         valUsd,
-        pnlArs: metrics.pnlArs ?? undefined,
-        pnlUsd: metrics.pnlUsdEq ?? undefined,
-        pnlPct: metrics.pnlPct ?? undefined,
+        pnlArs: Number.isFinite(metrics.costArs ?? NaN) ? valArs - (metrics.costArs ?? 0) : (metrics.pnlArs ?? undefined),
+        pnlUsd: Number.isFinite(metrics.costUsdEq ?? NaN) ? valUsd - (metrics.costUsdEq ?? 0) : (metrics.pnlUsdEq ?? undefined),
+        pnlPct: (() => {
+            const costArs = metrics.costArs ?? null
+            const costUsd = metrics.costUsdEq ?? null
+            const isUsdBasis = metrics.nativeCurrency === 'USD' || metrics.category === 'CRYPTO' || metrics.category === 'STABLE'
+            if (isUsdBasis && costUsd != null && Number.isFinite(costUsd) && costUsd > 0) return (valUsd - costUsd) / costUsd
+            if (costArs != null && Number.isFinite(costArs) && costArs > 0) return (valArs - costArs) / costArs
+            return metrics.pnlPct ?? undefined
+        })(),
         accountId,
         instrumentId: metrics.instrumentId,
         fxMeta,
+        priceMeta,
     }
 }
 
@@ -445,12 +515,13 @@ function buildProviderFromGroup(
     settingsMap: Map<string, AccountSettings>,
     account?: Account,
     fxSnapshot?: FxRatesSnapshot,
-    fxOverrides?: FxOverridesMap
+    fxOverrides?: FxOverridesMap,
+    lastTrades?: Map<string, { unitPrice: number; asOfISO: string; tradeCurrency: Movement['tradeCurrency'] }>
 ): ProviderV2 | null {
     // Filter out zero-balance items
     const filteredMetrics = metrics.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity, m.category))
     if (filteredMetrics.length === 0) return null
-    const items: ItemV2[] = filteredMetrics.map(m => buildItemFromMetrics(m, accountId, fxSnapshot, account, fxOverrides))
+    const items: ItemV2[] = filteredMetrics.map(m => buildItemFromMetrics(m, accountId, fxSnapshot, account, fxOverrides, lastTrades))
     const displayName = getDisplayName(accountId, accountName, settingsMap)
 
     // Attach yield metadata for remunerated ARS cash (so ItemRow can render TNA chip)
@@ -518,7 +589,8 @@ export function buildRubros(
     pfData?: PFData,
     fxSnapshot?: FxRatesSnapshot,
     accountSettings: AccountSettings[] = [],
-    fxOverrides?: FxOverridesMap
+    fxOverrides?: FxOverridesMap,
+    lastTrades?: Map<string, { unitPrice: number; asOfISO: string; tradeCurrency: Movement['tradeCurrency'] }>
 ): RubroV2[] {
     const rubros: RubroV2[] = []
     const accountMap = new Map(accounts.map(a => [a.id, a]))
@@ -549,7 +621,7 @@ export function buildRubros(
 
                 // Convert to wallet_yield items
                 const yieldItems: ItemV2[] = filteredCashItems.map(m => {
-                    const base = buildItemFromMetrics(m, accountId, fxSnapshot, account, fxOverrides)
+                    const base = buildItemFromMetrics(m, accountId, fxSnapshot, account, fxOverrides, lastTrades)
                     const yieldMeta = buildYieldMeta(accountId, account, settingsMap)
 
                     // If the item is ARS cash, allow FX override keyed by wallet_yield as well (UI may target that kind).
@@ -696,7 +768,8 @@ export function buildRubros(
                             settingsMap,
                             account,
                             fxSnapshot,
-                            fxOverrides
+                            fxOverrides,
+                            lastTrades
                         )
                         if (!provider) continue
 
@@ -719,7 +792,7 @@ export function buildRubros(
                         // Create provider with suffix to differentiate from main rubro
                         const providerName = getDisplayName(accountId, account?.name, settingsMap)
                         const items = cashMetrics.map(m => {
-                            const base = buildItemFromMetrics(m, accountId, fxSnapshot, account, fxOverrides)
+                            const base = buildItemFromMetrics(m, accountId, fxSnapshot, account, fxOverrides, lastTrades)
                             if (m.category === 'CASH_ARS') {
                                 return maybeAttachYieldMetaToArsCashItem(base, accountId, account, settingsMap)
                             }
@@ -784,7 +857,8 @@ export function buildRubros(
                             settingsMap,
                             account,
                             fxSnapshot,
-                            fxOverrides
+                            fxOverrides,
+                            lastTrades
                         )
                         if (!provider) continue
 
@@ -807,7 +881,8 @@ export function buildRubros(
                             settingsMap,
                             account,
                             fxSnapshot,
-                            fxOverrides
+                            fxOverrides,
+                            lastTrades
                         )
                         if (!provider) continue
 
@@ -838,7 +913,8 @@ export function buildRubros(
                             settingsMap,
                             account,
                             fxSnapshot,
-                            fxOverrides
+                            fxOverrides,
+                            lastTrades
                         )
                         if (!provider) continue
 
@@ -861,7 +937,8 @@ export function buildRubros(
                             settingsMap,
                             account,
                             fxSnapshot,
-                            fxOverrides
+                            fxOverrides,
+                            lastTrades
                         )
                         if (!provider) continue
 
@@ -890,7 +967,8 @@ export function buildRubros(
                     settingsMap,
                     account,
                     fxSnapshot,
-                    fxOverrides
+                    fxOverrides,
+                    lastTrades
                 )
                 if (!provider) continue
 
@@ -1009,6 +1087,27 @@ function computeTEA(tna: number): number {
     return (Math.pow(1 + tna / 100 / 365, 365) - 1) * 100
 }
 
+function buildLastTradeUnitPriceIndex(
+    movements: Movement[]
+): Map<string, { unitPrice: number; asOfISO: string; tradeCurrency: Movement['tradeCurrency'] }> {
+    const map = new Map<string, { unitPrice: number; asOfISO: string; tradeCurrency: Movement['tradeCurrency'] }>()
+
+    for (const m of movements) {
+        if (!m.instrumentId) continue
+        if (m.type !== 'BUY') continue
+        if (m.unitPrice == null || !Number.isFinite(m.unitPrice) || m.unitPrice <= 0) continue
+        if (!m.datetimeISO) continue
+
+        const key = `${m.accountId}:${m.instrumentId}`
+        const existing = map.get(key)
+        if (!existing || m.datetimeISO > existing.asOfISO) {
+            map.set(key, { unitPrice: m.unitPrice, asOfISO: m.datetimeISO, tradeCurrency: m.tradeCurrency })
+        }
+    }
+
+    return map
+}
+
 // =============================================================================
 // Main Builder Function
 // =============================================================================
@@ -1027,7 +1126,8 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
     const { groupedRows, accounts, fxRates, movements, pfData, accountSettings = [], fxOverrides } = input
 
     const fxSnapshot = buildFxSnapshot(fxRates)
-    const rubros = buildRubros(groupedRows, accounts, pfData, fxSnapshot, accountSettings, fxOverrides)
+    const lastTrades = buildLastTradeUnitPriceIndex(movements)
+    const rubros = buildRubros(groupedRows, accounts, pfData, fxSnapshot, accountSettings, fxOverrides, lastTrades)
     const kpis = buildKPIs(rubros, accounts, fxSnapshot)
 
     // Debug guard rail: detect same (accountId + instrumentId/symbol) present in multiple rubros.

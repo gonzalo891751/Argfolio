@@ -48,9 +48,10 @@ function getFxRateForSelection(
     family: FxOverrideFamily,
     side: FxOverrideSide
 ): number {
-    if (family === 'Cripto') return side === 'V' ? fx.cryptoSell : fx.cryptoBuy
-    if (family === 'MEP') return side === 'V' ? fx.mepSell : fx.mepBuy
-    return side === 'V' ? fx.officialSell : fx.officialBuy
+    // Convention: C (Compra USD) -> uses "venta" (sell/ask). V (Venta USD) -> uses "compra" (buy/bid).
+    if (family === 'Cripto') return side === 'C' ? fx.cryptoSell : fx.cryptoBuy
+    if (family === 'MEP') return side === 'C' ? fx.mepSell : fx.mepBuy
+    return side === 'C' ? fx.officialSell : fx.officialBuy
 }
 
 // =============================================================================
@@ -883,6 +884,7 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName }: ItemRowProps
     const isUsdCash = item.kind === 'cash_usd'
     const isUsdNative = item.kind === 'crypto' || item.kind === 'stable'
     const hasTna = item.yieldMeta?.tna && item.yieldMeta.tna > 0
+    const fciPriceSource = item.kind === 'fci' ? item.priceMeta?.source : undefined
     // For USD-native assets, secondary is ARS (check valArs). For others, secondary is USD (check valUsd).
     const hasSecondary = isUsdNative || isUsdCash
         ? Math.abs(item.valArs) >= 1
@@ -916,6 +918,26 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName }: ItemRowProps
                 <div>
                     <div className="flex items-center gap-2">
                         <p className="font-medium text-sm group-hover:text-primary transition-colors">{item.label}</p>
+                        {/* FCI Pricing Guard: show when using estimated pricing */}
+                        {fciPriceSource && fciPriceSource !== 'quote' && (
+                            <span
+                                className={cn(
+                                    'text-[10px] font-bold px-1.5 py-0.5 rounded border',
+                                    fciPriceSource === 'missing'
+                                        ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                                        : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                                )}
+                                title={
+                                    fciPriceSource === 'last_trade'
+                                        ? 'Precio estimado: última compra registrada'
+                                        : fciPriceSource === 'avg_cost'
+                                            ? 'Precio estimado: costo promedio'
+                                            : 'Sin precio disponible (revisar cotización del fondo)'
+                                }
+                            >
+                                {fciPriceSource === 'missing' ? 'Sin precio' : 'Estimado'}
+                            </span>
+                        )}
                         {/* TNA + TEA Chips */}
                         {hasTna && (
                             <>
