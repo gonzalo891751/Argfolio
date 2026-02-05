@@ -14,8 +14,13 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
-import { usePortfolioV2, type RubroV2, type ProviderV2, type ItemV2 } from '@/features/portfolioV2'
+import { usePortfolioV2, type RubroV2, type ProviderV2, type ItemV2, type ItemKind } from '@/features/portfolioV2'
+import { useFxOverrides, type FxOverrideFamily, type FxOverrideSide } from '@/features/portfolioV2/fxOverrides'
 import { useProviderSettings } from '@/hooks/useProviderSettings'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
+import { useToast } from '@/components/ui/toast'
 import {
     Wallet,
     PiggyBank,
@@ -35,6 +40,18 @@ import {
     LayoutGrid,
     List,
 } from 'lucide-react'
+
+type FxOverrideMode = 'auto' | 'manual'
+
+function getFxRateForSelection(
+    fx: NonNullable<ReturnType<typeof usePortfolioV2>>['fx'],
+    family: FxOverrideFamily,
+    side: FxOverrideSide
+): number {
+    if (family === 'Cripto') return side === 'V' ? fx.cryptoSell : fx.cryptoBuy
+    if (family === 'MEP') return side === 'V' ? fx.mepSell : fx.mepBuy
+    return side === 'V' ? fx.officialSell : fx.officialBuy
+}
 
 // =============================================================================
 // Icon Map
@@ -58,6 +75,19 @@ export function AssetsPageV2() {
     const { calculateVNR } = useProviderSettings()
     const navigate = useNavigate()
     const location = useLocation()
+    const { toast } = useToast()
+    const { getOverride, setOverride, clearOverride } = useFxOverrides()
+
+    const [fxOverrideTarget, setFxOverrideTarget] = useState<null | {
+        accountId: string
+        kind: ItemKind
+        title: string
+        autoMeta?: ItemV2['fxMeta']
+    }>(null)
+
+    const [fxOverrideMode, setFxOverrideMode] = useState<FxOverrideMode>('auto')
+    const [fxOverrideFamily, setFxOverrideFamily] = useState<FxOverrideFamily>('Oficial')
+    const [fxOverrideSide, setFxOverrideSide] = useState<FxOverrideSide>('V')
 
     // UI State
     const [expandedRubros, setExpandedRubros] = useState<Set<string>>(new Set())
@@ -118,6 +148,59 @@ export function AssetsPageV2() {
         didLogDebug.current = true
     }, [debug, portfolio])
 
+    const openFxOverride = (target: {
+        accountId: string
+        kind: ItemKind
+        title: string
+        autoMeta?: ItemV2['fxMeta']
+    }) => {
+        setFxOverrideTarget(target)
+    }
+
+    useEffect(() => {
+        if (!fxOverrideTarget) return
+
+        const existing = getOverride(fxOverrideTarget.accountId, fxOverrideTarget.kind)
+        if (existing) {
+            setFxOverrideMode('manual')
+            setFxOverrideFamily(existing.family)
+            setFxOverrideSide(existing.side)
+            return
+        }
+
+        setFxOverrideMode('auto')
+        const auto = fxOverrideTarget.autoMeta
+        setFxOverrideFamily(auto?.family ?? 'Oficial')
+        setFxOverrideSide(auto?.side ?? 'V')
+    }, [fxOverrideTarget, getOverride])
+
+    const applyFxOverride = () => {
+        if (!portfolio || !fxOverrideTarget) return
+
+        const { accountId, kind } = fxOverrideTarget
+
+        if (fxOverrideMode === 'auto') {
+            clearOverride(accountId, kind)
+            setFxOverrideTarget(null)
+            return
+        }
+
+        const rate = getFxRateForSelection(portfolio.fx, fxOverrideFamily, fxOverrideSide)
+        if (!Number.isFinite(rate) || rate <= 0) {
+            clearOverride(accountId, kind)
+            toast({
+                title: 'TC no disponible',
+                description: `No hay cotización para ${fxOverrideFamily} ${fxOverrideSide}. Se usará Auto.`,
+                variant: 'info',
+            })
+            setFxOverrideTarget(null)
+            return
+        }
+
+        setOverride(accountId, kind, { family: fxOverrideFamily, side: fxOverrideSide })
+        setFxOverrideTarget(null)
+    }
+
     // Toggle helpers
     const toggleRubro = (id: string) => {
         setExpandedRubros(prev => {
@@ -144,6 +227,11 @@ export function AssetsPageV2() {
             // Use accountId from item, falling back to provider id (removing -cash suffix if present)
             const accountId = item.accountId || provider.id.replace(/-cash$/, '')
             navigate(`/mis-activos-v2/billeteras/${accountId}?kind=${item.kind}`)
+            return
+        }
+        // For plazo fijo items, navigate to PF detail subpage
+        if (item.kind === 'plazo_fijo') {
+            navigate(`/mis-activos-v2/plazos-fijos/${item.id}`)
             return
         }
         // For other items, use overlay
@@ -254,6 +342,7 @@ export function AssetsPageV2() {
                             onItemClick={openItemDetail}
                             onProviderSettings={openProviderSettings}
                             calculateVNR={calculateVNR}
+                            onOpenFxOverride={openFxOverride}
                         />
                     ))}
                 </div>
@@ -263,12 +352,13 @@ export function AssetsPageV2() {
                     {allProviders.map(provider => (
                         <div key={provider.id} className="border border-border rounded-xl overflow-hidden bg-card">
                             <ProviderSection
-                                provider={provider}
-                                isExpanded={expandedProviders.has(provider.id)}
-                                onToggle={() => toggleProvider(provider.id)}
-                                onItemClick={(item) => openItemDetail(item, provider)}
-                                onSettings={() => openProviderSettings(provider.id)}
-                            />
+                            provider={provider}
+                            isExpanded={expandedProviders.has(provider.id)}
+                            onToggle={() => toggleProvider(provider.id)}
+                            onItemClick={(item) => openItemDetail(item, provider)}
+                            onSettings={() => openProviderSettings(provider.id)}
+                            onOpenFxOverride={openFxOverride}
+                        />
                         </div>
                     ))}
                 </div>
@@ -312,6 +402,115 @@ export function AssetsPageV2() {
                     onClose={() => setShowSettingsModal(false)}
                 />
             )}
+
+            {/* FX Override Modal */}
+            <Dialog open={!!fxOverrideTarget} onOpenChange={(open) => !open && setFxOverrideTarget(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Tipo de cambio</DialogTitle>
+                        <DialogDescription>
+                            {fxOverrideTarget?.title}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {fxOverrideTarget && (
+                        <div className="space-y-4 px-6 pb-2">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    className={cn(
+                                        'flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors',
+                                        fxOverrideMode === 'auto'
+                                            ? 'bg-primary/10 border-primary/30 text-primary'
+                                            : 'bg-muted/30 border-border text-muted-foreground hover:bg-muted/50'
+                                    )}
+                                    onClick={() => setFxOverrideMode('auto')}
+                                    type="button"
+                                >
+                                    Auto (recomendado)
+                                </button>
+                                <button
+                                    className={cn(
+                                        'flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors',
+                                        fxOverrideMode === 'manual'
+                                            ? 'bg-primary/10 border-primary/30 text-primary'
+                                            : 'bg-muted/30 border-border text-muted-foreground hover:bg-muted/50'
+                                    )}
+                                    onClick={() => setFxOverrideMode('manual')}
+                                    type="button"
+                                >
+                                    Manual
+                                </button>
+                            </div>
+
+                            <div className={cn('grid grid-cols-2 gap-3', fxOverrideMode === 'auto' && 'opacity-50 pointer-events-none')}>
+                                <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Familia</p>
+                                    <Select
+                                        value={fxOverrideFamily}
+                                        onChange={(e) => setFxOverrideFamily(e.target.value as FxOverrideFamily)}
+                                        options={[
+                                            { value: 'Oficial', label: 'Oficial' },
+                                            { value: 'MEP', label: 'MEP' },
+                                            { value: 'Cripto', label: 'Cripto' },
+                                        ]}
+                                    />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Lado</p>
+                                    <Select
+                                        value={fxOverrideSide}
+                                        onChange={(e) => setFxOverrideSide(e.target.value as FxOverrideSide)}
+                                        options={[
+                                            { value: 'C', label: 'C (Compra)' },
+                                            { value: 'V', label: 'V (Venta)' },
+                                        ]}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="text-sm flex items-center justify-between bg-muted/30 border border-border rounded-lg px-3 py-2">
+                                <span className="text-muted-foreground">Rate actual</span>
+                                <span className="font-mono">
+                                    {(() => {
+                                        const rate = getFxRateForSelection(
+                                            portfolio.fx,
+                                            fxOverrideMode === 'auto'
+                                                ? (fxOverrideTarget.autoMeta?.family ?? 'Oficial')
+                                                : fxOverrideFamily,
+                                            fxOverrideMode === 'auto'
+                                                ? (fxOverrideTarget.autoMeta?.side ?? 'V')
+                                                : fxOverrideSide
+                                        )
+                                        return Number.isFinite(rate) && rate > 0 ? `$${rate.toFixed(2)}` : '—'
+                                    })()}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter className="flex !justify-between gap-2 sm:gap-0">
+                        <Button
+                            variant="outline"
+                            type="button"
+                            onClick={() => {
+                                if (!fxOverrideTarget) return
+                                clearOverride(fxOverrideTarget.accountId, fxOverrideTarget.kind)
+                                setFxOverrideTarget(null)
+                            }}
+                        >
+                            Restaurar Auto
+                        </Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" type="button" onClick={() => setFxOverrideTarget(null)}>
+                                Cancelar
+                            </Button>
+                            <Button type="button" onClick={applyFxOverride}>
+                                Aplicar
+                            </Button>
+                        </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
@@ -414,6 +613,7 @@ interface RubroCardProps {
     onItemClick: (item: ItemV2, provider: ProviderV2) => void
     onProviderSettings: (providerId: string) => void
     calculateVNR: (providerId: string, value: number, side: 'buy' | 'sell') => number
+    onOpenFxOverride: (target: { accountId: string; kind: ItemKind; title: string; autoMeta?: ItemV2['fxMeta'] }) => void
 }
 
 function RubroCard({
@@ -424,6 +624,7 @@ function RubroCard({
     onToggleProvider,
     onItemClick,
     onProviderSettings,
+    onOpenFxOverride,
 }: RubroCardProps) {
     const IconComponent = ICON_MAP[rubro.icon] ?? Wallet
 
@@ -474,6 +675,7 @@ function RubroCard({
                             onToggle={() => onToggleProvider(provider.id)}
                             onItemClick={(item) => onItemClick(item, provider)}
                             onSettings={() => onProviderSettings(provider.id)}
+                            onOpenFxOverride={onOpenFxOverride}
                         />
                     ))}
                 </div>
@@ -492,6 +694,7 @@ interface ProviderSectionProps {
     onToggle: () => void
     onItemClick: (item: ItemV2) => void
     onSettings: () => void
+    onOpenFxOverride: (target: { accountId: string; kind: ItemKind; title: string; autoMeta?: ItemV2['fxMeta'] }) => void
 }
 
 function ProviderSection({
@@ -500,10 +703,25 @@ function ProviderSection({
     onToggle,
     onItemClick,
     onSettings,
+    onOpenFxOverride,
 }: ProviderSectionProps) {
     const isUsdPrimary = Math.abs(provider.totals.ars) < 1 && Math.abs(provider.totals.usd) >= 0.01
     const primary = isUsdPrimary ? formatMoneyUSD(provider.totals.usd) : formatMoneyARS(provider.totals.ars)
     const secondary = isUsdPrimary ? formatMoneyARS(provider.totals.ars) : formatMoneyUSD(provider.totals.usd)
+
+    const baseAccountId = provider.id.replace(/-cash$/, '')
+    const kindForProviderFx: ItemKind | null = useMemo(() => {
+        const kinds: ItemKind[] = ['cash_usd', 'cash_ars', 'wallet_yield']
+        for (const k of kinds) {
+            if (provider.items.some(it => it.kind === k)) return k
+        }
+        return null
+    }, [provider.items])
+
+    const autoMetaForProvider = useMemo(() => {
+        if (!kindForProviderFx) return provider.fxMeta
+        return provider.items.find(it => it.kind === kindForProviderFx)?.fxMeta ?? provider.fxMeta
+    }, [kindForProviderFx, provider.fxMeta, provider.items])
 
     return (
         <div className="border-b border-border last:border-b-0">
@@ -526,9 +744,22 @@ function ProviderSection({
                         <div className="flex items-center justify-end gap-1.5">
                             <p className="text-xs text-emerald-400 font-mono">≈ {secondary}</p>
                             {provider.fxMeta && provider.fxMeta.rate > 0 && (
-                                <span className="text-[9px] font-mono text-muted-foreground bg-muted/50 px-1 py-0.5 rounded whitespace-nowrap">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (!kindForProviderFx) return
+                                        onOpenFxOverride({
+                                            accountId: baseAccountId,
+                                            kind: kindForProviderFx,
+                                            title: provider.name,
+                                            autoMeta: autoMetaForProvider,
+                                        })
+                                    }}
+                                    className="text-[9px] font-mono text-muted-foreground bg-muted/50 hover:bg-muted px-1 py-0.5 rounded whitespace-nowrap transition-colors"
+                                    title="Elegir tipo de cambio"
+                                >
                                     TC {provider.fxMeta.family} {provider.fxMeta.side}
-                                </span>
+                                </button>
                             )}
                         </div>
                     </div>
@@ -553,6 +784,8 @@ function ProviderSection({
                             key={item.id}
                             item={item}
                             onClick={() => onItemClick(item)}
+                            onOpenFxOverride={onOpenFxOverride}
+                            providerName={provider.name}
                         />
                     ))}
                 </div>
@@ -568,9 +801,11 @@ function ProviderSection({
 interface ItemRowProps {
     item: ItemV2
     onClick: () => void
+    onOpenFxOverride: (target: { accountId: string; kind: ItemKind; title: string; autoMeta?: ItemV2['fxMeta'] }) => void
+    providerName: string
 }
 
-function ItemRow({ item, onClick }: ItemRowProps) {
+function ItemRow({ item, onClick, onOpenFxOverride, providerName }: ItemRowProps) {
     const isWalletOrCash = item.kind === 'wallet_yield' || item.kind === 'cash_ars' || item.kind === 'cash_usd'
     const isUsdCash = item.kind === 'cash_usd'
     const hasTna = item.yieldMeta?.tna && item.yieldMeta.tna > 0
@@ -628,7 +863,33 @@ function ItemRow({ item, onClick }: ItemRowProps) {
                             </p>
                             {/* TC Chip */}
                             {item.fxMeta && item.fxMeta.rate > 0 && (
-                                <span className="text-[9px] font-mono text-muted-foreground bg-muted/50 px-1 py-0.5 rounded whitespace-nowrap">
+                                <span
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onOpenFxOverride({
+                                            accountId: item.accountId,
+                                            kind: item.kind,
+                                            title: providerName,
+                                            autoMeta: item.fxMeta,
+                                        })
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            onOpenFxOverride({
+                                                accountId: item.accountId,
+                                                kind: item.kind,
+                                                title: providerName,
+                                                autoMeta: item.fxMeta,
+                                            })
+                                        }
+                                    }}
+                                    className="text-[9px] font-mono text-muted-foreground bg-muted/50 hover:bg-muted px-1 py-0.5 rounded whitespace-nowrap transition-colors cursor-pointer"
+                                    title="Elegir tipo de cambio"
+                                >
                                     TC {item.fxMeta.family} {item.fxMeta.side}
                                 </span>
                             )}

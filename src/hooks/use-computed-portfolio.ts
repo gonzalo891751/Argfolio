@@ -187,6 +187,9 @@ export function useComputedPortfolio() {
             return totals
         },
         enabled: !!fxRates && instrumentsList.length > 0 && accountsList.length > 0,
+        // Prevent UI flicker (and scroll reset) when queryKey changes due to FX/price refresh.
+        // We keep the previous computed snapshot until the new one is ready.
+        placeholderData: (prev) => prev,
     })
 }
 

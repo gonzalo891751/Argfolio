@@ -45,6 +45,90 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-04 — Claude Opus 4.5 — Feature: Plazos Fijos Detalle Subpágina
+**Goal:** Reemplazar modal de PF por subpágina de detalle + verificar auto-cierre al vencimiento + ocultar PFs cerrados.
+
+**Scope touched:** `src/pages/pf-detail.tsx` (NEW), `src/App.tsx`, `src/pages/assets-v2.tsx`.
+
+**Key Changes:**
+
+1. **Nueva subpágina de detalle PF (`/mis-activos-v2/plazos-fijos/:pfId`):**
+   - Breadcrumb: Mis Activos / Plazos Fijos / {Banco} / {Alias}
+   - Hero card con "Total a Cobrar" (ARS + USD Oficial Venta)
+   - Chart SVG de step-up (capital → cobro)
+   - KPIs: Capital Invertido, Interés Ganado, Plazo (barra de progreso), Tasas (TNA/TEA)
+   - Timeline de automatización (Baja PF → Acreditación)
+   - Estados visuales: Activo / Vence hoy / Vencido (con animaciones)
+   - Tabla de movimientos relacionados (constitución + vencimiento futuro + redemptions)
+   - Disclaimer legal
+
+2. **Navegación desde Mis Activos V2:**
+   - Click en item `plazo_fijo` ahora navega a `/mis-activos-v2/plazos-fijos/:pfId`
+   - Ya no abre `DetailOverlay` modal
+
+3. **Sistema de auto-cierre (ya existente, verificado):**
+   - `usePFSettlement` ya está activo en `app-layout.tsx`
+   - `derivePFPositions` separa PFs en: `active`, `matured`, `closed`
+   - El builder solo incluye `active` y `matured` (no `closed`)
+   - PFs con redemption existente no aparecen (idempotencia via `isRedeemed()`)
+
+4. **Ocultación de PFs cerrados (ya implementado):**
+   - `buildRubros` usa `pfData.active` y `pfData.matured`, NO usa `closed`
+   - Efecto: PFs con redemption no aparecen en dashboard
+
+**Files Changed:**
+- `src/pages/pf-detail.tsx` — NEW: Subpágina de detalle de Plazo Fijo
+- `src/App.tsx` — Nueva ruta `/mis-activos-v2/plazos-fijos/:pfId`
+- `src/pages/assets-v2.tsx` — Navigate a subpágina para items `plazo_fijo`
+
+**Checklists:**
+- [x] Click en PF navega a URL de detalle (no modal)
+- [x] Subpágina respeta layout/estilo de prototipo PF.html
+- [x] Capital, interés, total con formato AR correcto
+- [x] Equivalencia USD con TC Oficial Venta
+- [x] Barra de progreso según días transcurridos
+- [x] Timeline de automatización con estados visuales
+- [x] Movimientos relacionados en tabla
+- [x] PFs cerrados no aparecen en dashboard (verificado)
+- [x] Sistema de auto-cierre ya funciona (usePFSettlement activo)
+- [x] `npm run build` ✅ PASS
+- [x] `npm test` ✅ 49/49 PASS
+
+**Notes / Decisions:**
+- El prototipo PF.html usa Tailwind CDN; la implementación usa los tokens del proyecto
+- El estado "Vencido" aparece temporalmente hasta que `usePFSettlement` procese el auto-cierre
+- Los movimientos relacionados se filtran por `pfId` o `meta.pfGroupId`
+- VNR no implementado (no hay comisión cargada en el modelo actual)
+
+---
+
+### 2026-02-05 - Codex - Feature: FX Override (TC) + Yield chips + No scroll reset
+**Goal:** En `/mis-activos-v2` (Billeteras): mostrar TNA+TEA en la fila cuando corresponde; permitir override manual del TC (familia + lado C/V) desde el chip "TC"; y eliminar flicker/scroll-reset en revalidaciones.
+
+**Fix Applied (high level):**
+- **YieldMeta (lista Billeteras):**
+  - `src/features/portfolioV2/builder.ts` ahora adjunta `yieldMeta` al item `cash_ars` cuando `account.cashYield.enabled` (ARS + `tna>0`) sin cambiar `label`/`kind` (la fila sigue siendo "Pesos Argentinos").
+  - `computeTEA()` en builder ahora retorna % (no decimal), así el chip `TEA` no queda en `0.x%`.
+- **FX Override (impacta valuación real + totales):**
+  - Nuevo store/hook: `src/features/portfolioV2/fxOverrides.ts` con persistencia en `localStorage` (`argfolio.fxOverrides.v1`) y clave `${accountId}:${kind}`.
+  - `src/features/portfolioV2/usePortfolioV2.ts` pasa `fxOverrides` al builder; `src/features/portfolioV2/builder.ts` usa overrides para decidir `fxMeta` + recalcular `valArs/valUsd` (no solo UI).
+  - `src/pages/assets-v2.tsx` hace el chip TC clickeable (fila + header de provider) y abre modal para elegir Auto/Oficial/MEP/Cripto + C/V con "Restaurar Auto".
+- **Scroll reset / flicker:**
+  - `src/hooks/use-computed-portfolio.ts` mantiene el snapshot previo (`placeholderData`) cuando cambia el `queryKey` por refresh de FX/precios, evitando que la página caiga a estado "loading" y resetee scroll.
+
+**Archivos tocados:**
+- `src/features/portfolioV2/builder.ts`
+- `src/features/portfolioV2/fxOverrides.ts` (new)
+- `src/features/portfolioV2/usePortfolioV2.ts`
+- `src/pages/assets-v2.tsx`
+- `src/hooks/use-computed-portfolio.ts`
+
+**Validación:**
+- `npm test` OK (49/49)
+- `npm run build` OK
+
+---
+
 ### 2026-02-05 — Antigravity — Fix: FX for Broker/Exchange Cash + TEA Chip
 **Goal:** Fix missing `fxMeta` on broker/exchange cash providers and add TEA chip alongside TNA in list view.
 

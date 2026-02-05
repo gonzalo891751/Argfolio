@@ -12,6 +12,7 @@ import { useFxRates } from '@/hooks/use-fx-rates'
 import { useMovements } from '@/hooks/use-movements'
 import { usePF } from '@/hooks/use-pf'
 import { useAccountSettings } from '@/hooks/useAccountSettings'
+import { useFxOverrides } from './fxOverrides'
 import { buildPortfolioV2, type PFData } from './builder'
 import type { PortfolioV2 } from './types'
 
@@ -39,6 +40,7 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
     const { data: fxRates } = useFxRates()
     const { data: movements = [] } = useMovements()
     const { settings: accountSettings } = useAccountSettings()
+    const { overrides: fxOverrides } = useFxOverrides()
 
     // PF data from usePF hook
     const pfRaw = usePF()
@@ -135,8 +137,9 @@ export function usePortfolioV2(options: UsePortfolioV2Options = {}): PortfolioV2
             movements,
             pfData,
             accountSettings,
+            fxOverrides,
         })
-    }, [groupedRows, accounts, fxRates, movements, pfData, accountSettings, assetsLoading, assetsError])
+    }, [groupedRows, accounts, fxRates, movements, pfData, accountSettings, fxOverrides, assetsLoading, assetsError])
 
     return portfolioV2
 }

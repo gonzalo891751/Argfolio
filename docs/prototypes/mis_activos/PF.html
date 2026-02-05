@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="es-AR" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Plazos Fijos</title>
+    
+    <!-- Fonts: Inter (UI), Space Grotesk (Display), JetBrains Mono (Data) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tailwind Configuration (Brand Book Compatible) -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a', // Deep Navy base
+                            primary: '#6366f1', // Indigo primary
+                            accent: '#0ea5e9', // Sky accent
+                        },
+                        semantic: {
+                            up: '#10b981', // Emerald
+                            down: '#f43f5e', // Rose
+                            warn: '#f59e0b', // Amber
+                            info: '#3b82f6', // Blue
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-sm': '0 0 10px -2px rgba(99, 102, 241, 0.2)',
+                    },
+                    backgroundImage: {
+                        'grid-pattern': "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Base Styles & Tokens */
+        :root {
+            --bg-app: #0B1121;
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-bg: rgba(30, 41, 59, 0.4);
+        }
+
+        body {
+            background-color: var(--bg-app);
+            color: #F8FAFC;
+            background-image: var(--grid-pattern); /* Custom grid subtle */
+            background-size: 40px 40px;
+        }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+        }
+
+        /* Utilities */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Step Chart Animation */
+        .chart-path {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 2s ease-out forwards;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: 0; }
+        }
+        
+        /* Smooth Transitions for Views */
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- TOPBAR / SIMULATOR CONTROL -->
+    <nav class="fixed top-0 inset-x-0 h-16 glass-panel z-50 flex items-center justify-between px-6 border-b border-white/5">
+        <div class="flex items-center gap-3">
+            <!-- Logo Argfolio -->
+            <div class="w-8 h-8 flex items-center justify-center bg-brand-primary/10 rounded-lg text-brand-primary">
+                <svg class="w-5 h-5" viewBox="0 0 40 40" fill="none">
+                    <path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/>
+                    <circle cx="20" cy="14" r="3" fill="white"/>
+                </svg>
+            </div>
+            <span class="font-display font-bold text-lg tracking-tight">Argfolio</span>
+            <div class="h-4 w-px bg-white/10 mx-2"></div>
+            <span class="font-mono text-xs text-slate-400">USD Oficial Venta: <span class="text-white">$ 1.465,00</span></span>
+        </div>
+
+        <!-- Simulation Controls (Dev/Proto Only) -->
+        <div class="flex items-center gap-3">
+            <label class="text-xs font-mono text-slate-500 uppercase mr-2 hidden md:block">Simular Estado:</label>
+            <select id="sim-state" onchange="updateSimulation()" class="bg-slate-900 border border-white/10 text-xs text-white rounded px-2 py-1.5 focus:outline-none focus:border-brand-primary">
+                <option value="active" selected>Activo (En curso)</option>
+                <option value="expired">Vencido (Hoy)</option>
+                <option value="collected">Cobrado (Histórico)</option>
+            </select>
+            <button class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+            </button>
+            <div class="w-8 h-8 rounded-full bg-brand-primary flex items-center justify-center text-white text-xs font-bold font-display shadow-glow-sm">
+                JP
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-1 pt-24 pb-12 px-4 md:px-8 max-w-7xl mx-auto w-full">
+
+        <!-- VIEW 1: OVERVIEW LIST -->
+        <section id="view-overview" class="fade-in space-y-8">
+            <!-- Header & Total -->
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                <div>
+                    <div class="flex items-center gap-2 text-sm text-slate-400 mb-2">
+                        <span>Mis Activos</span>
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                        <span class="text-white">Plazos Fijos</span>
+                    </div>
+                    <h1 class="font-display font-bold text-4xl text-white">Plazos Fijos</h1>
+                </div>
+                <div class="glass-panel p-4 rounded-xl flex items-center gap-6 border-l-4 border-l-brand-primary">
+                    <div>
+                        <div class="text-xs font-mono text-slate-400 uppercase mb-1">Total Estimado ARS</div>
+                        <div class="text-2xl font-mono font-bold text-white tracking-tight">$ 2.902.438,36</div>
+                        <div class="text-xs font-mono text-semantic-up mt-1">≈ US$ 1.981,19</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- List -->
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                    <h3 class="font-display text-sm font-medium text-slate-300">Tus Inversiones</h3>
+                    <button class="text-xs text-brand-primary hover:text-white transition">Ver Historial</button>
+                </div>
+                
+                <!-- Item 1: Naranja X (Clickeable) -->
+                <div onclick="navigateTo('detail')" class="group p-6 border-b border-white/5 hover:bg-white/[0.02] transition cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div class="flex items-start gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-[#FF5000]/10 flex items-center justify-center text-[#FF5000] border border-[#FF5000]/20">
+                            <!-- Logo Naranja X mock -->
+                            <span class="font-display font-bold text-lg">Nx</span>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-sans font-medium text-white group-hover:text-brand-primary transition">Naranja X</span>
+                                <span id="list-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-semantic-up/10 text-semantic-up border border-semantic-up/20 uppercase tracking-wide">Activo</span>
+                            </div>
+                            <div class="text-sm text-slate-400 mt-0.5">Frasco fijo · Vence 06/02/26</div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-8 text-right">
+                        <div>
+                            <div class="text-xs font-mono text-slate-500 mb-1">Capital + Interés</div>
+                            <div class="font-mono text-white text-lg">$ 2.902.438,36</div>
+                            <div class="font-mono text-xs text-slate-500">US$ 1.981,19</div>
+                        </div>
+                        <div class="text-slate-600 group-hover:text-white transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Empty state placeholder (simulated) -->
+                <div class="p-4 text-center text-sm text-slate-500 font-mono border-t border-dashed border-white/5">
+                    No tenés otros plazos fijos activos.
+                </div>
+            </div>
+        </section>
+
+
+        <!-- VIEW 2: DETAIL SUBPAGE -->
+        <section id="view-detail" class="hidden fade-in space-y-6">
+            
+            <!-- Breadcrumb & Actions -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <button onclick="navigateTo('overview')" class="p-2 -ml-2 text-slate-400 hover:text-white transition rounded-lg hover:bg-white/5">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    </button>
+                    <div class="flex items-center gap-2 text-sm text-slate-400">
+                        <span>Plazos Fijos</span>
+                        <svg class="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                        <span>Naranja X</span>
+                        <svg class="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                        <span class="text-white">Frasco fijo</span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="window.print()" class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white hover:bg-white/5 transition flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Exportar PDF
+                    </button>
+                    <button class="px-3 py-1.5 text-xs font-medium rounded-md bg-white/10 text-white hover:bg-white/20 transition">
+                        Ver en Movimientos
+                    </button>
+                </div>
+            </div>
+
+            <!-- Header Content -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 class="font-display font-bold text-3xl md:text-4xl text-white mb-2 flex items-center gap-3">
+                        Frasco fijo
+                        <span id="detail-badge" class="text-sm font-sans font-medium px-2.5 py-1 rounded-full bg-semantic-up/10 text-semantic-up border border-semantic-up/20 align-middle">Activo</span>
+                    </h1>
+                    <p class="text-slate-400">Naranja X · Plazo Fijo Tradicional en Pesos</p>
+                </div>
+            </div>
+
+            <!-- HERO CARD (Focus on Total) -->
+            <div class="glass-panel p-6 md:p-8 rounded-2xl relative overflow-hidden group">
+                <!-- Background Glow -->
+                <div class="absolute top-0 right-0 w-64 h-64 bg-brand-primary/10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                
+                <div class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
+                    <div>
+                        <div class="text-sm font-mono text-brand-primary uppercase tracking-wider mb-2">Total a cobrar</div>
+                        <div class="text-4xl md:text-5xl font-mono font-bold text-white tracking-tighter shadow-glow-sm inline-block">
+                            $ 2.902.438<span class="text-slate-500 text-2xl md:text-3xl">,36</span>
+                        </div>
+                        <div class="mt-4 flex items-center gap-2">
+                            <span class="px-2 py-1 rounded bg-slate-800 text-xs font-mono text-emerald-400 border border-emerald-500/20">≈ US$ 1.981,19</span>
+                            <span class="text-xs text-slate-500">Calculado a USD Oficial Venta ($ 1.465)</span>
+                        </div>
+                    </div>
+                    
+                    <!-- SVG Chart Visualization (Step up) -->
+                    <div class="h-24 w-full flex items-end relative">
+                         <svg class="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 50">
+                            <!-- Gradient Defs -->
+                            <defs>
+                                <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="#6366f1" stop-opacity="0.2"/>
+                                    <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+                                </linearGradient>
+                            </defs>
+                            <!-- Line: Start low, step up at end -->
+                            <path d="M0 40 L85 40 L85 10 L100 10" fill="none" stroke="#6366f1" stroke-width="2" class="chart-path"/>
+                            <!-- Fill Area -->
+                            <path d="M0 40 L85 40 L85 10 L100 10 L100 50 L0 50 Z" fill="url(#chartGradient)" opacity="0.5"/>
+                            
+                            <!-- Dots -->
+                            <circle cx="0" cy="40" r="2" fill="#6366f1"/>
+                            <circle cx="85" cy="40" r="2" fill="#6366f1"/>
+                            <circle cx="85" cy="10" r="2" fill="#fff"/>
+                            <circle cx="100" cy="10" r="2" fill="#fff"/>
+                            
+                            <!-- Labels inside chart -->
+                            <text x="2" y="35" class="text-[4px] fill-slate-500 font-mono">Inicio</text>
+                            <text x="75" y="5" class="text-[4px] fill-emerald-400 font-mono font-bold">Cobro</text>
+                         </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPIs GRID -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- KPI 1: Capital -->
+                <div class="glass-panel p-5 rounded-xl">
+                    <div class="text-xs text-slate-400 mb-1">Capital Invertido</div>
+                    <div class="text-lg font-mono font-medium text-white">$ 2.844.000,00</div>
+                    <div class="text-xs font-mono text-slate-500 mt-1">≈ US$ 1.941,30</div>
+                </div>
+
+                <!-- KPI 2: Interés -->
+                <div class="glass-panel p-5 rounded-xl">
+                    <div class="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                        Interés Ganado
+                        <svg class="w-3 h-3 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    </div>
+                    <div class="text-lg font-mono font-medium text-emerald-400">+$ 58.438,36</div>
+                    <div class="text-xs font-mono text-emerald-500/50 mt-1">Fijo por contrato</div>
+                </div>
+
+                <!-- KPI 3: Plazos -->
+                <div class="glass-panel p-5 rounded-xl">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="text-xs text-slate-400 mb-1">Plazo</div>
+                            <div class="text-lg font-display font-medium text-white">30 días</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-[10px] text-slate-500 uppercase">Vencimiento</div>
+                            <div class="text-sm font-mono text-white">06/02/2026</div>
+                        </div>
+                    </div>
+                    <!-- Progress Bar -->
+                    <div class="mt-3 relative h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                        <div id="progress-bar" class="absolute top-0 left-0 h-full bg-gradient-to-r from-brand-primary to-brand-accent w-[93%] rounded-full"></div>
+                    </div>
+                    <div class="mt-1 flex justify-between text-[10px] font-mono text-slate-500">
+                        <span>07/01</span>
+                        <span id="days-remaining">2 días restantes</span>
+                    </div>
+                </div>
+
+                <!-- KPI 4: Tasas -->
+                <div class="glass-panel p-5 rounded-xl border-l-2 border-l-white/20">
+                    <div class="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                        Tasas
+                        <span class="text-slate-600" title="Tasas fijas al momento de constitución">🔒</span>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-400">TNA</span>
+                            <span class="font-mono text-white">25,00%</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-400">TEA</span>
+                            <span class="font-mono text-white">28,08%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AUTOMATION & MOVEMENT PREVIEW -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- Col Left: Automation Timeline -->
+                <div class="lg:col-span-1 glass-panel p-6 rounded-xl">
+                    <h3 class="font-display text-lg text-white mb-4">Automatización al Vencimiento</h3>
+                    
+                    <div class="relative pl-4 border-l border-white/10 space-y-8 my-6">
+                        <!-- Step 1 -->
+                        <div class="relative">
+                            <div id="step-1-dot" class="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-slate-700 border-2 border-slate-900 ring-1 ring-slate-600"></div>
+                            <div class="text-sm font-medium text-slate-300">Baja del Plazo Fijo</div>
+                            <div class="text-xs text-slate-500 mt-1">Cierre del contrato y liquidación de intereses.</div>
+                        </div>
+                        
+                        <!-- Step 2 -->
+                        <div class="relative">
+                            <div id="step-2-dot" class="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-slate-700 border-2 border-slate-900 ring-1 ring-slate-600"></div>
+                            <div class="text-sm font-medium text-slate-300">Acreditación en Liquidez</div>
+                            <div class="text-xs text-slate-500 mt-1">El total se transfiere a tu cuenta Naranja X disponible.</div>
+                        </div>
+                    </div>
+
+                    <div id="automation-status" class="p-3 bg-brand-primary/10 border border-brand-primary/20 rounded-lg flex items-start gap-3">
+                        <svg class="w-5 h-5 text-brand-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <div>
+                            <div class="text-xs font-bold text-brand-primary uppercase">Programado</div>
+                            <div class="text-xs text-slate-300 mt-0.5">Se ejecutará automáticamente el 06/02/2026.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Col Right: Movements Table -->
+                <div class="lg:col-span-2 glass-panel p-0 rounded-xl overflow-hidden flex flex-col">
+                    <div class="p-4 border-b border-white/5 flex items-center justify-between">
+                        <h3 class="font-display text-sm text-white">Movimientos Relacionados</h3>
+                        <div class="flex gap-2">
+                            <span class="px-2 py-1 rounded-md bg-white/10 text-[10px] text-white cursor-pointer">Todos</span>
+                            <span class="px-2 py-1 rounded-md hover:bg-white/5 text-[10px] text-slate-400 cursor-pointer transition">Ingresos</span>
+                            <span class="px-2 py-1 rounded-md hover:bg-white/5 text-[10px] text-slate-400 cursor-pointer transition">Egresos</span>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="text-xs font-mono text-slate-500 border-b border-white/5">
+                                    <th class="p-4 font-normal">Fecha</th>
+                                    <th class="p-4 font-normal">Concepto</th>
+                                    <th class="p-4 font-normal text-right">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm">
+                                <!-- Future Move (Simulated) -->
+                                <tr id="row-future" class="border-b border-white/5 bg-brand-primary/[0.02] opacity-60">
+                                    <td class="p-4 font-mono text-slate-400">06/02/2026</td>
+                                    <td class="p-4">
+                                        <div class="text-white font-medium flex items-center gap-2">
+                                            Vencimiento Plazo Fijo
+                                            <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        </div>
+                                        <div class="text-xs text-slate-500">Acreditación automática</div>
+                                    </td>
+                                    <td class="p-4 text-right font-mono text-emerald-400">+$ 2.902.438,36</td>
+                                </tr>
+                                <!-- Past Move -->
+                                <tr class="border-b border-white/5 hover:bg-white/[0.02]">
+                                    <td class="p-4 font-mono text-slate-400">07/01/2026</td>
+                                    <td class="p-4">
+                                        <div class="text-white">Constitución Plazo Fijo</div>
+                                        <div class="text-xs text-slate-500">Débito de cuenta Naranja X</div>
+                                    </td>
+                                    <td class="p-4 text-right font-mono text-white">-$ 2.844.000,00</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="p-4 bg-slate-900/30 text-[10px] text-slate-500 text-center">
+                        Este comprobante es válido como constancia de inversión. <br> ID de transacción: #PF-99283-NX
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Risk Disclaimer (Subtle) -->
+            <div class="text-xs text-slate-500 text-center max-w-2xl mx-auto pt-8 pb-12">
+                <p>Argfolio muestra esta información a modo de resumen. La custodia real de los fondos corresponde a Naranja X (Entidad regulada por BCRA). Los rendimientos pasados no garantizan rendimientos futuros.</p>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- LOGIC: ROUTER & SIMULATION -->
+    <script>
+        // DOM Elements
+        const viewOverview = document.getElementById('view-overview');
+        const viewDetail = document.getElementById('view-detail');
+        const listBadge = document.getElementById('list-badge');
+        const detailBadge = document.getElementById('detail-badge');
+        const progressBar = document.getElementById('progress-bar');
+        const daysRemaining = document.getElementById('days-remaining');
+        
+        // Automation DOM
+        const automationStatus = document.getElementById('automation-status');
+        const step1Dot = document.getElementById('step-1-dot');
+        const step2Dot = document.getElementById('step-2-dot');
+        const rowFuture = document.getElementById('row-future');
+
+        // Navigation (Internal Router)
+        function navigateTo(viewName) {
+            window.scrollTo(0,0);
+            if(viewName === 'detail') {
+                viewOverview.classList.add('hidden');
+                viewDetail.classList.remove('hidden');
+            } else {
+                viewDetail.classList.add('hidden');
+                viewOverview.classList.remove('hidden');
+            }
+        }
+
+        // Simulation Logic
+        function updateSimulation() {
+            const state = document.getElementById('sim-state').value;
+            
+            // 1. Update Badges
+            const badgeClasses = {
+                active: "bg-semantic-up/10 text-semantic-up border-semantic-up/20",
+                expired: "bg-semantic-warn/10 text-semantic-warn border-semantic-warn/20",
+                collected: "bg-slate-700/50 text-slate-300 border-slate-600/50"
+            };
+            const badgeText = {
+                active: "Activo",
+                expired: "Vencido (Acreditando)",
+                collected: "Cobrado"
+            };
+
+            // Reset classes
+            const baseClass = "text-sm font-sans font-medium px-2.5 py-1 rounded-full border align-middle";
+            const smallBaseClass = "px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wide";
+
+            detailBadge.className = `${baseClass} ${badgeClasses[state]}`;
+            detailBadge.innerText = badgeText[state];
+            
+            listBadge.className = `${smallBaseClass} ${badgeClasses[state]}`;
+            listBadge.innerText = state === 'collected' ? 'FINALIZADO' : badgeText[state].toUpperCase();
+
+            // 2. Update Progress Bar & Days
+            if(state === 'active') {
+                progressBar.style.width = "93%";
+                progressBar.className = "absolute top-0 left-0 h-full bg-gradient-to-r from-brand-primary to-brand-accent rounded-full";
+                daysRemaining.innerText = "2 días restantes";
+            } else if (state === 'expired') {
+                progressBar.style.width = "100%";
+                progressBar.className = "absolute top-0 left-0 h-full bg-semantic-warn rounded-full animate-pulse";
+                daysRemaining.innerText = "Vence hoy";
+            } else {
+                progressBar.style.width = "100%";
+                progressBar.className = "absolute top-0 left-0 h-full bg-semantic-up rounded-full";
+                daysRemaining.innerText = "Finalizado";
+            }
+
+            // 3. Update Automation Timeline
+            if(state === 'active') {
+                // Pending styling
+                step1Dot.className = "absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-slate-700 border-2 border-slate-900 ring-1 ring-slate-600";
+                step2Dot.className = "absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-slate-700 border-2 border-slate-900 ring-1 ring-slate-600";
+                
+                automationStatus.innerHTML = `
+                    <svg class="w-5 h-5 text-brand-primary mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <div>
+                        <div class="text-xs font-bold text-brand-primary uppercase">Programado</div>
+                        <div class="text-xs text-slate-300 mt-0.5">Se ejecutará automáticamente el 06/02/2026.</div>
+                    </div>`;
+                
+                rowFuture.classList.add('opacity-60');
+
+            } else if (state === 'expired') {
+                // Processing styling
+                step1Dot.className = "absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-semantic-up border-2 border-slate-900 ring-1 ring-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
+                step2Dot.className = "absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-semantic-warn border-2 border-slate-900 ring-1 ring-amber-500/50 animate-pulse";
+                
+                automationStatus.innerHTML = `
+                    <svg class="w-5 h-5 text-semantic-warn mt-0.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    <div>
+                        <div class="text-xs font-bold text-semantic-warn uppercase">Procesando Acreditación</div>
+                        <div class="text-xs text-slate-300 mt-0.5">Tus fondos están ingresando a la cuenta de liquidez.</div>
+                    </div>`;
+                
+                rowFuture.classList.remove('opacity-60');
+                rowFuture.classList.add('bg-semantic-warn/10');
+
+            } else {
+                // Collected styling
+                step1Dot.className = "absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-semantic-up border-2 border-slate-900";
+                step2Dot.className = "absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-semantic-up border-2 border-slate-900";
+                
+                automationStatus.innerHTML = `
+                     <svg class="w-5 h-5 text-semantic-up mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    <div>
+                        <div class="text-xs font-bold text-semantic-up uppercase">Completado</div>
+                        <div class="text-xs text-slate-300 mt-0.5">Fondos disponibles en tu billetera.</div>
+                    </div>`;
+
+                rowFuture.classList.remove('opacity-60', 'bg-semantic-warn/10');
+            }
+        }
+
+        // Init
+        updateSimulation();
+
+    </script>
+</body>
+</html>

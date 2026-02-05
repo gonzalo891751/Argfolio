@@ -10,6 +10,7 @@ import { DashboardPage } from '@/pages/dashboard'
 import { AssetsPage } from '@/pages/assets'
 import { AssetsPageV2 } from '@/pages/assets-v2'
 import { WalletDetailPage } from '@/pages/wallet-detail'
+import { PFDetailPage } from '@/pages/pf-detail'
 import { AssetDetailPage } from '@/pages/asset-detail'
 import { MovementsPageV2 as MovementsPage } from '@/pages/movements/index'
 import { HistoryPage } from '@/pages/history'
@@ -115,6 +116,15 @@ function App() {
                                                 element={
                                                     <ErrorBoundary>
                                                         <WalletDetailPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* PF Detail - Subpage */}
+                                            <Route
+                                                path="/mis-activos-v2/plazos-fijos/:pfId"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <PFDetailPage />
                                                     </ErrorBoundary>
                                                 }
                                             />

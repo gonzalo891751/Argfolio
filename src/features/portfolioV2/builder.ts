@@ -24,6 +24,7 @@ import type { Account, Movement, FxRates } from '@/domain/types'
 import type { AssetRowMetrics } from '@/domain/assets/types'
 import type { PFPosition } from '@/domain/pf/types'
 import type { AccountSettings, RubroOverride } from '@/db/schema'
+import type { FxOverride, FxOverridesMap } from './fxOverrides'
 
 // =============================================================================
 // Rubro Configuration
@@ -190,28 +191,37 @@ function resolveAccountTnaPct(
     return null
 }
 
-function maybePromoteArsCashToYieldItem(
+function buildYieldMeta(
+    accountId: string,
+    account: Account | undefined,
+    settingsMap: Map<string, AccountSettings>
+): ItemV2['yieldMeta'] | undefined {
+    if (!account?.cashYield?.enabled) return undefined
+    if (account.cashYield.currency !== 'ARS') return undefined
+
+    const tnaPct = resolveAccountTnaPct(accountId, account, settingsMap)
+    if (!tnaPct) return undefined
+
+    return {
+        tna: tnaPct,
+        tea: computeTEA(tnaPct),
+        lastAccruedISO: account.cashYield.lastAccruedDate,
+    }
+}
+
+function maybeAttachYieldMetaToArsCashItem(
     item: ItemV2,
     accountId: string,
     account: Account | undefined,
     settingsMap: Map<string, AccountSettings>
 ): ItemV2 {
     if (item.kind !== 'cash_ars') return item
-    if (!account?.cashYield?.enabled) return item
-    if (account.cashYield.currency !== 'ARS') return item
-
-    const tnaPct = resolveAccountTnaPct(accountId, account, settingsMap)
-    if (!tnaPct) return item
+    const yieldMeta = buildYieldMeta(accountId, account, settingsMap)
+    if (!yieldMeta) return item
 
     return {
         ...item,
-        kind: 'wallet_yield',
-        label: 'Cuenta remunerada',
-        yieldMeta: {
-            tna: tnaPct,
-            tea: computeTEA(tnaPct),
-            lastAccruedISO: account.cashYield.lastAccruedDate,
-        },
+        yieldMeta,
     }
 }
 
@@ -268,14 +278,23 @@ function getFxRate(
 function buildFxMeta(
     account: Account | undefined,
     fx: FxRatesSnapshot,
-    isUsdToArs: boolean
+    isUsdToArs: boolean,
+    manualOverride?: FxOverride
 ): FxMeta {
-    const family = getFxFamilyForAccount(account)
+    const autoFamily = getFxFamilyForAccount(account)
     // USD->ARS: selling USD, get Venta (bid)
     // ARS->USD: buying USD, pay Compra (ask)
-    const side: 'C' | 'V' = isUsdToArs ? 'V' : 'C'
-    const rate = getFxRate(fx, family, side)
-    return { family, side, rate }
+    const autoSide: 'C' | 'V' = isUsdToArs ? 'V' : 'C'
+    const autoRate = getFxRate(fx, autoFamily, autoSide)
+
+    if (manualOverride) {
+        const manualRate = getFxRate(fx, manualOverride.family, manualOverride.side)
+        if (Number.isFinite(manualRate) && manualRate > 0) {
+            return { family: manualOverride.family, side: manualOverride.side, rate: manualRate }
+        }
+    }
+
+    return { family: autoFamily, side: autoSide, rate: autoRate }
 }
 
 function mapCategoryToKind(category: string): ItemKind {
@@ -303,7 +322,8 @@ function buildItemFromMetrics(
     metrics: AssetRowMetrics,
     accountId: string,
     fxSnapshot?: FxRatesSnapshot,
-    account?: Account
+    account?: Account,
+    fxOverrides?: FxOverridesMap
 ): ItemV2 {
     const kind = mapCategoryToKind(metrics.category)
 
@@ -316,7 +336,9 @@ function buildItemFromMetrics(
         // CASH_USD: US dollar balance valued to ARS → USD→ARS = Venta
         // CASH_ARS: ARS balance valued to USD → ARS→USD = Compra
         const isUsdToArs = kind === 'cash_usd'
-        fxMeta = buildFxMeta(account, fxSnapshot, isUsdToArs)
+        const overrideKey = `${accountId}:${kind}`
+        const manualOverride = fxOverrides?.[overrideKey]
+        fxMeta = buildFxMeta(account, fxSnapshot, isUsdToArs, manualOverride)
 
         // CRITICAL FIX: Recalculate valArs/valUsd with the correct FX rate
         // The upstream metrics use a generic 'oficial' rate, but we need to use
@@ -357,19 +379,20 @@ function buildProviderFromGroup(
     metrics: AssetRowMetrics[],
     settingsMap: Map<string, AccountSettings>,
     account?: Account,
-    fxSnapshot?: FxRatesSnapshot
+    fxSnapshot?: FxRatesSnapshot,
+    fxOverrides?: FxOverridesMap
 ): ProviderV2 | null {
     // Filter out zero-balance items
     const filteredMetrics = metrics.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity, m.category))
     if (filteredMetrics.length === 0) return null
-    const items: ItemV2[] = filteredMetrics.map(m => buildItemFromMetrics(m, accountId, fxSnapshot, account))
+    const items: ItemV2[] = filteredMetrics.map(m => buildItemFromMetrics(m, accountId, fxSnapshot, account, fxOverrides))
     const displayName = getDisplayName(accountId, accountName, settingsMap)
 
     // Attach yield metadata for remunerated ARS cash (so ItemRow can render TNA chip)
     const enrichedItems = items.map((it, idx) => {
         const m = filteredMetrics[idx]
         if (m.category === 'CASH_ARS') {
-            return maybePromoteArsCashToYieldItem(it, accountId, account, settingsMap)
+            return maybeAttachYieldMetaToArsCashItem(it, accountId, account, settingsMap)
         }
         return it
     })
@@ -429,7 +452,8 @@ export function buildRubros(
     accounts: Account[],
     pfData?: PFData,
     fxSnapshot?: FxRatesSnapshot,
-    accountSettings: AccountSettings[] = []
+    accountSettings: AccountSettings[] = [],
+    fxOverrides?: FxOverridesMap
 ): RubroV2[] {
     const rubros: RubroV2[] = []
     const accountMap = new Map(accounts.map(a => [a.id, a]))
@@ -458,23 +482,42 @@ export function buildRubros(
                 const filteredCashItems = cashItems.filter(m => hasSignificantValue(m.valArs ?? 0, m.quantity, m.category))
                 if (filteredCashItems.length === 0) continue
 
-                const itemsTotals = {
-                    valArs: filteredCashItems.reduce((s, m) => s + (m.valArs ?? 0), 0),
-                    valUsd: filteredCashItems.reduce((s, m) => s + (m.valUsdEq ?? 0), 0),
-                    pnlArs: filteredCashItems.reduce((s, m) => s + (m.pnlArs ?? 0), 0),
-                    pnlUsd: filteredCashItems.reduce((s, m) => s + (m.pnlUsdEq ?? 0), 0),
-                }
-
                 // Convert to wallet_yield items
-                const yieldItems: ItemV2[] = filteredCashItems.map(m => ({
-                    ...buildItemFromMetrics(m, accountId, fxSnapshot, account),
-                    kind: 'wallet_yield' as ItemKind,
-                    yieldMeta: account?.cashYield ? {
-                        tna: account.cashYield.tna,
-                        tea: computeTEA(account.cashYield.tna),
-                        lastAccruedISO: account.cashYield.lastAccruedDate,
-                    } : undefined,
-                }))
+                const yieldItems: ItemV2[] = filteredCashItems.map(m => {
+                    const base = buildItemFromMetrics(m, accountId, fxSnapshot, account, fxOverrides)
+                    const yieldMeta = buildYieldMeta(accountId, account, settingsMap)
+
+                    // If the item is ARS cash, allow FX override keyed by wallet_yield as well (UI may target that kind).
+                    if (fxSnapshot && m.category === 'CASH_ARS') {
+                        const manual = fxOverrides?.[`${accountId}:wallet_yield`]
+                        if (manual) {
+                            const fxMeta = buildFxMeta(account, fxSnapshot, false, manual)
+                            const qty = m.quantity ?? 0
+                            return {
+                                ...base,
+                                kind: 'wallet_yield' as ItemKind,
+                                yieldMeta,
+                                fxMeta,
+                                valArs: qty,
+                                valUsd: fxMeta.rate > 0 ? qty / fxMeta.rate : 0,
+                            }
+                        }
+                    }
+
+                    return {
+                        ...base,
+                        kind: 'wallet_yield' as ItemKind,
+                        yieldMeta,
+                    }
+                })
+
+                // Totals must be derived from rendered items (ensures FX overrides affect totals too)
+                const itemsTotals = {
+                    valArs: yieldItems.reduce((s, it) => s + it.valArs, 0),
+                    valUsd: yieldItems.reduce((s, it) => s + it.valUsd, 0),
+                    pnlArs: yieldItems.reduce((s, it) => s + (it.pnlArs ?? 0), 0),
+                    pnlUsd: yieldItems.reduce((s, it) => s + (it.pnlUsd ?? 0), 0),
+                }
 
                 const provider: ProviderV2 = {
                     id: accountId,
@@ -566,7 +609,8 @@ export function buildRubros(
                             matchingMetrics,
                             settingsMap,
                             account,
-                            fxSnapshot
+                            fxSnapshot,
+                            fxOverrides
                         )
                         if (!provider) continue
 
@@ -589,9 +633,9 @@ export function buildRubros(
                         // Create provider with suffix to differentiate from main rubro
                         const providerName = getDisplayName(accountId, account?.name, settingsMap)
                         const items = cashMetrics.map(m => {
-                            const base = buildItemFromMetrics(m, accountId, fxSnapshot, account)
+                            const base = buildItemFromMetrics(m, accountId, fxSnapshot, account, fxOverrides)
                             if (m.category === 'CASH_ARS') {
-                                return maybePromoteArsCashToYieldItem(base, accountId, account, settingsMap)
+                                return maybeAttachYieldMetaToArsCashItem(base, accountId, account, settingsMap)
                             }
                             return base
                         })
@@ -653,7 +697,8 @@ export function buildRubros(
                             cryptoMetrics,
                             settingsMap,
                             account,
-                            fxSnapshot
+                            fxSnapshot,
+                            fxOverrides
                         )
                         if (!provider) continue
 
@@ -675,7 +720,8 @@ export function buildRubros(
                             matchingMetrics,
                             settingsMap,
                             account,
-                            fxSnapshot
+                            fxSnapshot,
+                            fxOverrides
                         )
                         if (!provider) continue
 
@@ -706,7 +752,8 @@ export function buildRubros(
                             cedearMetrics,
                             settingsMap,
                             account,
-                            fxSnapshot
+                            fxSnapshot,
+                            fxOverrides
                         )
                         if (!provider) continue
 
@@ -728,7 +775,8 @@ export function buildRubros(
                             matchingMetrics,
                             settingsMap,
                             account,
-                            fxSnapshot
+                            fxSnapshot,
+                            fxOverrides
                         )
                         if (!provider) continue
 
@@ -756,7 +804,8 @@ export function buildRubros(
                     matchingMetrics,
                     settingsMap,
                     account,
-                    fxSnapshot
+                    fxSnapshot,
+                    fxOverrides
                 )
                 if (!provider) continue
 
@@ -863,7 +912,7 @@ export function buildKPIs(
 
 function computeTEA(tna: number): number {
     // TEA = (1 + TNA/365)^365 - 1
-    return Math.pow(1 + tna / 100 / 365, 365) - 1
+    return (Math.pow(1 + tna / 100 / 365, 365) - 1) * 100
 }
 
 // =============================================================================
@@ -877,13 +926,14 @@ export interface BuildPortfolioV2Input {
     movements: Movement[]
     pfData?: PFData
     accountSettings?: AccountSettings[]
+    fxOverrides?: FxOverridesMap
 }
 
 export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
-    const { groupedRows, accounts, fxRates, movements, pfData, accountSettings = [] } = input
+    const { groupedRows, accounts, fxRates, movements, pfData, accountSettings = [], fxOverrides } = input
 
     const fxSnapshot = buildFxSnapshot(fxRates)
-    const rubros = buildRubros(groupedRows, accounts, pfData, fxSnapshot, accountSettings)
+    const rubros = buildRubros(groupedRows, accounts, pfData, fxSnapshot, accountSettings, fxOverrides)
     const kpis = buildKPIs(rubros, accounts, fxSnapshot)
 
     // Count inferred balances
@@ -925,7 +975,7 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
             cashBalanceUsd: cashUsd,
             yieldEnabled: true,
             tna: acc.cashYield.tna,
-            tea: computeTEA(acc.cashYield.tna) * 100,
+            tea: computeTEA(acc.cashYield.tna),
             recentInterestMovements: interestMovs.map(m => ({
                 dateISO: m.datetimeISO.slice(0, 10),
                 amountArs: m.totalAmount ?? 0,
