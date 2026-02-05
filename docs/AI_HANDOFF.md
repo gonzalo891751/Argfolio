@@ -45,6 +45,128 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-05 — Claude Opus 4.5 — Feat: Selector Costeo + Simulador Venta + Tabla Sorteable + Acreditación Stable
+**Goal:** Agregar selector de método de costeo (PPP/PEPS/UEPS/Baratos/Manual), tabla sorteable de lotes, simulador de venta con preview y confirmación, y acreditación automática de USDT en liquidez del exchange.
+
+**Scope touched:** `src/domain/portfolio/lot-allocation.ts` (NEW), `src/domain/portfolio/lot-allocation.test.ts` (NEW), `src/domain/types.ts`, `src/hooks/use-preferences.ts`, `src/pages/crypto-detail.tsx`.
+
+**Key Changes:**
+
+1. **Motor de asignación de lotes (`lot-allocation.ts` — NEW):**
+   - Tipo `CostingMethod = 'PPP' | 'FIFO' | 'LIFO' | 'CHEAPEST' | 'MANUAL'`
+   - `allocateSale(lots, qty, price, method, manual?)` → `SaleAllocation` con allocations, cost, proceeds, PnL
+   - PPP: costo = qty × promedio ponderado (pooled, sin allocation individual)
+   - FIFO: consume oldest first (por fecha asc)
+   - LIFO: consume newest first (por fecha desc)
+   - CHEAPEST: consume cheapest first (por unitCost asc, tie-break fecha asc)
+   - MANUAL: consume según selección del usuario (capped a qty del lote)
+   - `COSTING_METHODS[]` con labels, shorts, descripciones para UI
+
+2. **Preferencia persistente (`use-preferences.ts` — EXTEND):**
+   - `useCostingMethod()` → `{ method, setMethod }` con localStorage key `argfolio.cryptoCostingMethod`
+   - Default: PPP
+   - Sigue patrón exacto de `useTrackCash()`
+
+3. **Trazabilidad en movimientos (`types.ts` — EXTEND):**
+   - `meta.allocations?: Array<{ lotId, qty, costUsd }>` para SELL movements
+   - `meta.costingMethod?: string` para saber qué método se usó
+
+4. **Crypto Detail Page (`crypto-detail.tsx` — MAJOR REWRITE):**
+   - **Selector de método**: segmented control prominente entre hero y tabs, con tooltip info
+   - **Tabla sorteable**: click en header para sort asc/desc, indicador visual (ChevronUp/Down), aria-sort
+   - **Nuevo tab "Simulador Venta"**: input qty + price, preview (producido, costo asignado, PnL), visualización de lotes a consumir (non-PPP), selector manual de lotes (MANUAL)
+   - **Confirmación de venta**: crea SELL movement (crypto) + BUY movement (USDT) en mismo exchange, linked por groupId, toast de éxito
+   - **USDT auto-create**: si no existe instrumento USDT, lo crea on-the-fly
+   - Mantiene "Vender" per-lot (legacy → navigate to wizard) como quick action
+
+5. **Tests (`lot-allocation.test.ts` — NEW, 19 tests):**
+   - PPP: full sale, partial, cap at holding
+   - FIFO: full, partial (2 lots consumed)
+   - LIFO: newest first, partial
+   - CHEAPEST: cheapest first, tie-break by date
+   - MANUAL: user selection, cap at lot qty, ignore unknown IDs, fallback to FIFO
+   - Edge cases: zero qty, negative, empty lots, PnL %, single lot, total liquidation
+
+**Files Changed:**
+- `src/domain/portfolio/lot-allocation.ts` — NEW: motor de asignación multi-método
+- `src/domain/portfolio/lot-allocation.test.ts` — NEW: 19 tests
+- `src/domain/types.ts` — EXTEND: meta.allocations + meta.costingMethod
+- `src/hooks/use-preferences.ts` — EXTEND: useCostingMethod()
+- `src/pages/crypto-detail.tsx` — REWRITE: selector + tabla sorteable + simulador + confirmación
+
+**Decisions:**
+- **Método no afecta lots display**: El builder sigue usando FIFO para construir lotes abiertos. El método solo afecta el simulador de venta. Esto es por diseño: los movements históricos no almacenan qué método se usó, así que no se puede reconstruir retrospectivamente.
+- **Persistencia global**: Un solo método para todos los cryptos (no per-asset). Usa localStorage como el resto de preferencias.
+- **USDT acreditación**: Se crea movimiento BUY de USDT (assetClass='crypto', category=STABLE) en la misma cuenta. El builder ya separa stables como "Liquidez (Stable)" → aparece allí sin doble conteo.
+- **PPP sin allocations**: PPP es pooled (no consume lotes específicos), así que `allocations=[]` y se registra `costingMethod: 'PPP'` en meta.
+- **MANUAL UX**: Tabla inline con inputs numéricos por lote en el simulador. La qty viene de la suma de allocations, no del input qty principal (que se deshabilita).
+
+**Validación:**
+- `npm test` ✅ (68/68 — 19 nuevos + 49 existentes)
+- `npm run build` ✅
+- `npm run lint` ✅ (0 errors, 109 warnings — mismos que antes)
+
+**Checklist de aceptación:**
+- [x] Selector de método visible: PPP, PEPS(FIFO), UEPS(LIFO), Baratos primero, Manual
+- [x] Cambiar método cambia cálculo en simulador (costo/ganancia)
+- [x] Tabla "Compras (Lotes)" sorteable por columna con indicador asc/desc
+- [x] Simulador: input qty/price, preview proceeds/cost/PnL, lotes a consumir
+- [x] MANUAL: selección de lotes con inputs individuales
+- [x] Confirmar venta → SELL movement + BUY USDT movement (linked por groupId)
+- [x] USDT acreditado en liquidez del exchange (via STABLE category)
+- [x] Qty capped at holding (no se puede vender más de lo que se tiene)
+- [x] Build + tests pasan
+- [x] 19 tests unitarios para el motor de asignación
+
+**Pendientes (nice-to-have):**
+- [ ] Toggle "Mostrar lotes cerrados (0)" (OFF por defecto, lotes en 0 ya filtrados por builder)
+- [ ] Guardar preferencia de orden de tabla
+- [ ] Link "Ver Movimientos" filtrado por asset/exchange
+- [ ] Comisiones en simulador (deducir del proceeds si fee > 0)
+- [ ] Método por asset (override per-asset; estructura lista pero no UI)
+
+**CHECKPOINT FASE 0 — DIAGNÓSTICO / PLAN**
+
+**Diagnóstico:**
+- Página detalle cripto: `src/pages/crypto-detail.tsx` (route `/mis-activos-v2/cripto/:accountId/:symbol`)
+- Lotes FIFO: `src/domain/portfolio/fifo.ts` → `buildFifoLots()` (solo FIFO, consume oldest first)
+- Costo promedio (PPP): `src/domain/portfolio/average-cost.ts` → `computeAverageCost()` (ya existe)
+- Builder: `src/features/portfolioV2/builder.ts` L1102-1178 → construye `cryptoDetails` usando FIFO
+- Preferencias: `src/hooks/use-preferences.ts` → patrón `useTrackCash` con localStorage
+- Lotes en 0: `buildFifoLots()` ya los elimina (lots.shift()); builder filtra con `hasSignificantValue()`
+- Stablecoins: `kind === 'stable'`, excluidas de cryptoDetails (builder L1111)
+- Liquidez exchange: cash va a Billeteras como "(Liquidez)"; stables van a Cripto sección "Liquidez (Stable)"
+- Sell actual: navega a `/movements` con `prefillMovement` (solo 1 movimiento, sin acreditación stable)
+- No hay selector de método visible, no hay simulador, tabla no sorteable
+
+**Mini-Plan (10 bullets):**
+1. NEW `src/domain/portfolio/lot-allocation.ts` — Motor de asignación: `CostingMethod` type + `allocateSale()` para PPP/FIFO/LIFO/CHEAPEST/MANUAL
+2. EXTEND `src/hooks/use-preferences.ts` — Agregar `useCostingMethod()` con key `argfolio.cryptoCostingMethod` (default: PPP)
+3. EXTEND `src/domain/types.ts` — Agregar `allocations` a `meta` para trazabilidad en movimientos de venta
+4. REWRITE `src/pages/crypto-detail.tsx` — Selector de método (segmented control), tabla sorteable con click en headers, nuevo tab "Simulador Venta"
+5. Simulador: input qty + precio, preview costo/ganancia según método, botón confirmar
+6. Confirmar venta: crea SELL movement (crypto) + BUY movement (USDT en mismo exchange) → acreditación en liquidez
+7. Tabla "Compras (Lotes)": sort por fecha/cantidad/precio/invertido/valor/resultado con indicador asc/desc
+8. MANUAL method: UI para seleccionar lotes y asignar cantidades
+9. NEW `src/domain/portfolio/lot-allocation.test.ts` — Tests unitarios: PPP, FIFO, LIFO, CHEAPEST, parcial, total
+10. Hardening: validar qty <= tenencia, lotes en 0 ocultos, no doble conteo stables
+
+**Archivos a tocar:**
+- `src/domain/portfolio/lot-allocation.ts` (NEW)
+- `src/domain/portfolio/lot-allocation.test.ts` (NEW)
+- `src/domain/types.ts` (EXTEND meta)
+- `src/hooks/use-preferences.ts` (EXTEND)
+- `src/pages/crypto-detail.tsx` (MAJOR REWRITE)
+- `docs/AI_HANDOFF.md` (CHECKPOINTS)
+
+**Riesgos:**
+- Precisión numérica: usar misma estrategia que fifo.ts (floating point nativo, sin bigdecimal)
+- USDT instrument: si no existe en DB, hay que crearlo on-the-fly (o buscar en instruments existentes)
+- Doble conteo: la venta genera SELL de crypto y BUY de USDT; builder ya separa stables como liquidez, OK
+- El builder sigue usando FIFO para lots display; el método solo afecta al simulador de venta (diseño consciente)
+
+---
+
 ### 2026-02-05 — Claude Opus 4.5 — Feat: Cripto Detalle Subpágina + Stablecoins como Liquidez
 **Goal:** Implementar detalle de cripto como subpágina (NO modal) siguiendo prototipo `Cripto.html`, con cálculos reales FIFO lots desde movements, reclasificar USDT/stablecoins como liquidez visual del exchange, y CTA "Vender" que prellena movimiento.
 

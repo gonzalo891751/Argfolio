@@ -156,6 +156,10 @@ export interface Movement {
         fci?: FciMetaSnapshot
         isAutoSettlement?: boolean
         source?: string
+        /** Lot allocation traceability for crypto sales */
+        allocations?: Array<{ lotId: string; qty: number; costUsd: number }>
+        /** Costing method used for the sale */
+        costingMethod?: string
     }
 }
 
