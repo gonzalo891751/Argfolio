@@ -711,10 +711,14 @@ function ProviderSection({
 
     const baseAccountId = provider.id.replace(/-cash$/, '')
     const kindForProviderFx: ItemKind | null = useMemo(() => {
-        const kinds: ItemKind[] = ['cash_usd', 'cash_ars', 'wallet_yield']
-        for (const k of kinds) {
+        // Prefer cash items (wallet pattern), then fall back to first item with fxMeta
+        const cashKinds: ItemKind[] = ['cash_usd', 'cash_ars', 'wallet_yield']
+        for (const k of cashKinds) {
             if (provider.items.some(it => it.kind === k)) return k
         }
+        // For non-cash providers (CEDEARs, Cripto, FCI, PF), use first item's kind
+        const firstWithFx = provider.items.find(it => it.fxMeta)
+        if (firstWithFx) return firstWithFx.kind
         return null
     }, [provider.items])
 
@@ -808,8 +812,22 @@ interface ItemRowProps {
 function ItemRow({ item, onClick, onOpenFxOverride, providerName }: ItemRowProps) {
     const isWalletOrCash = item.kind === 'wallet_yield' || item.kind === 'cash_ars' || item.kind === 'cash_usd'
     const isUsdCash = item.kind === 'cash_usd'
+    const isUsdNative = item.kind === 'crypto' || item.kind === 'stable'
     const hasTna = item.yieldMeta?.tna && item.yieldMeta.tna > 0
-    const hasSecondary = isUsdCash ? Math.abs(item.valArs) >= 1 : Math.abs(item.valUsd) >= 0.01
+    // For USD-native assets, secondary is ARS (check valArs). For others, secondary is USD (check valUsd).
+    const hasSecondary = isUsdNative || isUsdCash
+        ? Math.abs(item.valArs) >= 1
+        : Math.abs(item.valUsd) >= 0.01
+
+    // Determine primary/secondary display based on native currency
+    const primaryValue = isUsdNative
+        ? formatMoneyUSD(item.valUsd)
+        : isUsdCash
+            ? formatMoneyUSD(item.valUsd)
+            : formatMoneyARS(item.valArs)
+    const secondaryValue = isUsdNative || isUsdCash
+        ? formatMoneyARS(item.valArs)
+        : formatMoneyUSD(item.valUsd)
 
     return (
         <button
@@ -852,21 +870,31 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName }: ItemRowProps
             <div className="text-right">
                 {/* Primary value */}
                 <p className="font-mono text-base font-semibold">
-                    {isUsdCash ? formatMoneyUSD(item.valUsd) : formatMoneyARS(item.valArs)}
+                    {primaryValue}
                 </p>
-                {/* Secondary value (dual-currency) or PnL */}
-                {isWalletOrCash ? (
-                    hasSecondary ? (
-                        <div className="flex items-center justify-end gap-1.5">
-                            <p className="text-xs text-emerald-400 font-mono">
-                                ≈ {isUsdCash ? formatMoneyARS(item.valArs) : formatMoneyUSD(item.valUsd)}
-                            </p>
-                            {/* TC Chip */}
-                            {item.fxMeta && item.fxMeta.rate > 0 && (
-                                <span
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={(e) => {
+                {/* Secondary value (dual-currency) — unified for ALL item types */}
+                {hasSecondary ? (
+                    <div className="flex items-center justify-end gap-1.5">
+                        <p className="text-xs text-emerald-400 font-mono">
+                            ≈ {secondaryValue}
+                        </p>
+                        {/* TC Chip — clickable for FX override */}
+                        {item.fxMeta && item.fxMeta.rate > 0 && (
+                            <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    onOpenFxOverride({
+                                        accountId: item.accountId,
+                                        kind: item.kind,
+                                        title: providerName,
+                                        autoMeta: item.fxMeta,
+                                    })
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault()
                                         e.stopPropagation()
                                         onOpenFxOverride({
                                             accountId: item.accountId,
@@ -874,35 +902,16 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName }: ItemRowProps
                                             title: providerName,
                                             autoMeta: item.fxMeta,
                                         })
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' || e.key === ' ') {
-                                            e.preventDefault()
-                                            e.stopPropagation()
-                                            onOpenFxOverride({
-                                                accountId: item.accountId,
-                                                kind: item.kind,
-                                                title: providerName,
-                                                autoMeta: item.fxMeta,
-                                            })
-                                        }
-                                    }}
-                                    className="text-[9px] font-mono text-muted-foreground bg-muted/50 hover:bg-muted px-1 py-0.5 rounded whitespace-nowrap transition-colors cursor-pointer"
-                                    title="Elegir tipo de cambio"
-                                >
-                                    TC {item.fxMeta.family} {item.fxMeta.side}
-                                </span>
-                            )}
-                        </div>
-                    ) : null
-                ) : item.pnlPct !== undefined && (
-                    <p className={cn(
-                        "text-xs font-mono",
-                        (item.pnlPct ?? 0) >= 0 ? "text-green-500" : "text-red-500"
-                    )}>
-                        {(item.pnlPct ?? 0) >= 0 ? '+' : ''}{formatPercent((item.pnlPct ?? 0) / 100)}
-                    </p>
-                )}
+                                    }
+                                }}
+                                className="text-[9px] font-mono text-muted-foreground bg-muted/50 hover:bg-muted px-1 py-0.5 rounded whitespace-nowrap transition-colors cursor-pointer"
+                                title="Elegir tipo de cambio"
+                            >
+                                TC {item.fxMeta.family} {item.fxMeta.side}
+                            </span>
+                        )}
+                    </div>
+                ) : null}
             </div>
         </button>
     )

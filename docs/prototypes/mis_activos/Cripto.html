@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Cripto</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Config -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            primary: '#6366f1',
+                            accent: '#0ea5e9',
+                        },
+                        semantic: {
+                            up: '#10b981',
+                            down: '#f43f5e',
+                            warn: '#f59e0b',
+                            info: '#3b82f6',
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+            --bg-surface: #151E32;
+            --border-subtle: rgba(255,255,255,0.08);
+            --col-primary: #6366f1;
+        }
+
+        body {
+            background-color: var(--bg-app);
+            color: #F8FAFC;
+        }
+
+        /* Utilities */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .glass-card-hover:hover {
+            background: rgba(30, 41, 59, 0.6);
+            border-color: rgba(255,255,255,0.15);
+            transform: translateY(-1px);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        .tab-active {
+            color: white;
+            border-bottom: 2px solid var(--col-primary);
+        }
+        .tab-inactive {
+            color: #94A3B8;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-inactive:hover { color: #CBD5E1; }
+
+        /* Animation for View Transition */
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* FIX: !important para ganar a las clases de Tailwind (como grid) */
+        .hidden-view { display: none !important; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col pb-20">
+
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-50 glass-panel border-b-0 border-b-white/5 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <svg class="w-6 h-6 text-brand-primary" viewBox="0 0 40 40" fill="none">
+                <path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/>
+                <circle cx="20" cy="14" r="3" class="text-white" fill="currentColor"/>
+            </svg>
+            <span class="font-display font-bold tracking-wide text-lg">Argfolio</span>
+        </div>
+        <div class="flex items-center gap-4">
+             <div class="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-xs font-mono text-slate-400">BTC/USD <span class="text-white ml-1">$71.845</span></span>
+             </div>
+             <div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-primary to-purple-600 flex items-center justify-center text-xs font-bold border border-white/10">AF</div>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-6xl w-full mx-auto p-4 md:p-8 relative">
+
+        <!-- VIEW A: OVERVIEW -->
+        <section id="view-overview" class="fade-in space-y-8">
+            <header class="flex items-end justify-between border-b border-white/10 pb-6">
+                <div>
+                    <h1 class="font-display text-3xl font-bold text-white">Cripto</h1>
+                    <div class="flex items-center gap-2 mt-2 text-slate-400">
+                        <span>Provider:</span>
+                        <span class="flex items-center gap-1.5 text-white bg-slate-800 px-2 py-0.5 rounded text-sm border border-white/5">
+                            <svg class="w-4 h-4 text-yellow-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L3.6 8.4l2.8 2.8 5.6-5.6 5.6 5.6 2.8-2.8L12 0zm0 6.6l-2.8 2.8 2.8 2.8 2.8-2.8-2.8-2.8zM3.6 15.6l8.4 8.4 8.4-8.4-2.8-2.8-5.6 5.6-5.6-5.6-2.8 2.8zm8.4-3.4l2.8 2.8-2.8 2.8-2.8-2.8 2.8-2.8z"/></svg>
+                            Binance
+                        </span>
+                    </div>
+                </div>
+                <div class="text-right hidden md:block">
+                    <div class="text-xs font-mono text-slate-500 uppercase mb-1">Tenencia Total</div>
+                    <div class="text-2xl font-mono font-medium tracking-tight">US$ 4,120.50</div>
+                </div>
+            </header>
+
+            <!-- Volatile Assets -->
+            <div class="space-y-4">
+                <h2 class="text-sm font-mono text-slate-500 uppercase tracking-widest">Activos Volátiles</h2>
+                
+                <!-- BTC Card (Clickable) -->
+                <div onclick="router.navigate('detail')" class="glass-panel p-5 rounded-xl cursor-pointer glass-card-hover transition-all duration-200 group">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M16.14 8.84c.33-2.18-1.34-3.36-3.62-4.14l.74-2.96-1.8-.45-.72 2.89c-.47-.12-.96-.23-1.45-.34l.73-2.92-1.8-.45-.74 2.95c-.39-.09-.79-.17-1.18-.26l-.01-.06-2.48.62.48 1.93s1.33-.33 1.31-.31c.73.18.86.66.84 1.05l-.84 3.37c.05.01.12.03.19.06l-.2.05-.59 2.34c-.04.11-.15.44-1.17.18l-1.99.5.37 1.48 2.33.58c.43.11.86.21 1.28.31l-.75 3.03 1.8.45.74-2.97c.5.14.98.26 1.46.37l-.74 2.98 1.8.45.75-2.99c2.68.51 4.7.3 5.55-2.12.69-1.97-.03-3.11-1.46-3.85.96-.22 1.69-.85 1.88-2.15zm-2.48 5.67c-.34 1.36-2.65.63-3.39.44l.6-2.42c.74.19 3.12.57 2.79 1.98zm.34-5.69c-.31 1.24-2.27.61-2.9.45l.55-2.2c.63.16 2.67.45 2.35 1.75z"/></svg>
+                            </div>
+                            <div>
+                                <div class="font-display font-bold text-lg text-white group-hover:text-brand-primary transition-colors">Bitcoin</div>
+                                <div class="flex items-center gap-2 text-xs font-mono">
+                                    <span class="text-slate-400">BTC</span>
+                                    <span class="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">▲ 2.4%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hidden md:block w-32 h-10 opacity-50">
+                            <!-- Simple SVG Sparkline -->
+                            <svg class="w-full h-full text-emerald-500" viewBox="0 0 100 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M0 15 L10 12 L20 16 L30 10 L40 14 L50 8 L60 11 L70 5 L80 9 L90 4 L100 2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+
+                        <div class="text-right">
+                            <div class="font-mono text-lg font-medium text-white">US$ 2.840,12</div>
+                            <div class="font-mono text-xs text-slate-500">≈ $ 4.263.188,14</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BNB Card -->
+                <div class="glass-panel p-5 rounded-xl transition-opacity hover:opacity-100 opacity-75">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
+                                <span class="font-bold text-xs">BNB</span>
+                            </div>
+                            <div>
+                                <div class="font-display font-bold text-lg text-white">BNB</div>
+                                <div class="flex items-center gap-2 text-xs font-mono">
+                                    <span class="text-slate-400">BNB</span>
+                                    <span class="text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">▼ 0.8%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-mono text-lg font-medium text-white">US$ 152,40</div>
+                            <div class="font-mono text-xs text-slate-500">≈ $ 228.782,88</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Liquidity Section -->
+            <div class="space-y-4 pt-4">
+                <div class="flex justify-between items-end">
+                    <h2 class="text-sm font-mono text-brand-accent uppercase tracking-widest">Liquidez (Stable)</h2>
+                    <span class="text-[10px] text-slate-500 hidden md:inline-block">USDT se considera dólar cripto</span>
+                </div>
+                
+                <div class="glass-panel p-5 rounded-xl border-l-4 border-l-brand-accent/50 bg-gradient-to-r from-brand-accent/5 to-transparent">
+                     <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500">
+                                <span class="font-bold text-xs">T</span>
+                            </div>
+                            <div>
+                                <div class="font-display font-bold text-lg text-white">Tether USDT</div>
+                                <div class="flex items-center gap-2 text-xs font-mono">
+                                    <span class="text-slate-400">Saldo disponible</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-mono text-lg font-medium text-white">US$ 1.127,98</div>
+                            <div class="font-mono text-xs text-slate-500">≈ $ 1.693.323,57</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW B: DETAIL (BTC) -->
+        <section id="view-detail" class="hidden-view space-y-6">
+            
+            <!-- Breadcrumb + Actions -->
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex items-center gap-2">
+                    <button onclick="router.navigate('overview')" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    </button>
+                    <div class="flex items-center text-sm font-mono text-slate-500">
+                        <span>Mis Activos</span>
+                        <span class="mx-2">/</span>
+                        <span>Cripto</span>
+                        <span class="mx-2">/</span>
+                        <span class="text-white">Bitcoin</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="px-3 py-1 rounded bg-slate-900 border border-white/10 text-[10px] font-mono text-slate-400">
+                        TC Venta: <span class="text-brand-accent font-bold">$1.501,20</span>
+                    </div>
+                    <button class="p-2 rounded-lg text-brand-primary border border-brand-primary/30 hover:bg-brand-primary/10 transition text-xs font-medium">
+                        Ver Movimientos
+                    </button>
+                </div>
+            </div>
+
+            <!-- Hero Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Main Balance -->
+                <div class="lg:col-span-2 glass-panel p-6 rounded-xl relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-brand-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                    
+                    <div class="flex items-start justify-between mb-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500">
+                                <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M16.14 8.84c.33-2.18-1.34-3.36-3.62-4.14l.74-2.96-1.8-.45-.72 2.89c-.47-.12-.96-.23-1.45-.34l.73-2.92-1.8-.45-.74 2.95c-.39-.09-.79-.17-1.18-.26l-.01-.06-2.48.62.48 1.93s1.33-.33 1.31-.31c.73.18.86.66.84 1.05l-.84 3.37c.05.01.12.03.19.06l-.2.05-.59 2.34c-.04.11-.15.44-1.17.18l-1.99.5.37 1.48 2.33.58c.43.11.86.21 1.28.31l-.75 3.03 1.8.45.74-2.97c.5.14.98.26 1.46.37l-.74 2.98 1.8.45.75-2.99c2.68.51 4.7.3 5.55-2.12.69-1.97-.03-3.11-1.46-3.85.96-.22 1.69-.85 1.88-2.15zm-2.48 5.67c-.34 1.36-2.65.63-3.39.44l.6-2.42c.74.19 3.12.57 2.79 1.98zm.34-5.69c-.31 1.24-2.27.61-2.9.45l.55-2.2c.63.16 2.67.45 2.35 1.75z"/></svg>
+                            </div>
+                            <div>
+                                <h1 class="text-3xl font-display font-bold text-white">Bitcoin</h1>
+                                <p class="text-slate-400 text-sm">Binance · BTC</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                             <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-sm font-mono font-medium">
+                                ▲ 2.45% <span class="text-slate-500 opacity-50">| 24h</span>
+                             </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1">
+                        <div class="text-sm font-mono text-slate-400">Valor de Mercado</div>
+                        <div class="text-4xl md:text-5xl font-mono font-medium tracking-tight text-white flex items-baseline gap-2">
+                            US$ 2.840,12 <span class="text-lg text-slate-500 font-normal">USD</span>
+                        </div>
+                        <div class="text-lg font-mono text-slate-500">
+                            ≈ $ 4.263.188,14 ARS
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Grid -->
+                <div class="glass-panel p-6 rounded-xl flex flex-col justify-between">
+                    <div>
+                        <div class="text-xs font-mono text-slate-500 uppercase mb-2">Tenencia (Qty)</div>
+                        <div class="text-xl font-mono text-white" id="display-qty">0.039531 BTC</div>
+                    </div>
+                    <div class="h-px bg-white/10 my-4"></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <div class="text-[10px] font-mono text-slate-500 uppercase">Precio Promedio</div>
+                            <div class="text-sm font-mono text-white mt-1" id="display-avg-price">US$ 64.210</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-mono text-slate-500 uppercase">Precio Actual</div>
+                            <div class="text-sm font-mono text-brand-primary mt-1">US$ 71.845</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-mono text-slate-500 uppercase">Invertido</div>
+                            <div class="text-sm font-mono text-white mt-1" id="display-invested">US$ 2.538</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-mono text-slate-500 uppercase">Ganancia Total</div>
+                            <div class="text-sm font-mono text-emerald-400 mt-1 font-bold" id="display-pnl">+$301 (11%)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="border-b border-white/10 mt-6">
+                <nav class="flex gap-6" aria-label="Tabs">
+                    <button onclick="tabs.switch('lots')" id="tab-lots" class="tab-active py-4 px-1 text-sm font-medium font-display">
+                        Compras (Lotes)
+                    </button>
+                    <button onclick="tabs.switch('sell')" id="tab-sell" class="tab-inactive py-4 px-1 text-sm font-medium font-display">
+                        Simulador Venta
+                    </button>
+                    <button onclick="tabs.switch('info')" id="tab-info" class="tab-inactive py-4 px-1 text-sm font-medium font-display">
+                        Cómo se calcula
+                    </button>
+                </nav>
+            </div>
+
+            <!-- TAB CONTENT: LOTS -->
+            <div id="content-lots" class="fade-in space-y-4 pt-6">
+                <div class="bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="bg-slate-900 border-b border-white/10 text-xs font-mono text-slate-500 uppercase">
+                                <tr>
+                                    <th class="px-6 py-3 font-medium">Fecha</th>
+                                    <th class="px-6 py-3 font-medium text-right">Cantidad</th>
+                                    <th class="px-6 py-3 font-medium text-right">Precio Compra</th>
+                                    <th class="px-6 py-3 font-medium text-right">Invertido</th>
+                                    <th class="px-6 py-3 font-medium text-right">Valor Hoy</th>
+                                    <th class="px-6 py-3 font-medium text-right">Resultado</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/5 font-mono" id="lots-table-body">
+                                <!-- JS Populated -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB CONTENT: SELL SIMULATOR -->
+            <div id="content-sell" class="hidden-view fade-in pt-6">
+                
+                <!-- Cost Basis Controls (MOVED INSIDE SIMULATOR) -->
+                <div class="mb-6">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div class="flex bg-slate-900 p-1 rounded-lg border border-white/10 w-full sm:w-auto overflow-x-auto">
+                            <button onclick="simulation.setMethod('ppp')" id="btn-ppp" class="flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-medium font-mono transition bg-white/10 text-white shadow-sm">PPP</button>
+                            <button onclick="simulation.setMethod('fifo')" id="btn-fifo" class="flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-medium font-mono transition text-slate-400 hover:text-white">PEPS (FIFO)</button>
+                            <button onclick="simulation.setMethod('lifo')" id="btn-lifo" class="flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-medium font-mono transition text-slate-400 hover:text-white">UEPS (LIFO)</button>
+                            <button onclick="simulation.setMethod('manual')" id="btn-manual" class="flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-medium font-mono transition text-slate-400 hover:text-white">Manual</button>
+                        </div>
+                        <div class="text-[10px] text-slate-500 max-w-md text-right hidden sm:block">
+                            El método seleccionado define qué lotes se venden primero y cómo se calcula la ganancia.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+                    <!-- Inputs -->
+                    <div class="md:col-span-5 space-y-6">
+                        <div class="glass-panel p-6 rounded-xl space-y-6">
+                            <h3 class="font-display text-lg text-white">Configurar Venta</h3>
+                            
+                            <div class="space-y-2">
+                                <label class="text-xs font-mono text-slate-400 uppercase">Cantidad a Vender (BTC)</label>
+                                <div class="relative">
+                                    <input type="number" id="input-qty" step="0.00000001" value="0.005" class="w-full bg-slate-950 border border-white/10 rounded-lg py-3 px-4 text-white font-mono focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition">
+                                    <button class="absolute right-3 top-3 text-[10px] text-brand-primary font-bold hover:text-white" onclick="document.getElementById('input-qty').value = logic.totalQty; simulation.update();">MAX</button>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="text-xs font-mono text-slate-400 uppercase">Precio de Venta (USD)</label>
+                                <input type="number" id="input-price" class="w-full bg-slate-950 border border-white/10 rounded-lg py-3 px-4 text-white font-mono focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition">
+                                <div class="text-[10px] text-slate-500 text-right">Usando cotización actual por defecto</div>
+                            </div>
+
+                            <div class="pt-4">
+                                <button onclick="simulation.execute()" class="w-full py-3 bg-brand-primary hover:bg-indigo-500 text-white rounded-lg font-medium text-sm transition shadow-glow font-display">
+                                    Generar movimiento de venta
+                                </button>
+                                <p class="text-[10px] text-slate-500 text-center mt-3">
+                                    Esto generará una orden cerrada y actualizará tu stock de lotes según el método <span id="lbl-method" class="text-white font-bold">PPP</span>.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preview Results -->
+                    <div class="md:col-span-7 space-y-6">
+                        <h3 class="font-display text-lg text-slate-300">Vista Previa del Resultado</h3>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="p-4 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+                                <div class="text-xs font-mono text-emerald-400/70 uppercase">Proceeds (Recibido)</div>
+                                <div class="text-xl font-mono text-white mt-1" id="res-proceeds">--</div>
+                                <div class="text-xs font-mono text-slate-500 mt-1" id="res-proceeds-ars">--</div>
+                            </div>
+                            <div class="p-4 rounded-lg bg-slate-800/50 border border-white/10">
+                                <div class="text-xs font-mono text-slate-400 uppercase">Costo Asignado</div>
+                                <div class="text-xl font-mono text-white mt-1" id="res-cost">--</div>
+                                <div class="text-[10px] font-mono text-slate-500 mt-1" id="res-cost-detail">Basado en PPP</div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-6 rounded-xl border-l-4 border-l-slate-500" id="pnl-card">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <div class="text-xs font-mono text-slate-400 uppercase">Ganancia / Pérdida Realizada</div>
+                                    <div class="text-3xl font-mono font-bold text-white mt-2" id="res-pnl">--</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-xl font-mono font-bold" id="res-pnl-percent">--%</div>
+                                    <div class="text-xs text-slate-500 mt-1">Impacto impositivo arg.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Lots Usage Visualization -->
+                        <div id="lots-usage-viz" class="hidden space-y-2">
+                            <div class="text-xs font-mono text-slate-500 uppercase">Lotes a consumir (Simulación)</div>
+                            <div class="bg-slate-950 p-3 rounded-lg border border-white/10 text-xs font-mono text-slate-400 space-y-1" id="lots-consumed-list">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB CONTENT: INFO -->
+            <div id="content-info" class="hidden-view fade-in max-w-2xl pt-6">
+                <div class="space-y-4 text-sm text-slate-300">
+                    <div class="glass-panel p-5 rounded-xl">
+                        <h4 class="text-white font-bold mb-2">Precio Promedio Ponderado (PPP)</h4>
+                        <p>Calcula un costo único dividiendo el total invertido por la cantidad total de tokens. Es el método más común para simplificar el seguimiento.</p>
+                    </div>
+                    <div class="glass-panel p-5 rounded-xl">
+                        <h4 class="text-white font-bold mb-2">PEPS / FIFO</h4>
+                        <p>Primeras Entradas, Primeras Salidas. Asume que vendés primero los tokens más antiguos. Suele generar mayor ganancia fiscal si compraste barato hace mucho.</p>
+                    </div>
+                    <div class="glass-panel p-5 rounded-xl">
+                        <h4 class="text-white font-bold mb-2">UEPS / LIFO</h4>
+                        <p>Últimas Entradas, Primeras Salidas. Asume que vendés lo último que compraste. Útil si querés realizar pérdidas o vender lo caro primero.</p>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 right-6 translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <div class="glass-panel bg-slate-900 border-l-4 border-l-emerald-500 px-6 py-4 rounded-lg shadow-2xl flex items-center gap-4">
+            <div class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <div>
+                <h4 class="text-white font-medium text-sm">Movimiento generado</h4>
+                <p class="text-slate-400 text-xs mt-0.5">Se actualizó tu tenencia y balance.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIC -->
+    <script>
+        // --- Mock Data & State ---
+        const marketData = {
+            btcPrice: 71845.32,
+            fxCripto: 1501.20 // USD -> ARS
+        };
+
+        const logic = {
+            method: 'ppp', // ppp, fifo, lifo, manual
+            lots: [
+                { id: 1, date: '2024-01-15', qty: 0.00500000, price: 42500.00 },
+                { id: 2, date: '2024-03-10', qty: 0.00250000, price: 68000.00 },
+                { id: 3, date: '2024-06-20', qty: 0.01000000, price: 64200.00 },
+                { id: 4, date: '2024-08-05', qty: 0.00850000, price: 58900.00 },
+                { id: 5, date: '2024-11-12', qty: 0.00353100, price: 82000.00 }, // Bought high
+                { id: 6, date: '2025-02-01', qty: 0.01000000, price: 71000.00 },
+            ],
+            
+            get totalQty() { return this.lots.reduce((acc, lot) => acc + lot.qty, 0); },
+            get totalInvested() { return this.lots.reduce((acc, lot) => acc + (lot.qty * lot.price), 0); },
+            get avgPrice() { return this.totalQty > 0 ? this.totalInvested / this.totalQty : 0; },
+            get currentValue() { return this.totalQty * marketData.btcPrice; },
+            get totalPnl() { return this.currentValue - this.totalInvested; },
+            get totalPnlPercent() { return (this.totalPnl / this.totalInvested) * 100; }
+        };
+
+        // --- Formatters ---
+        const fmtUSD = (n) => `US$ ${n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const fmtARS = (n) => `$ ${n.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const fmtBTC = (n) => `${n.toLocaleString('en-US', {minimumFractionDigits: 8})} BTC`;
+        const fmtPct = (n) => `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+
+        // --- Core UI Functions ---
+        const render = {
+            kpi: () => {
+                document.getElementById('display-qty').innerText = fmtBTC(logic.totalQty);
+                document.getElementById('display-avg-price').innerText = fmtUSD(logic.avgPrice);
+                document.getElementById('display-invested').innerText = fmtUSD(logic.totalInvested);
+                
+                const pnlEl = document.getElementById('display-pnl');
+                pnlEl.innerText = `${fmtUSD(logic.totalPnl)} (${fmtPct(logic.totalPnlPercent)})`;
+                pnlEl.className = `text-sm font-mono mt-1 font-bold ${logic.totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+            },
+
+            lotsTable: () => {
+                const tbody = document.getElementById('lots-table-body');
+                tbody.innerHTML = '';
+                
+                // Sort visually by date desc for readability
+                const sortedLots = [...logic.lots].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+                sortedLots.forEach(lot => {
+                    const currentVal = lot.qty * marketData.btcPrice;
+                    const invested = lot.qty * lot.price;
+                    const pnl = currentVal - invested;
+                    const pnlPct = (pnl / invested) * 100;
+                    
+                    const row = `
+                        <tr class="hover:bg-white/5 transition group">
+                            <td class="px-6 py-4 text-slate-300">${lot.date}</td>
+                            <td class="px-6 py-4 text-right text-white">${lot.qty.toFixed(8)}</td>
+                            <td class="px-6 py-4 text-right text-slate-400 text-xs">${fmtUSD(lot.price)}</td>
+                            <td class="px-6 py-4 text-right text-slate-300 text-xs">${fmtUSD(invested)}</td>
+                            <td class="px-6 py-4 text-right text-white text-xs">${fmtUSD(currentVal)}</td>
+                            <td class="px-6 py-4 text-right">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${pnl >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}">
+                                    ${pnl >= 0 ? '+' : ''}${Math.round(pnl)} USD
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            }
+        };
+
+        // --- Simulation Logic ---
+        const simulation = {
+            init: () => {
+                document.getElementById('input-price').value = marketData.btcPrice;
+                ['input-qty', 'input-price'].forEach(id => {
+                    document.getElementById(id).addEventListener('input', simulation.update);
+                });
+                simulation.update();
+            },
+
+            setMethod: (m) => {
+                logic.method = m;
+                // Update Buttons
+                ['ppp','fifo','lifo','manual'].forEach(type => {
+                    const btn = document.getElementById(`btn-${type}`);
+                    if(type === m) {
+                        btn.className = "flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-medium font-mono transition bg-white/10 text-white shadow-sm border border-brand-primary/50";
+                    } else {
+                        btn.className = "flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-medium font-mono transition text-slate-400 hover:text-white";
+                    }
+                });
+                document.getElementById('lbl-method').innerText = m.toUpperCase();
+                simulation.update();
+            },
+
+            calculate: (sellQty, sellPrice) => {
+                let cost = 0;
+                let usedLots = [];
+
+                if (logic.method === 'ppp') {
+                    cost = sellQty * logic.avgPrice;
+                } else {
+                    // FIFO / LIFO / MANUAL logic
+                    let remainingToSell = sellQty;
+                    // Sort lots based on method
+                    let availableLots = [...logic.lots];
+                    
+                    if (logic.method === 'fifo') availableLots.sort((a,b) => new Date(a.date) - new Date(b.date));
+                    if (logic.method === 'lifo') availableLots.sort((a,b) => new Date(b.date) - new Date(a.date));
+                    // Manual in this prototype behaves like FIFO for calculation simplicity but implies user selection
+                    if (logic.method === 'manual') availableLots.sort((a,b) => new Date(a.date) - new Date(b.date)); 
+
+                    for (let lot of availableLots) {
+                        if (remainingToSell <= 0) break;
+                        
+                        let take = Math.min(lot.qty, remainingToSell);
+                        cost += take * lot.price;
+                        remainingToSell -= take;
+                        
+                        usedLots.push({ date: lot.date, qty: take, price: lot.price });
+                    }
+                }
+
+                const proceeds = sellQty * sellPrice;
+                const pnl = proceeds - cost;
+                
+                return { proceeds, cost, pnl, usedLots };
+            },
+
+            update: () => {
+                const qty = parseFloat(document.getElementById('input-qty').value) || 0;
+                const price = parseFloat(document.getElementById('input-price').value) || 0;
+
+                if (qty <= 0) return;
+
+                const res = simulation.calculate(qty, price);
+                
+                // Render Results
+                document.getElementById('res-proceeds').innerText = fmtUSD(res.proceeds);
+                document.getElementById('res-proceeds-ars').innerText = fmtARS(res.proceeds * marketData.fxCripto);
+                
+                document.getElementById('res-cost').innerText = fmtUSD(res.cost);
+                document.getElementById('res-cost-detail').innerText = logic.method === 'ppp' ? 
+                    `Promedio: ${fmtUSD(logic.avgPrice)}` : 
+                    `${res.usedLots.length} lote(s) afectado(s)`;
+
+                document.getElementById('res-pnl').innerText = `${res.pnl >= 0 ? '+' : ''}${fmtUSD(res.pnl)}`;
+                document.getElementById('res-pnl').className = `text-3xl font-mono font-bold mt-2 ${res.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+                
+                const pnlPct = (res.pnl / res.cost) * 100;
+                document.getElementById('res-pnl-percent').innerText = fmtPct(pnlPct);
+                document.getElementById('pnl-card').className = `glass-panel p-6 rounded-xl border-l-4 ${res.pnl >= 0 ? 'border-l-emerald-500' : 'border-l-rose-500'}`;
+
+                // Viz lots consumption
+                const vizContainer = document.getElementById('lots-usage-viz');
+                const list = document.getElementById('lots-consumed-list');
+                
+                if (logic.method !== 'ppp' && res.usedLots.length > 0) {
+                    vizContainer.classList.remove('hidden');
+                    list.innerHTML = res.usedLots.map(l => 
+                        `<div class="flex justify-between"><span>${l.date}</span><span>-${l.qty.toFixed(6)} @ ${Math.round(l.price)}</span></div>`
+                    ).join('');
+                } else {
+                    vizContainer.classList.add('hidden');
+                }
+            },
+
+            execute: () => {
+                const toast = document.getElementById('toast');
+                toast.classList.remove('translate-y-20', 'opacity-0');
+                
+                // Reset inputs slightly to simulate refresh
+                setTimeout(() => {
+                    toast.classList.add('translate-y-20', 'opacity-0');
+                    // In a real app, we would slice the lots array here.
+                    // For prototype, we just switch back to summary tab
+                    tabs.switch('lots');
+                }, 3000);
+            }
+        };
+
+        // --- Router & Tabs ---
+        const router = {
+            navigate: (view) => {
+                const ov = document.getElementById('view-overview');
+                const dt = document.getElementById('view-detail');
+                
+                if (view === 'detail') {
+                    ov.classList.add('hidden-view');
+                    dt.classList.remove('hidden-view');
+                    window.scrollTo(0,0);
+                    render.kpi();
+                    render.lotsTable();
+                    simulation.init();
+                } else {
+                    dt.classList.add('hidden-view');
+                    ov.classList.remove('hidden-view');
+                    window.scrollTo(0,0);
+                }
+            }
+        };
+
+        const tabs = {
+            switch: (tabName) => {
+                // Update Headers
+                ['lots', 'sell', 'info'].forEach(t => {
+                    const btn = document.getElementById(`tab-${t}`);
+                    if (t === tabName) {
+                        btn.className = "tab-active py-4 px-1 text-sm font-medium font-display transition-colors";
+                    } else {
+                        btn.className = "tab-inactive py-4 px-1 text-sm font-medium font-display transition-colors";
+                    }
+                    
+                    const content = document.getElementById(`content-${t}`);
+                    if (t === tabName) content.classList.remove('hidden-view');
+                    else content.classList.add('hidden-view');
+                });
+            }
+        };
+
+    </script>
+</body>
+</html>

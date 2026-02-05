@@ -318,6 +318,26 @@ function mapCategoryToKind(category: string): ItemKind {
     }
 }
 
+/** Get default FX family for a given asset category */
+function getFxFamilyForCategory(category: string, account?: Account): FxMeta['family'] {
+    // For cash items, use account-based logic
+    if (category === 'CASH_ARS' || category === 'CASH_USD') {
+        return getFxFamilyForAccount(account)
+    }
+    // Asset-specific FX families
+    switch (category) {
+        case 'CEDEAR':
+            return 'MEP'
+        case 'CRYPTO':
+        case 'STABLE':
+            return 'Cripto'
+        case 'FCI':
+        case 'PF':
+        default:
+            return 'Oficial'
+    }
+}
+
 function buildItemFromMetrics(
     metrics: AssetRowMetrics,
     accountId: string,
@@ -327,31 +347,71 @@ function buildItemFromMetrics(
 ): ItemV2 {
     const kind = mapCategoryToKind(metrics.category)
 
-    // Compute fxMeta for cash items if FX info is available
+    // Compute fxMeta for ALL items if FX info is available
     let fxMeta: FxMeta | undefined
     let valArs = metrics.valArs ?? 0
     let valUsd = metrics.valUsdEq ?? 0
 
-    if (fxSnapshot && (kind === 'cash_ars' || kind === 'cash_usd' || kind === 'wallet_yield')) {
-        // CASH_USD: US dollar balance valued to ARS → USD→ARS = Venta
-        // CASH_ARS: ARS balance valued to USD → ARS→USD = Compra
-        const isUsdToArs = kind === 'cash_usd'
-        const overrideKey = `${accountId}:${kind}`
-        const manualOverride = fxOverrides?.[overrideKey]
-        fxMeta = buildFxMeta(account, fxSnapshot, isUsdToArs, manualOverride)
+    if (fxSnapshot) {
+        const isCashItem = kind === 'cash_ars' || kind === 'cash_usd' || kind === 'wallet_yield'
 
-        // CRITICAL FIX: Recalculate valArs/valUsd with the correct FX rate
-        // The upstream metrics use a generic 'oficial' rate, but we need to use
-        // the account-specific rate (Cripto for exchanges, MEP for brokers, Oficial for wallets)
-        const qty = metrics.quantity ?? 0
-        if (kind === 'cash_usd') {
-            // USD balance: valUsd = qty, valArs = qty * rate(Venta)
-            valUsd = qty
-            valArs = qty * fxMeta.rate
+        if (isCashItem) {
+            // CASH_USD: US dollar balance valued to ARS → USD→ARS = Venta
+            // CASH_ARS: ARS balance valued to USD → ARS→USD = Compra
+            const isUsdToArs = kind === 'cash_usd'
+            const overrideKey = `${accountId}:${kind}`
+            const manualOverride = fxOverrides?.[overrideKey]
+            fxMeta = buildFxMeta(account, fxSnapshot, isUsdToArs, manualOverride)
+
+            // CRITICAL FIX: Recalculate valArs/valUsd with the correct FX rate
+            // The upstream metrics use a generic 'oficial' rate, but we need to use
+            // the account-specific rate (Cripto for exchanges, MEP for brokers, Oficial for wallets)
+            const qty = metrics.quantity ?? 0
+            if (kind === 'cash_usd') {
+                // USD balance: valUsd = qty, valArs = qty * rate(Venta)
+                valUsd = qty
+                valArs = qty * fxMeta.rate
+            } else {
+                // ARS balance (cash_ars or wallet_yield): valArs = qty, valUsd = qty / rate(Compra)
+                valArs = qty
+                valUsd = fxMeta.rate > 0 ? qty / fxMeta.rate : 0
+            }
         } else {
-            // ARS balance (cash_ars or wallet_yield): valArs = qty, valUsd = qty / rate(Compra)
-            valArs = qty
-            valUsd = fxMeta.rate > 0 ? qty / fxMeta.rate : 0
+            // Non-cash items (CEDEARs, Crypto, FCI, etc.)
+            // These assets are priced in their native currency and we need to convert
+            // CEDEARs: priced in ARS, convert to USD using MEP
+            // Crypto: priced in USD, convert to ARS using Cripto
+            // FCI: priced in ARS (VCP), convert to USD using Oficial
+            const family = getFxFamilyForCategory(metrics.category, account)
+
+            // Determine if this is a USD-native asset
+            const isUsdNative = metrics.category === 'CRYPTO' || metrics.category === 'STABLE'
+
+            // For USD-native: USD→ARS uses Venta (V)
+            // For ARS-native: ARS→USD uses Compra (C)
+            const side: 'C' | 'V' = isUsdNative ? 'V' : 'C'
+            const rate = getFxRate(fxSnapshot, family, side)
+
+            // Check for manual override
+            const overrideKey = `${accountId}:${kind}`
+            const manualOverride = fxOverrides?.[overrideKey]
+
+            if (manualOverride) {
+                const manualRate = getFxRate(fxSnapshot, manualOverride.family, manualOverride.side)
+                if (Number.isFinite(manualRate) && manualRate > 0) {
+                    fxMeta = { family: manualOverride.family, side: manualOverride.side, rate: manualRate }
+                    // Recalculate with manual rate
+                    if (isUsdNative) {
+                        valArs = valUsd * manualRate
+                    } else {
+                        valUsd = manualRate > 0 ? valArs / manualRate : 0
+                    }
+                } else {
+                    fxMeta = { family, side, rate }
+                }
+            } else {
+                fxMeta = { family, side, rate }
+            }
         }
     }
 
@@ -554,6 +614,19 @@ export function buildRubros(
                         ? Math.max(0, Math.ceil((new Date(pf.maturityTs).getTime() - Date.now()) / 86400000))
                         : 0
 
+                    // Build yieldMeta for PF if TNA is available
+                    const yieldMeta: ItemV2['yieldMeta'] | undefined = pf.tna && pf.tna > 0
+                        ? {
+                            tna: pf.tna,
+                            tea: pf.tea ?? computeTEA(pf.tna),
+                        }
+                        : undefined
+
+                    // Build fxMeta for PF (always Oficial)
+                    const pfFxMeta: FxMeta | undefined = fxSnapshot
+                        ? { family: 'Oficial', side: 'V', rate: oficialSell }
+                        : undefined
+
                     return {
                         id: pf.id,
                         kind: 'plazo_fijo' as ItemKind,
@@ -570,8 +643,15 @@ export function buildRubros(
                             expectedInterestArs: pf.expectedInterestARS,
                             expectedTotalArs: pf.expectedTotalARS,
                         },
+                        yieldMeta,
+                        fxMeta: pfFxMeta,
                     }
                 })
+
+                // PF providers use Oficial FX
+                const pfProviderFxMeta: FxMeta | undefined = fxSnapshot
+                    ? { family: 'Oficial', side: 'V', rate: oficialSell }
+                    : undefined
 
                 providers.push({
                     id: `pf-${bank}`,
@@ -579,6 +659,7 @@ export function buildRubros(
                     totals: { ars: bankTotal, usd: bankTotal / oficialSell },
                     pnl: { ars: 0, usd: 0 }, // PF doesn't have PnL in this sense
                     items,
+                    fxMeta: pfProviderFxMeta,
                 })
 
                 rubroTotals.ars += bankTotal

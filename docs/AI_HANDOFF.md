@@ -45,6 +45,56 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Changelog / Sessions
 
+### 2026-02-05 — Claude Opus 4.5 — Feat: Extrapolación FX/TC + TNA/TEA a todos los rubros
+**Goal:** Extrapolar la valuación secundaria (USD/ARS) + chip TC clickeable + chips TNA/TEA a TODOS los rubros de `/mis-activos-v2` (no solo Billeteras). Reemplazar el badge de % change en CEDEARs/Cripto por valuación secundaria.
+
+**Root Cause / Diagnóstico:**
+- `buildItemFromMetrics()` solo generaba `fxMeta` para items cash (`cash_ars`, `cash_usd`, `wallet_yield`). Items de CEDEARs, Cripto, FCI y PF no tenían `fxMeta` → sin chip TC ni valuación secundaria.
+- Items PF tenían `pfMeta` con TNA/TEA pero NO `yieldMeta` → chips TNA/TEA no se renderizaban en lista.
+- `ItemRow` mostraba `pnlPct` (badge %) para items no-cash, en lugar de la valuación dual-currency.
+- `ProviderSection` solo buscaba cash kinds para el chip TC del provider header.
+- Scroll reset: ya corregido en sesión anterior (`placeholderData`, `useAutoRefresh` default `false`). Verificado que sigue OK.
+
+**Fix Applied:**
+- **`src/features/portfolioV2/builder.ts`:**
+  - Nueva función `getFxFamilyForCategory()`: CEDEAR→MEP, CRYPTO/STABLE→Cripto, FCI/PF→Oficial.
+  - `buildItemFromMetrics()` ahora genera `fxMeta` para TODOS los items (no solo cash). Para items no-cash: calcula familia FX por categoría, side (C para ARS→USD, V para USD→ARS), y soporta `fxOverrides` con recálculo de `valArs`/`valUsd`.
+  - Items PF ahora incluyen `yieldMeta` (TNA/TEA) y `fxMeta` (Oficial V).
+  - Providers PF ahora incluyen `fxMeta` (Oficial V).
+
+- **`src/pages/assets-v2.tsx`:**
+  - `ItemRow`: Unificado el rendering de la columna derecha. TODOS los items muestran valuación secundaria en verde + chip TC clickeable (en lugar del badge % para CEDEARs/Cripto). Crypto/stables muestran USD como principal y ARS como secundario.
+  - `ProviderSection`: `kindForProviderFx` ahora hace fallback al primer item con `fxMeta` si no hay items cash, habilitando el chip TC en providers de CEDEARs/Cripto/FCI/PF.
+
+**FX Rules (completas):**
+| Categoría | Familia FX | Side |
+|-----------|-----------|------|
+| CASH_ARS / FCI / PF / CEDEAR (ARS-native) | Por account kind / Oficial / MEP | C (Compra) |
+| CASH_USD / CRYPTO / STABLE (USD-native) | Por account kind / Cripto | V (Venta) |
+| EXCHANGE cash | Cripto | V (USD→ARS) / C (ARS→USD) |
+| BROKER cash | MEP | V / C |
+| WALLET/BANK cash | Oficial | V / C |
+
+**Archivos tocados:**
+- `src/features/portfolioV2/builder.ts` — fxMeta para todos los items + yieldMeta para PF
+- `src/pages/assets-v2.tsx` — ItemRow unificado + ProviderSection extendido
+
+**Validación:**
+- `npm test` ✅ (49/49)
+- `npm run build` ✅
+
+**Checklist de aceptación:**
+- [x] Cada rubro muestra principal + secundario en verde + chip TC coherente
+- [x] Provider headers muestran chip TC para todos los rubros
+- [x] Items CEDEARs/Cripto muestran valuación secundaria (no % badge)
+- [x] Items PF muestran chips TNA/TEA si tienen TNA > 0
+- [x] Cuentas remuneradas (Billeteras) siguen mostrando TNA/TEA (no regresión)
+- [x] Override TC desde chip cambia efectivamente números (fxOverrides en builder)
+- [x] No scroll reset (verificado: placeholderData + autoRefresh=false)
+- [x] Build y tests pasan
+
+---
+
 ### 2026-02-04 — Claude Opus 4.5 — Feature: Plazos Fijos Detalle Subpágina
 **Goal:** Reemplazar modal de PF por subpágina de detalle + verificar auto-cierre al vencimiento + ocultar PFs cerrados.
 
