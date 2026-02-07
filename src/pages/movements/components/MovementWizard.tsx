@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
     X,
-    ArrowRight,
     Check,
     Building2,
     Bitcoin,
@@ -32,6 +31,8 @@ import { WalletCashWizard } from './wallet/WalletCashWizard'
 import { CryptoBuySellWizard } from './crypto'
 import { FciBuySellWizard } from './fci'
 import { CedearBuySellWizard } from './cedear'
+import { WizardStepper } from './ui/WizardStepper'
+import { WizardFooter } from './ui/WizardFooter'
 
 // Max days after maturity to allow redemption
 const PF_REDEEM_MARGIN_DAYS = 3
@@ -1117,21 +1118,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     <div>
                         <h2 className="font-display text-xl font-bold text-white">Nuevo Movimiento</h2>
                         {!(step >= 2 && (state.assetClass === 'wallet' || state.assetClass === 'crypto' || state.assetClass === 'fci' || state.assetClass === 'cedear')) && (
-                            <div className="flex gap-2 mt-2">
-                                {[1, 2, 3, 4].map(s => (
-                                    <div
-                                        key={s}
-                                        className={cn(
-                                            'h-1 w-8 rounded-full transition-all duration-300',
-                                            s < step
-                                                ? 'bg-emerald-500'
-                                                : s === step
-                                                    ? 'bg-indigo-500'
-                                                    : 'bg-white/10'
-                                        )}
-                                    />
-                                ))}
-                            </div>
+                            <WizardStepper currentStep={step} totalSteps={4} className="mt-2" />
                         )}
                         {step >= 2 && state.assetClass === 'wallet' && (
                             <p className="text-sm text-slate-400 mt-0.5">Ajustá manualmente tus saldos o registrá operaciones.</p>
@@ -1161,6 +1148,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         movements={allMovements}
                         instruments={instrumentsList}
                         onClose={() => onOpenChange(false)}
+                        onBackToAssetType={() => setStep(1)}
                     />
                 ) : step >= 2 && state.assetClass === 'crypto' ? (
                     <CryptoBuySellWizard
@@ -1169,6 +1157,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         instruments={instrumentsList}
                         prefillMovement={prefillMovement}
                         onClose={() => onOpenChange(false)}
+                        onBackToAssetType={() => setStep(1)}
                     />
                 ) : step >= 2 && state.assetClass === 'wallet' ? (
                     <WalletCashWizard
@@ -1176,6 +1165,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         movements={allMovements}
                         instruments={instrumentsList}
                         onClose={() => onOpenChange(false)}
+                        onBackToAssetType={() => setStep(1)}
                     />
                 ) : step >= 2 && state.assetClass === 'fci' ? (
                     <FciBuySellWizard
@@ -1183,6 +1173,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         movements={allMovements}
                         instruments={instrumentsList}
                         onClose={() => onOpenChange(false)}
+                        onBackToAssetType={() => setStep(1)}
                     />
                 ) : (<>
                 {/* Body - Scrollable */}
@@ -1699,7 +1690,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                     Capital a Invertir (ARS)
                                                 </label>
                                                 <div className="relative">
-                                                    <span className="absolute left-3 top-3.5 text-slate-500 font-mono">$</span>
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono pointer-events-none">$</span>
                                                     <input
                                                         type="number"
                                                         value={state.qtyStr || ''}
@@ -1874,7 +1865,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                             Cantidad (USD)
                                                         </label>
                                                         <div className="relative">
-                                                            <span className="absolute left-3 top-3.5 text-slate-500 font-mono">u$s</span>
+                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono pointer-events-none">u$s</span>
                                                             <input
                                                                 type="text"
                                                                 inputMode="decimal"
@@ -1885,7 +1876,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                     setState(s => ({ ...s, qtyStr: e.target.value, qty: val }));
                                                                 }}
                                                                 placeholder="100.00"
-                                                                className="input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg"
+                                                                className="input-base w-full rounded-lg pl-12 pr-4 py-3 text-white font-mono text-lg"
                                                                 autoFocus
                                                             />
                                                             {(['sell', 'sell_usd', 'redeem'].includes(state.opType) && (availableQty || 0) < Infinity) && (
@@ -1906,7 +1897,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                 Cotización (ARS/USD)
                                                             </label>
                                                             <div className="relative">
-                                                                <span className="absolute left-3 top-3.5 text-slate-500 font-mono">$</span>
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono pointer-events-none">$</span>
                                                                 <input
                                                                     type="number"
                                                                     value={state.fxRate || ''}
@@ -1943,7 +1934,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                             Monto (ARS)
                                                         </label>
                                                         <div className="relative">
-                                                            <span className="absolute left-3 top-3.5 text-slate-500 font-mono">$</span>
+                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono pointer-events-none">$</span>
                                                             <input
                                                                 type="text"
                                                                 inputMode="decimal"
@@ -1999,7 +1990,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                             Cantidad (USD)
                                                         </label>
                                                         <div className="relative">
-                                                            <span className="absolute left-3 top-3.5 text-slate-500 font-mono">u$s</span>
+                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono pointer-events-none">u$s</span>
                                                             <input
                                                                 type="number"
                                                                 value={state.qtyStr || ''}
@@ -2014,7 +2005,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                     }));
                                                                 }}
                                                                 placeholder="100.00"
-                                                                className="input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg"
+                                                                className="input-base w-full rounded-lg pl-12 pr-4 py-3 text-white font-mono text-lg"
                                                                 autoFocus
                                                             />
                                                             {(['sell', 'sell_usd', 'redeem'].includes(state.opType) && (availableQty || 0) < Infinity) && (
@@ -2035,7 +2026,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                 Tipo de Cambio (ARS/USD)
                                                             </label>
                                                             <div className="relative">
-                                                                <span className="absolute left-3 top-3.5 text-slate-500 font-mono">$</span>
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono pointer-events-none">$</span>
                                                                 <input
                                                                     type="number"
                                                                     value={state.fxRate || ''}
@@ -2178,7 +2169,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                 )}
                                                             </label>
                                                             <div className="relative">
-                                                                <span className="absolute left-3 top-3.5 text-slate-500 font-mono">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono pointer-events-none">
                                                                     {state.currency === 'USD' ? 'u$s' : '$'}
                                                                 </span>
                                                                 <input
@@ -2201,7 +2192,8 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                                     }}
                                                                     placeholder="0.00"
                                                                     className={cn(
-                                                                        "input-base w-full rounded-lg pl-10 pr-4 py-3 text-white font-mono text-lg transition-colors",
+                                                                        "input-base w-full rounded-lg pr-4 py-3 text-white font-mono text-lg transition-colors",
+                                                                        state.currency === 'USD' ? 'pl-12' : 'pl-10',
                                                                         state.priceMode === 'auto' ? "bg-slate-800/50 text-slate-300 focus:bg-slate-800 focus:text-white" : ""
                                                                     )}
                                                                 />
@@ -2639,7 +2631,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                         )}
                                         <div className="flex justify-between border-b border-white/5 pb-2">
                                             <span className="text-slate-200 text-sm font-bold">Total Neto</span>
-                                            <span className="text-indigo-400 font-mono font-bold text-lg">
+                                            <span className={cn('font-mono font-bold text-lg', totals.nativeNet < 0 ? 'text-rose-400' : totals.nativeNet > 0 ? 'text-emerald-400' : 'text-slate-200')}>
                                                 {state.currency === 'USD'
                                                     ? formatMoneyUSD(totals.nativeNet)
                                                     : formatMoneyARS(totals.nativeNet)}
@@ -2659,54 +2651,28 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-white/10 bg-[#0F172A] flex justify-between items-center shrink-0">
-                    <button
-                        onClick={() => setStep(s => s - 1)}
-                        className={cn(
-                            'px-4 py-2 text-slate-400 hover:text-white font-medium text-sm transition',
-                            step === 1 && 'invisible'
-                        )}
-                    >
-                        Atrás
-                    </button>
-                    <div className="ml-auto flex gap-3">
-                        <button
-                            onClick={() => onOpenChange(false)}
-                            className="px-4 py-2 text-slate-400 hover:text-white font-medium text-sm transition"
-                        >
-                            Cancelar
-                        </button>
-                        {step < 4 ? (
-                            <button
-                                onClick={() => setStep(s => s + 1)}
-                                disabled={
-                                    state.assetClass === 'pf' && state.opType === 'redeem' && step === 3
-                                        ? (!state.selectedPfData || !state.selectedPfMovementId || (() => {
-                                            if (!state.selectedPfData?.maturityDate) return false
-                                            const matDate = new Date(state.selectedPfData.maturityDate)
-                                            const maxDate = new Date(matDate)
-                                            maxDate.setDate(maxDate.getDate() + PF_REDEEM_MARGIN_DAYS)
-                                            const redeemDate = new Date(state.datetime)
-                                            return redeemDate < matDate || redeemDate > maxDate
-                                        })())
-                                        : false
-                                }
-                                className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg rounded-lg text-sm font-medium transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Siguiente <ArrowRight className="w-4 h-4" />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleConfirm}
-                                disabled={createMovement.isPending || updateMovement.isPending}
-                                className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg rounded-lg text-sm font-medium transition flex items-center gap-2 disabled:opacity-50"
-                            >
-                                <Check className="w-4 h-4" />
-                                {createMovement.isPending || updateMovement.isPending ? 'Guardando...' : 'Confirmar'}
-                            </button>
-                        )}
-                    </div>
-                </div>
+                <WizardFooter
+                    onBack={step === 1 ? () => onOpenChange(false) : () => setStep(s => s - 1)}
+                    onCancel={() => onOpenChange(false)}
+                    primaryLabel={step < 4 ? 'Siguiente' : 'Confirmar'}
+                    onPrimary={step < 4 ? () => setStep(s => s + 1) : handleConfirm}
+                    primaryVariant={step < 4 ? 'indigo' : 'emerald'}
+                    primaryDisabled={
+                        step < 4
+                            ? (state.assetClass === 'pf' && state.opType === 'redeem' && step === 3
+                                ? (!state.selectedPfData || !state.selectedPfMovementId || (() => {
+                                    if (!state.selectedPfData?.maturityDate) return false
+                                    const matDate = new Date(state.selectedPfData.maturityDate)
+                                    const maxDate = new Date(matDate)
+                                    maxDate.setDate(maxDate.getDate() + PF_REDEEM_MARGIN_DAYS)
+                                    const redeemDate = new Date(state.datetime)
+                                    return redeemDate < matDate || redeemDate > maxDate
+                                })())
+                                : false)
+                            : false
+                    }
+                    primaryLoading={step === 4 && (createMovement.isPending || updateMovement.isPending)}
+                />
                 </>)}
             </div>
         </div >,

@@ -30,6 +30,7 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 - ~~FciBuySellWizard (Suscripción/Rescate FCI):~~ ✅ IMPLEMENTADO (2026-02-07)
 - ~~CedearBuySellWizard (Compra/Venta CEDEARs):~~ ✅ IMPLEMENTADO (2026-02-07)
 - Eliminar mocks de precios / formalizar fuentes (Yahoo Finance?)
+- ~~Auditoría UI/UX 'Nuevo Movimiento' (Homogeneidad Framework):~~ ✅ COMPLETADO (2026-02-07)
 - Unificar Mis Activos (AssetsPage -> engine único)
 - Fix vitest 4.x test suite detection (all 9 test files affected)
 
@@ -41,7 +42,7 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 3. **[P1] Price Hardcoding:** mockPrices hardcodeados en portfolio engine (`src/domain/portfolio/use-computed-portfolio.ts`).
 4. **[P2] Asset/History Drift:** Snapshots estáticos generan drift al editar movimientos pasados.
 5. **[P2] Hybrid AssetsPage:** UX híbrida entre legacy PF/FCI y nueva tabla `useAssetsRows`.
-6. **[P2] FX Inference Risks:** `fxAtTrade` opcional o inferido arriesga precisión histórica.
+6. **[P2] FX Inference Risks:** `fxAtTrade` opcional o inferido arriesga precisión histórica. *(Mitigación: CEDEAR wizard ahora siempre persiste TC explícito con default MEP buy/sell según operación)*
 7. **[P2] Date Discrepancy:** Asientos de inventario con desfase de 1 día (Investigar `Inventory` vs `Journal`).
 8. **[P2] RT6 Missing Items:** Ajuste por inflación incompleto en flujo de inventario.
 9. **[P2] Performance:** Renderizado lento en tablas con historial extenso.
@@ -50,6 +51,76 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 ---
 
 # Changelog / Sessions
+
+### 2026-02-07 — Claude Opus 4.6 — CEDEAR TC Editable + Back to Asset Type + UI Polish
+
+**Goal:** Agregar Tipo de Cambio (ARS/USD) editable al wizard CEDEAR, habilitar navegación "Atrás" en step 1 de todos los sub-wizards para volver a selección de tipo de activo, y pulir UI (fix US$ encimado, colores).
+
+**Files modified:**
+- `src/pages/movements/components/cedear/CedearBuySellWizard.tsx` — TC editable con default inteligente (Compra→MEP venta, Venta→MEP compra), persistido como `fxAtTrade`; fix padding US$/$ (pl-14/pl-8); TC mostrado en resumen y confirmación; `onBackToAssetType` prop
+- `src/pages/movements/components/crypto/CryptoBuySellWizard.tsx` — `onBackToAssetType` prop wired to footer back on step 1
+- `src/pages/movements/components/fci/FciBuySellWizard.tsx` — `onBackToAssetType` prop wired to footer back on step 1
+- `src/pages/movements/components/wallet/WalletCashWizard.tsx` — `onBackToAssetType` prop wired to footer back on step 1
+- `src/pages/movements/components/MovementWizard.tsx` — passes `onBackToAssetType={() => setStep(1)}` to all sub-wizards
+
+**Key behaviors:**
+- **CEDEAR TC**: Input numérico en step 2, default auto (MEP venta para compra, MEP compra para venta), editable para operaciones históricas. Botón "Auto" restaura default. Referencia MEP vta/cpa visible debajo del input.
+- **TC persistencia**: `fxAtTrade` y `fx.rate` en movimiento usan el TC del usuario. `fx.side` refleja 'sell' (compra) o 'buy' (venta).
+- **TC en UI**: Mostrado en summary panel lateral y en tarjeta de confirmación (step 3). Si fue editado manualmente muestra "(manual)" en amber.
+- **Back navigation**: Todos los sub-wizards en step 1 ahora vuelven a selección de activo (`setStep(1)`) en vez de cerrar el modal.
+- **US$ fix**: Inputs con prefijo US$ usan `pl-14` (más espacio) para evitar encimamiento.
+
+**Validation:** ✅ `npm run build` green | ✅ `eslint` 0 errors on changed files
+
+---
+
+### 2026-02-07 — Claude Opus 4.6 — UI: WizardStepper/WizardFooter unificados
+
+**Goal:** Homogeneizar la UI/UX del modal "Nuevo Movimiento" para que todos los flujos (base + sub-wizards) compartan el mismo Stepper y Footer, sin tocar lógica de negocio.
+
+**Decision:** Plan A light — componentes UI compartidos, sin refactor arquitectónico.
+
+**Files created:**
+- `src/pages/movements/components/ui/WizardStepper.tsx` (NEW — segment bar: emerald/indigo/slate)
+- `src/pages/movements/components/ui/WizardFooter.tsx` (NEW — sticky footer: Atrás + Cancelar + Siguiente/Confirmar)
+
+**Files modified:**
+- `src/pages/movements/components/MovementWizard.tsx` — replaced inline stepper + footer with shared components; "Atrás" on step 1 now closes modal; prefix fixes (u$s → pl-12, pointer-events-none); dynamic Total Neto coloring (rose/emerald/neutral)
+- `src/pages/movements/components/cedear/CedearBuySellWizard.tsx` — replaced stepper+footer with shared components; stepper uses offset (visual step = 1 + internal); prefix fix for dynamic US$/$ padding
+- `src/pages/movements/components/crypto/CryptoBuySellWizard.tsx` — removed circular Stepper component, replaced with WizardStepper (offset); replaced footer with WizardFooter
+- `src/pages/movements/components/fci/FciBuySellWizard.tsx` — same pattern as crypto; FCI price input prefix fix (dynamic pl-12 for USD)
+- `src/pages/movements/components/wallet/WalletCashWizard.tsx` — replaced themed circular stepper + custom footer with shared components
+
+**Key behaviors:**
+- Sub-wizard steppers use `baseOffset = 1` so internal step 1 shows as visual step 2 (no "restart" feel)
+- All footers: blur + border-top, Back/Cancel/Primary layout, green Confirmar on last step
+- "Atrás" at sub-wizard step 1 calls `onClose` (returns to parent / closes modal)
+- Currency prefixes: `pointer-events-none`, `text-slate-400`, centered vertically; USD inputs use `pl-12`
+- Total Neto in base wizard: dynamic color (< 0 rose, > 0 emerald, = 0 neutral)
+
+**Validation:** ✅ `tsc --noEmit` clean | ✅ `npm run build` green | ✅ `npm run lint` 0 errors (120 warnings pre-existing)
+
+---
+
+### 2026-02-07 — Antigravity — Audit: Movimientos Wizard UI/UX Homogeneity
+
+**Goal:** Auditar la homogeneidad UI/UX del modal "Nuevo Movimiento" y sus sub-wizards (CEDEAR, Crypto, Wallet) contra el benchmark "Moneda / Dólares", e identificar estrategia de unificación.
+
+**Scope touched:** `docs/audits/2026-02-07_audit-movimientos-wizard-shell-homogeneidad.md` (NEW).
+
+**Hallazgos:**
+1. **Fragmentación Arquitectónica:** `MovementWizard.tsx` actúa como Shell pero delega el renderizado completo (Cuerpo + Footer + Stepper) a sub-componentes (`CedearBuySellWizard`, etc.) cuando el activo es complejo.
+2. **Divergencia Visual:**
+   - El Stepper principal se oculta y los hijos renderizan el suyo propio (iniciando en paso 1 visualmente, aunque lógico es paso 2).
+   - Los botones del Footer se reimplementan en cada hijo.
+3. **Plan de Unificación (Propuesto):**
+   - **No refactor masivo:** Mantener la arquitectura de componentes separados.
+   - **Componentes Compartidos:** Extraer `<WizardStepper />` y `<WizardFooter />` a `src/pages/movements/components/ui/` y reusarlos en todos los wizards para garantizar consistencia visual instantánea.
+
+**Next Steps:**
+- Ejecutar plan de unificación (Crear componentes UI compartidos e integrarlos).
+
+---
 
 ### 2026-02-07 — Claude Opus 4.6 — Feat: CedearBuySellWizard (Compra / Venta CEDEARs)
 

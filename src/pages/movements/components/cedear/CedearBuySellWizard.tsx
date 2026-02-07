@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { ArrowLeft, Check, Info } from 'lucide-react'
+import { Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Movement, Account, Instrument, MovementType, MovementFee } from '@/domain/types'
 import { AssetTypeahead, type AssetOption } from '../AssetTypeahead'
@@ -15,6 +15,8 @@ import type { LotDetail } from '@/features/portfolioV2/types'
 import { listCedears } from '@/domain/cedears/master'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
 import { formatMoneyARS } from '@/lib/format'
+import { WizardStepper } from '../ui/WizardStepper'
+import { WizardFooter } from '../ui/WizardFooter'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +39,8 @@ interface CedearWizardState {
     qtyStr: string
     feeMode: 'PERCENT' | 'FIXED'
     feeValue: string
+    fxAtTrade: number
+    fxAtTradeManual: boolean
     // Sell
     costingMethod: CostingMethod
     manualAllocations: ManualAllocation[]
@@ -48,6 +52,7 @@ interface CedearBuySellWizardProps {
     movements: Movement[]
     instruments: Instrument[]
     onClose: () => void
+    onBackToAssetType?: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -76,6 +81,7 @@ export function CedearBuySellWizard({
     movements,
     instruments,
     onClose,
+    onBackToAssetType,
 }: CedearBuySellWizardProps) {
     const createMovement = useCreateMovement()
     const createInstrument = useCreateInstrument()
@@ -83,7 +89,8 @@ export function CedearBuySellWizard({
     const { data: fxRates } = useFxRates()
     const { toast } = useToast()
 
-    const mepRate = fxRates?.mep?.sell ?? FX_MEP_FALLBACK
+    const mepSellRate = fxRates?.mep?.sell ?? FX_MEP_FALLBACK
+    const mepBuyRate = fxRates?.mep?.buy ?? mepSellRate
 
     const now = new Date()
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
@@ -101,12 +108,17 @@ export function CedearBuySellWizard({
         qtyStr: '',
         feeMode: 'PERCENT',
         feeValue: '0.5',
+        fxAtTrade: mepSellRate,
+        fxAtTradeManual: false,
         costingMethod: 'PPP',
         manualAllocations: [],
         notes: '',
     })
 
     const isBuy = state.mode === 'buy'
+
+    // Effective FX: use user-edited value, or auto-set based on mode
+    const effectiveFx = state.fxAtTrade
 
     // Sorted accounts for cedear (brokers first)
     const sortedAccounts = useMemo(
@@ -168,7 +180,7 @@ export function CedearBuySellWizard({
 
         const fifo = buildFifoLots(assetMoves)
         const currentPriceArs = cedearPrices?.[ticker]?.lastPriceArs || 0
-        const priceNative = state.currency === 'ARS' ? currentPriceArs : (mepRate > 0 ? currentPriceArs / mepRate : 0)
+        const priceNative = state.currency === 'ARS' ? currentPriceArs : (mepSellRate > 0 ? currentPriceArs / mepSellRate : 0)
 
         return fifo.lots.map((lot, idx) => ({
             id: `lot-${idx}`,
@@ -180,7 +192,7 @@ export function CedearBuySellWizard({
             pnlNative: lot.quantity * priceNative - lot.quantity * lot.unitCostNative,
             pnlPct: lot.unitCostNative > 0 ? (priceNative - lot.unitCostNative) / lot.unitCostNative : 0,
         }))
-    }, [state.asset, state.accountId, isBuy, movements, instruments, cedearPrices, state.currency, mepRate])
+    }, [state.asset, state.accountId, isBuy, movements, instruments, cedearPrices, state.currency, mepSellRate])
 
     // Accounts with balance for a ticker (sell mode)
     const accountsWithBalance = useMemo(() => {
@@ -220,11 +232,18 @@ export function CedearBuySellWizard({
         if (state.asset && cedearPrices && !state.priceManual) {
             const priceArs = cedearPrices[state.asset.ticker]?.lastPriceArs || 0
             if (priceArs > 0) {
-                const p = state.currency === 'ARS' ? priceArs : (mepRate > 0 ? priceArs / mepRate : 0)
+                const p = state.currency === 'ARS' ? priceArs : (mepSellRate > 0 ? priceArs / mepSellRate : 0)
                 setState(s => ({ ...s, price: p }))
             }
         }
-    }, [state.asset, cedearPrices, state.priceManual, state.currency, mepRate])
+    }, [state.asset, cedearPrices, state.priceManual, state.currency, mepSellRate])
+
+    // Auto-set fxAtTrade when mode changes (if not manually edited)
+    useEffect(() => {
+        if (!state.fxAtTradeManual) {
+            setState(s => ({ ...s, fxAtTrade: isBuy ? mepSellRate : mepBuyRate }))
+        }
+    }, [isBuy, mepSellRate, mepBuyRate, state.fxAtTradeManual])
 
     // ---------------------------------------------------------------------------
     // Computed values
@@ -277,24 +296,24 @@ export function CedearBuySellWizard({
         }
     }, [state, isBuy, fifoLots])
 
-    // Total in the alternate currency
+    // Total in the alternate currency (uses user-editable TC)
     const altCurrency = useMemo(() => {
         if (state.currency === 'ARS') {
-            return { label: 'USD (MEP)', value: mepRate > 0 ? computed.gross / mepRate : 0 }
+            return { label: 'USD (MEP)', value: effectiveFx > 0 ? computed.gross / effectiveFx : 0 }
         }
-        return { label: 'ARS', value: computed.gross * mepRate }
-    }, [state.currency, computed.gross, mepRate])
+        return { label: 'ARS', value: computed.gross * effectiveFx }
+    }, [state.currency, computed.gross, effectiveFx])
 
-    // Market price reference
+    // Market price reference (always uses market MEP sell for display)
     const marketPriceRef = useMemo(() => {
         if (!state.asset || !cedearPrices) return null
         const priceArs = cedearPrices[state.asset.ticker]?.lastPriceArs
         if (!priceArs) return null
         return {
             ars: priceArs,
-            usd: mepRate > 0 ? priceArs / mepRate : 0,
+            usd: mepSellRate > 0 ? priceArs / mepSellRate : 0,
         }
-    }, [state.asset, cedearPrices, mepRate])
+    }, [state.asset, cedearPrices, mepSellRate])
 
     // ---------------------------------------------------------------------------
     // Step Validation
@@ -333,6 +352,7 @@ export function CedearBuySellWizard({
 
     const prevStep = () => {
         if (state.step > 1) setState(s => ({ ...s, step: (s.step - 1) as Step }))
+        else if (onBackToAssetType) onBackToAssetType()
         else onClose()
     }
 
@@ -348,6 +368,8 @@ export function CedearBuySellWizard({
             manualAllocations: [],
             priceManual: false,
             price: 0,
+            fxAtTrade: mode === 'buy' ? mepSellRate : mepBuyRate,
+            fxAtTradeManual: false,
         }))
     }
 
@@ -355,7 +377,7 @@ export function CedearBuySellWizard({
         if (!state.asset || !cedearPrices) return
         const priceArs = cedearPrices[state.asset.ticker]?.lastPriceArs || 0
         if (priceArs > 0) {
-            const p = state.currency === 'ARS' ? priceArs : (mepRate > 0 ? priceArs / mepRate : 0)
+            const p = state.currency === 'ARS' ? priceArs : (mepSellRate > 0 ? priceArs / mepSellRate : 0)
             setState(s => ({ ...s, price: p, priceManual: false }))
         }
     }
@@ -391,14 +413,14 @@ export function CedearBuySellWizard({
             const netAmount = isBuy ? gross + feeAmount : gross - feeAmount
             const movementId = crypto.randomUUID()
 
-            // Dual currency totals
+            // Dual currency totals (using user-editable TC)
             let totalARS: number, totalUSD: number
             if (state.currency === 'ARS') {
                 totalARS = netAmount
-                totalUSD = mepRate > 0 ? netAmount / mepRate : 0
+                totalUSD = effectiveFx > 0 ? netAmount / effectiveFx : 0
             } else {
                 totalUSD = netAmount
-                totalARS = netAmount * mepRate
+                totalARS = netAmount * effectiveFx
             }
 
             const fee: MovementFee | undefined = feeAmount > 0 ? {
@@ -431,11 +453,11 @@ export function CedearBuySellWizard({
                 netAmount,
                 totalUSD,
                 totalARS,
-                fxAtTrade: mepRate,
+                fxAtTrade: effectiveFx,
                 fx: {
                     kind: 'MEP',
-                    rate: mepRate,
-                    side: 'sell',
+                    rate: effectiveFx,
+                    side: isBuy ? 'sell' : 'buy',
                     asOf: new Date().toISOString(),
                 },
                 notes: state.notes || undefined,
@@ -476,19 +498,9 @@ export function CedearBuySellWizard({
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
             {/* LEFT: Wizard Form */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Stepper */}
+                {/* Stepper (offset +1 so internal step 1 shows as visual step 2) */}
                 <div className="px-8 pt-4 pb-2 shrink-0">
-                    <div className="flex items-center gap-2">
-                        {[1, 2, 3].map(s => (
-                            <div
-                                key={s}
-                                className={cn(
-                                    'h-1 flex-1 rounded-full transition-all duration-300',
-                                    s <= state.step ? 'bg-indigo-500' : 'bg-white/10'
-                                )}
-                            />
-                        ))}
-                    </div>
+                    <WizardStepper currentStep={1 + state.step} totalSteps={1 + 3} />
                 </div>
 
                 {/* Form Content */}
@@ -640,48 +652,84 @@ export function CedearBuySellWizard({
                                             USD (MEP)
                                         </button>
                                     </div>
-                                    <p className="text-[10px] text-slate-500 mt-2">
-                                        TC Ref: <span className="font-mono text-slate-300">$ {fmt2(mepRate)}</span>
-                                    </p>
                                 </div>
 
-                                {/* Unit Price */}
+                                {/* Tipo de Cambio (ARS/USD) */}
                                 <div>
                                     <label className="block text-xs font-mono text-slate-400 mb-2 uppercase">
-                                        Precio Unitario
+                                        TC (ARS/USD)
                                     </label>
                                     <div className="relative">
-                                        <div className="absolute left-3 top-2.5 text-slate-500 font-mono text-sm">
-                                            {currSymbol}
+                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">
+                                            $
                                         </div>
                                         <input
                                             type="number"
-                                            value={state.price || ''}
+                                            step="0.01"
+                                            value={state.fxAtTrade || ''}
                                             onChange={e => {
                                                 const val = parseFloat(e.target.value) || 0
-                                                setState(s => ({ ...s, price: val, priceManual: true }))
+                                                setState(s => ({ ...s, fxAtTrade: val, fxAtTradeManual: true }))
                                             }}
-                                            className="w-full pl-10 pr-16 py-2.5 bg-slate-900 border border-white/10 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+                                            className="w-full pl-8 pr-16 py-2.5 bg-slate-900 border border-white/10 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
                                         />
                                         <button
-                                            onClick={autoPrice}
+                                            onClick={() => {
+                                                setState(s => ({
+                                                    ...s,
+                                                    fxAtTrade: isBuy ? mepSellRate : mepBuyRate,
+                                                    fxAtTradeManual: false,
+                                                }))
+                                            }}
                                             className="absolute right-2 top-2 px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-[10px] font-bold rounded uppercase hover:bg-indigo-500/30 transition"
                                         >
                                             Auto
                                         </button>
                                     </div>
-                                    <div className="text-[10px] text-slate-500 mt-1 flex justify-between">
-                                        <span>
-                                            Mercado:{' '}
-                                            <span className="text-slate-300">
-                                                {marketPriceRef
-                                                    ? state.currency === 'ARS'
-                                                        ? fmtArs(marketPriceRef.ars)
-                                                        : `US$ ${fmt2(marketPriceRef.usd)}`
-                                                    : '—'}
-                                            </span>
-                                        </span>
+                                    <p className="text-[10px] text-slate-500 mt-1">
+                                        MEP: <span className="font-mono text-slate-300">Vta $ {fmt2(mepSellRate)}</span>
+                                        {' / '}
+                                        <span className="font-mono text-slate-300">Cpa $ {fmt2(mepBuyRate)}</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Unit Price */}
+                            <div>
+                                <label className="block text-xs font-mono text-slate-400 mb-2 uppercase">
+                                    Precio Unitario
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">
+                                        {currSymbol}
                                     </div>
+                                    <input
+                                        type="number"
+                                        value={state.price || ''}
+                                        onChange={e => {
+                                            const val = parseFloat(e.target.value) || 0
+                                            setState(s => ({ ...s, price: val, priceManual: true }))
+                                        }}
+                                        className={cn("w-full pr-16 py-2.5 bg-slate-900 border border-white/10 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition", state.currency === 'USD' ? 'pl-14' : 'pl-8')}
+                                    />
+                                    <button
+                                        onClick={autoPrice}
+                                        className="absolute right-2 top-2 px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-[10px] font-bold rounded uppercase hover:bg-indigo-500/30 transition"
+                                    >
+                                        Auto
+                                    </button>
+                                </div>
+                                <div className="text-[10px] text-slate-500 mt-1 flex justify-between">
+                                    <span>
+                                        Mercado:{' '}
+                                        <span className="text-slate-300">
+                                            {marketPriceRef
+                                                ? state.currency === 'ARS'
+                                                    ? fmtArs(marketPriceRef.ars)
+                                                    : `US$ ${fmt2(marketPriceRef.usd)}`
+                                                : '—'}
+                                        </span>
+                                    </span>
                                 </div>
                             </div>
 
@@ -730,7 +778,7 @@ export function CedearBuySellWizard({
                                         </label>
                                     </div>
                                     <div className="relative">
-                                        <span className="absolute left-0 top-1 text-xl text-slate-500 font-mono">
+                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 text-xl text-slate-400 font-mono pointer-events-none">
                                             {currSymbol}
                                         </span>
                                         <input
@@ -748,7 +796,7 @@ export function CedearBuySellWizard({
                                                 }
                                             }}
                                             placeholder="0.00"
-                                            className="w-full pl-10 text-xl font-mono bg-transparent border-b border-white/10 pb-2 text-white placeholder-slate-700 focus:outline-none focus:border-indigo-500 transition"
+                                            className={cn("w-full text-xl font-mono bg-transparent border-b border-white/10 pb-2 text-white placeholder-slate-700 focus:outline-none focus:border-indigo-500 transition", state.currency === 'USD' ? 'pl-14' : 'pl-8')}
                                         />
                                     </div>
                                 </div>
@@ -900,6 +948,12 @@ export function CedearBuySellWizard({
                                         </span>
                                     </div>
                                 )}
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-400">Tipo de Cambio</span>
+                                    <span className="font-mono text-slate-300 text-xs">
+                                        $ {fmt2(effectiveFx)} {state.fxAtTradeManual && <span className="text-amber-400">(manual)</span>}
+                                    </span>
+                                </div>
                                 {!isBuy && (
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-slate-400">Método costeo</span>
@@ -954,42 +1008,15 @@ export function CedearBuySellWizard({
                 </div>
 
                 {/* Footer */}
-                <div className="px-8 py-4 border-t border-white/5 bg-slate-900/80 backdrop-blur-md flex justify-between shrink-0">
-                    <button
-                        onClick={prevStep}
-                        className="px-6 py-2.5 rounded-lg border border-white/10 text-slate-400 text-sm font-medium hover:bg-white/5 transition flex items-center gap-2"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                        Atrás
-                    </button>
-                    <div className="ml-auto">
-                        {state.step < 3 ? (
-                            <button
-                                onClick={nextStep}
-                                disabled={!canAdvance}
-                                className="px-8 py-2.5 rounded-lg bg-indigo-500 text-white text-sm font-bold shadow-lg hover:bg-indigo-600 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                            >
-                                Siguiente
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleConfirm}
-                                disabled={createMovement.isPending}
-                                className={cn(
-                                    'px-8 py-2.5 rounded-lg text-white text-sm font-bold shadow-lg transition disabled:opacity-50',
-                                    isBuy
-                                        ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-900/20'
-                                        : 'bg-rose-500 hover:bg-rose-600 shadow-rose-900/20'
-                                )}
-                            >
-                                <span className="flex items-center gap-2">
-                                    <Check className="w-4 h-4" />
-                                    {createMovement.isPending ? 'Guardando...' : 'Confirmar'}
-                                </span>
-                            </button>
-                        )}
-                    </div>
-                </div>
+                <WizardFooter
+                    onBack={prevStep}
+                    onCancel={onClose}
+                    primaryLabel={state.step < 3 ? 'Siguiente' : 'Confirmar'}
+                    onPrimary={nextStep}
+                    primaryVariant={state.step < 3 ? 'indigo' : 'emerald'}
+                    primaryDisabled={state.step < 3 ? !canAdvance : false}
+                    primaryLoading={state.step === 3 && createMovement.isPending}
+                />
             </div>
 
             {/* RIGHT: Summary Panel */}
@@ -1021,6 +1048,9 @@ export function CedearBuySellWizard({
                         </div>
                         <div className="text-[10px] text-slate-500 mt-1 font-mono">
                             ≈ {altCurrency.label} {fmt2(altCurrency.value)}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                            TC: $ {fmt2(effectiveFx)} {state.fxAtTradeManual && <span className="text-amber-400">(manual)</span>}
                         </div>
                     </div>
 

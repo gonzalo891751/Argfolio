@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { ArrowLeft, Check, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Movement, Currency, Account, Instrument, MovementType, MovementFee } from '@/domain/types'
 import { CryptoTypeahead, type CryptoOption } from '../CryptoTypeahead'
@@ -13,6 +13,8 @@ import { buildFifoLots } from '@/domain/portfolio/fifo'
 import { allocateSale, COSTING_METHODS, type CostingMethod, type ManualAllocation } from '@/domain/portfolio/lot-allocation'
 import type { LotDetail } from '@/features/portfolioV2/types'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
+import { WizardStepper } from '../ui/WizardStepper'
+import { WizardFooter } from '../ui/WizardFooter'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +51,7 @@ interface CryptoBuySellWizardProps {
     instruments: Instrument[]
     prefillMovement?: Movement | null
     onClose: () => void
+    onBackToAssetType?: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +74,7 @@ export function CryptoBuySellWizard({
     instruments,
     prefillMovement: _prefillMovement,
     onClose,
+    onBackToAssetType,
 }: CryptoBuySellWizardProps) {
     void _prefillMovement // reserved for future edit-mode
     const createMovement = useCreateMovement()
@@ -459,37 +463,6 @@ export function CryptoBuySellWizard({
             toast({ title: 'Error al guardar', description: 'Intenta nuevamente.', variant: 'error' })
         }
     }
-
-    // ---------------------------------------------------------------------------
-    // Stepper UI
-    // ---------------------------------------------------------------------------
-    const stepLabels = ['Activo', 'Detalles', 'Confirmar']
-
-    const Stepper = () => (
-        <div className="flex items-center w-full max-w-sm mx-auto relative mb-6">
-            <div className="absolute left-0 top-1/2 w-full h-px bg-white/10 -z-10" />
-            {stepLabels.map((label, i) => {
-                const num = i + 1
-                const active = num === state.step
-                const past = num < state.step
-                return (
-                    <div key={i} className={cn('flex-1 flex flex-col items-center gap-1.5 transition-all', active || past ? 'opacity-100' : 'opacity-40')}>
-                        <div className={cn(
-                            'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-4 border-[#0F172A] transition-colors',
-                            active ? (isBuy ? 'bg-indigo-500 text-white' : 'bg-rose-500 text-white')
-                                : past ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400 border-white/10',
-                        )}>
-                            {past ? <Check className="w-3.5 h-3.5" /> : num}
-                        </div>
-                        <span className={cn('text-[10px] font-mono uppercase tracking-wider px-1',
-                            active ? 'text-white' : past ? 'text-emerald-500' : 'text-slate-500')}>
-                            {label}
-                        </span>
-                    </div>
-                )
-            })}
-        </div>
-    )
 
     // ---------------------------------------------------------------------------
     // Mode Tabs
@@ -1099,36 +1072,21 @@ export function CryptoBuySellWizard({
             {/* Body */}
             <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#0F172A]">
                 <ModeTabs />
-                <Stepper />
+                <WizardStepper currentStep={1 + state.step} totalSteps={1 + 3} className="mb-6" />
                 {state.step === 1 && renderStep1()}
                 {state.step === 2 && (isBuy ? renderBuyStep2() : renderSellStep2())}
                 {state.step === 3 && renderStep3()}
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-white/5 bg-slate-900/60 flex justify-between items-center backdrop-blur-md shrink-0">
-                {state.step > 1 ? (
-                    <button onClick={prevStep} className="px-6 py-2.5 text-slate-400 hover:text-white text-sm font-medium transition flex items-center gap-2">
-                        <ArrowLeft className="w-4 h-4" /> Volver
-                    </button>
-                ) : <div />}
-                <button
-                    onClick={nextStep}
-                    disabled={!canAdvance}
-                    className={cn(
-                        'px-8 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all flex items-center gap-2 text-white',
-                        state.step === 3
-                            ? (isBuy
-                                ? 'bg-indigo-500 hover:bg-indigo-600 shadow-[0_0_20px_-5px_rgba(99,102,241,0.3)]'
-                                : 'bg-rose-500 hover:bg-rose-600 shadow-[0_0_20px_-5px_rgba(244,63,94,0.3)]')
-                            : canAdvance
-                                ? (isBuy ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-rose-500 hover:bg-rose-600')
-                                : 'bg-slate-700 opacity-50 cursor-not-allowed',
-                    )}
-                >
-                    {state.step === 3 ? (isBuy ? 'Confirmar Compra' : 'Confirmar Venta') : 'Siguiente'}
-                </button>
-            </div>
+            <WizardFooter
+                onBack={state.step > 1 ? prevStep : (onBackToAssetType ?? onClose)}
+                onCancel={onClose}
+                primaryLabel={state.step < 3 ? 'Siguiente' : 'Confirmar'}
+                onPrimary={nextStep}
+                primaryVariant={state.step < 3 ? 'indigo' : 'emerald'}
+                primaryDisabled={!canAdvance}
+            />
         </>
     )
 }

@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { ArrowLeftRight, ArrowDown, ChevronDown, Zap, Calendar, MessageSquare, Check } from 'lucide-react'
+import { WizardStepper } from '../ui/WizardStepper'
+import { WizardFooter } from '../ui/WizardFooter'
 import { cn } from '@/lib/utils'
 import type { Movement, Currency, Account, Instrument } from '@/domain/types'
 import { AccountSelectCreatable } from '../AccountSelectCreatable'
@@ -37,6 +39,7 @@ interface WalletCashWizardProps {
     movements: Movement[]
     instruments: Instrument[]
     onClose: () => void
+    onBackToAssetType?: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -56,8 +59,6 @@ const THEMES: Record<WalletMode, ThemeConfig> = {
     expense:  { color: '#f43f5e', bg: 'bg-[#f43f5e]', bgLight: 'bg-rose-500/20', text: 'text-rose-400', border: 'border-rose-500', label: 'Egreso' },
     transfer: { color: '#0ea5e9', bg: 'bg-[#0ea5e9]', bgLight: 'bg-sky-500/20', text: 'text-sky-400', border: 'border-sky-500', label: 'Transferencia' },
 }
-
-const STEP_LABELS = ['Datos', 'Monto', 'Confirmar']
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -88,7 +89,7 @@ function hasPositiveBalance(accountId: string, balancesMap: Map<string, Map<Curr
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export function WalletCashWizard({ accounts, movements, instruments, onClose }: WalletCashWizardProps) {
+export function WalletCashWizard({ accounts, movements, instruments, onClose, onBackToAssetType }: WalletCashWizardProps) {
     const createMovement = useCreateMovement()
     const createInstrument = useCreateInstrument()
     const { toast } = useToast()
@@ -476,27 +477,8 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose }: 
                     </button>
                 </div>
 
-                {/* Stepper */}
-                <div className="flex items-center justify-center gap-4 mb-2">
-                    {STEP_LABELS.map((label, i) => {
-                        const stepNum = i + 1
-                        const isActive = stepNum <= state.step
-                        return (
-                            <div key={label} className="flex items-center gap-2">
-                                {i > 0 && <div className="w-12 h-px bg-white/10" />}
-                                <div
-                                    className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors', isActive ? 'text-white shadow-lg' : 'bg-slate-800 border border-white/10 text-slate-500')}
-                                    style={isActive ? { backgroundColor: theme.color } : undefined}
-                                >
-                                    {stepNum}
-                                </div>
-                                <span className={cn('text-xs font-medium hidden sm:block', isActive ? 'text-white' : 'text-slate-500')}>
-                                    {label}
-                                </span>
-                            </div>
-                        )
-                    })}
-                </div>
+                {/* Stepper (offset +1: internal step 1 shows as visual step 2) */}
+                <WizardStepper currentStep={1 + state.step} totalSteps={1 + 3} className="mb-2" />
             </div>
 
             {/* Body */}
@@ -532,36 +514,15 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose }: 
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-white/5 flex justify-between bg-slate-900/80 backdrop-blur-sm shrink-0 relative z-20">
-                <button
-                    onClick={prevStep}
-                    className={cn('px-4 py-2 text-slate-400 hover:text-white text-sm font-medium transition', state.step === 1 && 'invisible')}
-                >
-                    ← Atrás
-                </button>
-                <div className="flex gap-3">
-                    <button
-                        onClick={onClose}
-                        className="px-5 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-slate-300 text-sm font-medium transition"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={nextStep}
-                        disabled={!isCurrentStepValid || submitting}
-                        className={cn(
-                            'px-6 py-2 rounded-lg text-white text-sm font-medium shadow-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed',
-                            state.step === 3 ? theme.bg : 'bg-[#6366f1]'
-                        )}
-                        style={state.step === 3 ? { backgroundColor: theme.color } : undefined}
-                    >
-                        <span>{state.step === 3 ? 'Confirmar' : 'Siguiente'}</span>
-                        {state.step < 3 && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                        )}
-                    </button>
-                </div>
-            </div>
+            <WizardFooter
+                onBack={state.step > 1 ? prevStep : (onBackToAssetType ?? onClose)}
+                onCancel={onClose}
+                primaryLabel={state.step < 3 ? 'Siguiente' : 'Confirmar'}
+                onPrimary={nextStep}
+                primaryVariant={state.step < 3 ? 'indigo' : 'emerald'}
+                primaryDisabled={!isCurrentStepValid || submitting}
+                primaryLoading={submitting}
+            />
         </div>
     )
 }
