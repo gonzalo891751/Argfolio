@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Operaciones Crypto Avanzadas</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a',
+                            primary: '#6366f1', // Compra
+                            danger: '#f43f5e',  // Venta
+                            accent: '#0ea5e9',
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-danger': '0 0 20px -5px rgba(244, 63, 94, 0.3)',
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.3s ease-out forwards',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(5px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-bg: rgba(30, 41, 59, 0.6);
+        }
+
+        body { background-color: var(--bg-app); color: #F8FAFC; }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+        }
+
+        /* Inputs */
+        .input-glass {
+            background: rgba(2, 6, 23, 0.5);
+            border: 1px solid var(--glass-border);
+            color: white;
+            transition: all 0.2s;
+        }
+        .input-glass:focus {
+            outline: none;
+            border-color: var(--focus-color, #6366f1);
+            box-shadow: 0 0 0 1px var(--focus-color, #6366f1);
+            background: rgba(2, 6, 23, 0.8);
+        }
+
+        /* Typeahead Dropdown */
+        .dropdown-glass {
+            background: #0f172a;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
+        }
+
+        /* Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+        
+        /* Table */
+        .table-row-hover:hover { background: rgba(255,255,255,0.03); }
+    </style>
+</head>
+<body class="h-screen w-full flex items-center justify-center overflow-hidden relative selection:bg-brand-primary/30">
+
+    <!-- Ambient BG -->
+    <div class="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        <div class="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-brand-primary/10 rounded-full blur-[120px]"></div>
+        <div class="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-brand-danger/5 rounded-full blur-[100px]"></div>
+    </div>
+
+    <!-- MAIN MODAL -->
+    <main class="relative z-10 w-full max-w-5xl h-[95vh] md:h-auto md:max-h-[850px] flex flex-col glass-panel rounded-2xl shadow-2xl overflow-hidden animate-fade-in" onclick="closeDropdowns(event)">
+        
+        <!-- HEADER -->
+        <header class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-slate-900/40">
+            <h1 class="text-xl font-display font-bold tracking-tight text-white flex items-center gap-3">
+                <span id="header-accent" class="w-2 h-6 rounded-full bg-brand-primary transition-colors duration-300"></span>
+                Nuevo Movimiento
+            </h1>
+            <button onclick="window.location.reload()" class="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-white/5 transition">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </header>
+
+        <!-- CONTROLS & STEPPER -->
+        <div class="px-6 pt-6 pb-2 space-y-6">
+            <!-- Mode Switcher -->
+            <div class="bg-slate-950/50 p-1 rounded-lg inline-flex w-full md:w-auto border border-white/5">
+                <button id="btn-mode-buy" onclick="setMode('buy')" class="flex-1 md:flex-none px-8 py-2 rounded-md text-sm font-medium transition-all text-white bg-brand-primary shadow-glow">Compra</button>
+                <button id="btn-mode-sell" onclick="setMode('sell')" class="flex-1 md:flex-none px-8 py-2 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white">Venta</button>
+            </div>
+
+            <!-- Stepper -->
+            <div class="flex items-center w-full max-w-lg mx-auto relative">
+                <div class="absolute left-0 top-1/2 w-full h-px bg-white/10 -z-10"></div>
+                <div id="step-1-ui" class="flex-1 flex flex-col items-center gap-2 transition-opacity duration-300">
+                    <div class="w-8 h-8 rounded-full bg-brand-primary text-white flex items-center justify-center text-xs font-bold border-4 border-slate-900 transition-colors">1</div>
+                    <span class="text-[10px] font-mono uppercase tracking-wider text-white bg-slate-900 px-2 transition-colors">Activo</span>
+                </div>
+                <div id="step-2-ui" class="flex-1 flex flex-col items-center gap-2 opacity-50 transition-opacity duration-300">
+                    <div class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 border border-white/10 flex items-center justify-center text-xs font-bold border-4 border-slate-900 transition-colors">2</div>
+                    <span class="text-[10px] font-mono uppercase tracking-wider text-slate-500 bg-slate-900 px-2 transition-colors">Detalles</span>
+                </div>
+                <div id="step-3-ui" class="flex-1 flex flex-col items-center gap-2 opacity-50 transition-opacity duration-300">
+                    <div class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 border border-white/10 flex items-center justify-center text-xs font-bold border-4 border-slate-900 transition-colors">3</div>
+                    <span class="text-[10px] font-mono uppercase tracking-wider text-slate-500 bg-slate-900 px-2 transition-colors">Confirmar</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTENT AREA -->
+        <div id="step-content" class="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar relative min-h-[400px]">
+            <!-- Dynamic Injection -->
+        </div>
+
+        <!-- FOOTER -->
+        <footer class="p-6 border-t border-white/5 bg-slate-900/60 flex justify-between items-center backdrop-blur-md">
+            <button id="btn-back" onclick="prevStep()" class="px-6 py-2.5 text-slate-400 hover:text-white text-sm font-medium transition hidden">
+                ← Volver
+            </button>
+            <div class="ml-auto">
+                <button id="btn-next" onclick="nextStep()" class="px-8 py-2.5 bg-brand-primary hover:bg-indigo-500 text-white rounded-lg text-sm font-bold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                    Siguiente
+                </button>
+            </div>
+        </footer>
+
+        <!-- TOAST -->
+        <div id="toast" class="absolute bottom-10 left-1/2 -translate-x-1/2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-6 py-3 rounded-full shadow-xl backdrop-blur-md translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-3">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span class="font-medium text-sm" id="toast-msg">Operación Exitosa</span>
+        </div>
+
+    </main>
+
+    <!-- LOGIC -->
+    <script>
+        // --- MOCK DATA ---
+        const MOCK = {
+            accounts: [
+                { id: 'binance', name: 'Binance', type: 'Exchange', cash: { USDT: 415.20, ARS: 0, USD: 0 } },
+                { id: 'iol', name: 'IOL InvertirOnline', type: 'Broker', cash: { USDT: 0, ARS: 120000, USD: 0 } },
+                { id: 'bybit', name: 'Bybit', type: 'Exchange', cash: { USDT: 0, ARS: 0, USD: 0 } }
+            ],
+            // Holdings: account -> asset -> qty
+            holdings: {
+                'binance': { 'BTC': 0.00111, 'SOL': 15.5, 'ETH': 0, 'USDT': 415.20 },
+                'iol': { 'BTC': 0.00500 },
+                'bybit': { 'SOL': 0 }
+            },
+            // Lot history for cost basis
+            lots: {
+                'binance': {
+                    'BTC': [{ id: 'b1', date: '2026-02-07', qty: 0.00111, unitCostUSD: 89656.01 }]
+                },
+                'iol': {
+                    'BTC': [
+                        { id: 'i1', date: '2026-01-10', qty: 0.00200, unitCostUSD: 60000.00 },
+                        { id: 'i2', date: '2026-02-01', qty: 0.00300, unitCostUSD: 75000.00 }
+                    ]
+                }
+            },
+            marketPrices: { 'BTC': 70860.00, 'ETH': 2450.00, 'SOL': 98.50, 'USDT': 1.00 },
+            assetsList: [
+                { symbol: 'BTC', name: 'Bitcoin' },
+                { symbol: 'ETH', name: 'Ethereum' },
+                { symbol: 'SOL', name: 'Solana' },
+                { symbol: 'USDT', name: 'Tether' }
+            ]
+        };
+
+        // --- GLOBAL STATE ---
+        let state = {
+            mode: 'buy',
+            step: 1,
+            // Step 1
+            asset: null, 
+            account: null,
+            // Step 2 Buy
+            buyMode: 'amount', // 'amount' | 'qty'
+            buyAmount: '', 
+            buyQty: '',
+            // Step 2 Sell
+            sellQty: 0,
+            costMethod: 'ppp', // 'ppp', 'peps', 'weps', 'manual'
+            selectedLots: {}, // { lotId: qtyToSell }
+            // Shared Step 2
+            price: 0,
+            feeMode: 'percent', // 'percent' | 'fixed'
+            feeValue: 0.1, // default 0.1% or 0.0
+            // Computed
+            computed: { gross: 0, fee: 0, net: 0, costBasis: 0, pnl: 0, qtyFinal: 0 }
+        };
+
+        // --- INIT & NAVIGATION ---
+        function init() {
+            setMode('buy');
+        }
+
+        function setMode(mode) {
+            state.mode = mode;
+            state.step = 1;
+            resetForm();
+            
+            // Visual Updates
+            const isBuy = mode === 'buy';
+            const accent = isBuy ? '#6366f1' : '#f43f5e';
+            document.documentElement.style.setProperty('--focus-color', accent);
+            
+            document.getElementById('btn-mode-buy').className = `flex-1 md:flex-none px-8 py-2 rounded-md text-sm font-medium transition-all ${isBuy ? 'bg-brand-primary text-white shadow-glow' : 'text-slate-400 hover:text-white'}`;
+            document.getElementById('btn-mode-sell').className = `flex-1 md:flex-none px-8 py-2 rounded-md text-sm font-medium transition-all ${!isBuy ? 'bg-brand-danger text-white shadow-glow-danger' : 'text-slate-400 hover:text-white'}`;
+            document.getElementById('header-accent').className = `w-2 h-6 rounded-full transition-colors duration-300 ${isBuy ? 'bg-brand-primary' : 'bg-brand-danger'}`;
+
+            renderStep();
+        }
+
+        function resetForm() {
+            state.asset = null;
+            state.account = null;
+            state.buyAmount = '';
+            state.buyQty = '';
+            state.sellQty = 0;
+            state.selectedLots = {};
+            state.price = 0;
+            state.feeValue = 0.1; // Default 0.1%
+            state.feeMode = 'percent';
+        }
+
+        function nextStep() {
+            if (!validateStep()) return;
+            
+            if (state.step === 2) {
+                // Ensure final calculations are locked in state
+                if(state.mode === 'buy') recalcBuy();
+                else recalcSell();
+            }
+
+            if (state.step < 3) {
+                state.step++;
+                renderStep();
+            } else {
+                confirmTransaction();
+            }
+        }
+
+        function prevStep() {
+            if (state.step > 1) {
+                state.step--;
+                renderStep();
+            }
+        }
+
+        function validateStep() {
+            if (state.step === 1) return state.asset && state.account;
+            if (state.step === 2) {
+                if (state.mode === 'buy') return state.computed.qtyFinal > 0;
+                if (state.mode === 'sell') {
+                    if (state.computed.qtyFinal <= 0) return false;
+                    const avail = getQty(state.account.id, state.asset.symbol);
+                    if (state.computed.qtyFinal > avail + 0.00000001) return false; // tolerance
+                    if (state.costMethod === 'manual') {
+                        // Check if manual selection matches total
+                        const sumSelected = Object.values(state.selectedLots).reduce((a,b) => a+b, 0);
+                        return Math.abs(sumSelected - state.computed.qtyFinal) < 0.00000001;
+                    }
+                    return true;
+                }
+            }
+            return true;
+        }
+
+        function updateNextBtn() {
+            const btn = document.getElementById('btn-next');
+            const isValid = validateStep();
+            btn.disabled = !isValid;
+            
+            const isBuy = state.mode === 'buy';
+            if (state.step === 3) {
+                btn.textContent = isBuy ? 'Confirmar Compra' : 'Confirmar Venta';
+                btn.className = `px-8 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all flex items-center gap-2 text-white ${isBuy ? 'bg-brand-primary hover:bg-indigo-500 shadow-glow' : 'bg-brand-danger hover:bg-rose-500 shadow-glow-danger'}`;
+            } else {
+                btn.textContent = 'Siguiente';
+                btn.className = `px-8 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all flex items-center gap-2 text-white ${isValid ? (isBuy ? 'bg-brand-primary hover:bg-indigo-500' : 'bg-brand-danger hover:bg-rose-500') : 'bg-slate-700 opacity-50 cursor-not-allowed'}`;
+            }
+        }
+
+        // --- RENDERERS ---
+
+        function renderStep() {
+            const content = document.getElementById('step-content');
+            const btnBack = document.getElementById('btn-back');
+            const steps = [1, 2, 3];
+            const isBuy = state.mode === 'buy';
+
+            // Stepper
+            steps.forEach(i => {
+                const el = document.getElementById(`step-${i}-ui`);
+                const circle = el.querySelector('div');
+                const label = el.querySelector('span');
+                const active = i === state.step;
+                const past = i < state.step;
+
+                el.className = `flex-1 flex flex-col items-center gap-2 transition-all duration-300 ${active || past ? 'opacity-100' : 'opacity-40'}`;
+                
+                if (active) {
+                    circle.className = `w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold border-4 border-slate-900 transition-colors ${isBuy ? 'bg-brand-primary' : 'bg-brand-danger'}`;
+                    label.className = "text-[10px] font-mono uppercase tracking-wider text-white bg-slate-900 px-2";
+                    circle.textContent = i;
+                } else if (past) {
+                    circle.className = "w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold border-4 border-slate-900";
+                    label.className = "text-[10px] font-mono uppercase tracking-wider text-emerald-500 bg-slate-900 px-2";
+                    circle.innerHTML = "✓";
+                } else {
+                    circle.className = "w-8 h-8 rounded-full bg-slate-800 text-slate-400 border border-white/10 flex items-center justify-center text-xs font-bold border-4 border-slate-900";
+                    label.className = "text-[10px] font-mono uppercase tracking-wider text-slate-500 bg-slate-900 px-2";
+                    circle.textContent = i;
+                }
+            });
+
+            btnBack.classList.toggle('hidden', state.step === 1);
+            content.innerHTML = '';
+            
+            if (state.step === 1) renderStep1(content);
+            else if (state.step === 2) {
+                if(isBuy) renderBuyStep2(content);
+                else renderSellStep2(content);
+            }
+            else if (state.step === 3) renderStep3(content);
+
+            updateNextBtn();
+        }
+
+        // --- STEP 1: ASSET & ACCOUNT ---
+        function renderStep1(container) {
+            const isBuy = state.mode === 'buy';
+            container.innerHTML = `
+                <div class="max-w-xl mx-auto space-y-8 pt-6 animate-fade-in">
+                    
+                    <!-- Asset Typeahead -->
+                    <div class="space-y-2 relative" id="container-asset">
+                        <label class="text-xs font-mono uppercase text-slate-400 ml-1">Criptoactivo</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <svg class="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            </div>
+                            <input type="text" id="input-asset" 
+                                class="w-full input-glass rounded-xl py-4 pl-12 pr-4 text-lg placeholder-slate-600 font-medium"
+                                placeholder="Buscá y elegí un criptoactivo..."
+                                value="${state.asset ? `${state.asset.name} (${state.asset.symbol})` : ''}"
+                                autocomplete="off"
+                                onfocus="showDropdown('asset', '')"
+                                oninput="showDropdown('asset', this.value)"
+                            >
+                            <!-- Dropdown -->
+                            <div id="dropdown-asset" class="hidden absolute top-full left-0 right-0 mt-2 dropdown-glass rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto custom-scrollbar"></div>
+                        </div>
+                    </div>
+
+                    <!-- Account Typeahead -->
+                    <div class="space-y-2 relative transition-opacity duration-300 ${!state.asset ? 'opacity-50 pointer-events-none' : ''}" id="container-account">
+                        <label class="text-xs font-mono uppercase text-slate-400 ml-1">Cuenta / Exchange</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <svg class="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                            </div>
+                            <input type="text" id="input-account"
+                                class="w-full input-glass rounded-xl py-4 pl-12 pr-4 text-lg placeholder-slate-600 font-medium cursor-pointer"
+                                placeholder="Buscá y elegí la cuenta / exchange..."
+                                value="${state.account ? state.account.name : ''}"
+                                autocomplete="off"
+                                onfocus="showDropdown('account', '')"
+                                oninput="showDropdown('account', this.value)"
+                            >
+                            <!-- Dropdown -->
+                            <div id="dropdown-account" class="hidden absolute top-full left-0 right-0 mt-2 dropdown-glass rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto custom-scrollbar"></div>
+                        </div>
+                    </div>
+
+                    ${!isBuy && state.asset && state.account ? `
+                        <div class="p-4 rounded-xl bg-slate-900/50 border border-white/5 flex justify-between items-center animate-fade-in">
+                            <div>
+                                <div class="text-xs text-slate-500 font-mono mb-1">Disponible en ${state.account.name}</div>
+                                <div class="text-xl text-white font-mono font-bold tracking-tight">${formatNum(getQty(state.account.id, state.asset.symbol), 8)} ${state.asset.symbol}</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-xs text-slate-500 font-mono mb-1">Valor Aprox.</div>
+                                <div class="text-lg text-slate-300 font-mono">USD ${formatNum(getQty(state.account.id, state.asset.symbol) * (MOCK.marketPrices[state.asset.symbol]||0), 2)}</div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                </div>
+            `;
+        }
+
+        // --- STEP 2 BUY: DETAILS ---
+        function renderBuyStep2(container) {
+            if(!state.price) state.price = MOCK.marketPrices[state.asset.symbol] || 0;
+            const accent = 'bg-brand-primary';
+            const textAccent = 'text-brand-primary';
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full animate-fade-in">
+                    
+                    <!-- INPUTS (Left) -->
+                    <div class="lg:col-span-7 space-y-6">
+                        
+                        <!-- Main Input with Toggle -->
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-mono uppercase text-slate-400 ml-1">¿Cuánto querés invertir?</label>
+                                <div class="flex bg-slate-950 rounded p-0.5 border border-white/10">
+                                    <button onclick="toggleBuyMode('amount')" class="px-3 py-1 rounded text-[10px] font-bold uppercase transition ${state.buyMode === 'amount' ? 'bg-white text-slate-900' : 'text-slate-500 hover:text-white'}">Monto</button>
+                                    <button onclick="toggleBuyMode('qty')" class="px-3 py-1 rounded text-[10px] font-bold uppercase transition ${state.buyMode === 'qty' ? 'bg-white text-slate-900' : 'text-slate-500 hover:text-white'}">Cantidad</button>
+                                </div>
+                            </div>
+                            <div class="relative">
+                                <input type="number" step="any" id="input-buy-main"
+                                    class="w-full input-glass rounded-xl py-4 px-5 text-2xl font-mono focus:border-brand-primary transition"
+                                    placeholder="0.00"
+                                    value="${state.buyMode === 'amount' ? state.buyAmount : state.buyQty}"
+                                    oninput="handleBuyInput(this.value)"
+                                >
+                                <span class="absolute right-5 top-1/2 -translate-y-1/2 text-sm text-slate-500 font-mono">
+                                    ${state.buyMode === 'amount' ? 'USD/USDT' : state.asset.symbol}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Price & Fee -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <label class="text-xs font-mono uppercase text-slate-400 ml-1">Precio Unit.</label>
+                                    <button onclick="fetchMarketPrice()" class="text-[10px] text-brand-primary hover:underline">Traer Mercado</button>
+                                </div>
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">$</span>
+                                    <input type="number" class="w-full input-glass rounded-lg py-2 pl-6 pr-3 font-mono text-sm" 
+                                        value="${state.price}" oninput="updatePrice(this.value)">
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <label class="text-xs font-mono uppercase text-slate-400 ml-1">Comisión</label>
+                                    <button onclick="toggleFeeMode()" class="text-[10px] ${textAccent} hover:underline uppercase">${state.feeMode}</button>
+                                </div>
+                                <input type="number" class="w-full input-glass rounded-lg py-2 px-3 font-mono text-sm" 
+                                    value="${state.feeValue}" oninput="updateFee(this.value)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SUMMARY CARD (Right) -->
+                    <div class="lg:col-span-5 bg-slate-950/40 rounded-xl border border-white/5 p-6 flex flex-col h-full">
+                        <h3 class="font-display text-lg text-white mb-4">Resumen de Compra</h3>
+                        
+                        <div class="space-y-4 flex-1">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Precio Mercado</span>
+                                <span class="text-white font-mono">$${formatNum(state.price, 2)}</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Comisión Est.</span>
+                                <span class="text-slate-300 font-mono" id="summary-buy-fee">USD ${formatNum(state.computed.fee, 2)}</span>
+                            </div>
+                            
+                            <div class="p-4 rounded-lg bg-brand-primary/10 border border-brand-primary/20 mt-4">
+                                <div class="text-xs text-indigo-300 font-mono mb-1 uppercase">Recibís (Est.)</div>
+                                <div class="text-2xl text-white font-mono font-bold tracking-tight" id="disp-buy-qty">
+                                    ${formatNum(state.computed.qtyFinal, 8)} ${state.asset.symbol}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-white/10 pt-4 mt-4">
+                            <div class="flex justify-between items-end">
+                                <span class="text-sm font-medium text-slate-400">Total a Pagar</span>
+                                <span class="font-mono text-xl font-bold text-white" id="summary-buy-total">USD ${formatNum(state.buyMode === 'amount' ? state.buyAmount : state.computed.gross + state.computed.fee, 2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            // Trigger calc initially without loop logic in recalcBuy
+            if(state.buyAmount || state.buyQty) recalcBuy();
+        }
+
+        // --- STEP 2 SELL: DETAILS ---
+        function renderSellStep2(container) {
+            if(!state.price) state.price = MOCK.marketPrices[state.asset.symbol] || 0;
+            const avail = getQty(state.account.id, state.asset.symbol);
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full animate-fade-in pb-20"> <!-- pb for scrolling space -->
+                    
+                    <!-- LEFT COLUMN: Inputs & Lots -->
+                    <div class="lg:col-span-7 space-y-8">
+                        
+                        <!-- Costing Method Pills -->
+                        <div class="space-y-2">
+                            <label class="text-xs font-mono uppercase text-slate-400 ml-1">Método de Costeo</label>
+                            <div class="flex gap-2">
+                                ${['ppp', 'peps', 'weps', 'manual'].map(m => `
+                                    <button onclick="setCostMethod('${m}')" 
+                                        class="px-4 py-1.5 rounded-full text-xs font-bold uppercase border transition ${state.costMethod === m ? 'bg-white text-slate-900 border-white' : 'bg-transparent text-slate-500 border-white/10 hover:border-white/30'}">
+                                        ${m}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Main Qty Input -->
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-mono uppercase text-slate-400 ml-1">Cantidad a Vender</label>
+                                <div class="flex gap-2">
+                                    <button onclick="setSellQty(${avail * 0.25})" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 hover:text-white transition">25%</button>
+                                    <button onclick="setSellQty(${avail * 0.5})" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 hover:text-white transition">50%</button>
+                                    <button onclick="setSellQty(${avail})" class="text-[10px] bg-brand-danger/20 px-2 py-0.5 rounded text-brand-danger hover:bg-brand-danger/30 transition font-bold">MAX</button>
+                                </div>
+                            </div>
+                            <div class="relative">
+                                <input type="number" step="any" id="input-sell-qty"
+                                    class="w-full input-glass rounded-xl py-4 px-5 text-2xl font-mono focus:border-brand-danger transition ${state.costMethod === 'manual' ? 'opacity-50 pointer-events-none' : ''}"
+                                    placeholder="0.00"
+                                    value="${state.sellQty || ''}"
+                                    oninput="handleSellInput(this.value)"
+                                >
+                                <span class="absolute right-5 top-1/2 -translate-y-1/2 text-sm text-slate-500 font-mono">${state.asset.symbol}</span>
+                            </div>
+                            <div class="text-[10px] text-slate-500 font-mono text-right">Disponible: ${formatNum(avail, 8)}</div>
+                        </div>
+
+                        <!-- Price & Fee -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <label class="text-xs font-mono uppercase text-slate-400 ml-1">Precio Unit.</label>
+                                    <button onclick="fetchMarketPrice()" class="text-[10px] text-brand-danger hover:underline">Traer Mercado</button>
+                                </div>
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">$</span>
+                                    <input type="number" class="w-full input-glass rounded-lg py-2 pl-6 pr-3 font-mono text-sm" 
+                                        value="${state.price}" oninput="updatePrice(this.value)">
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <label class="text-xs font-mono uppercase text-slate-400 ml-1">Comisión</label>
+                                    <button onclick="toggleFeeMode()" class="text-[10px] text-brand-danger hover:underline uppercase">${state.feeMode}</button>
+                                </div>
+                                <input type="number" class="w-full input-glass rounded-lg py-2 px-3 font-mono text-sm" 
+                                    value="${state.feeValue}" oninput="updateFee(this.value)">
+                            </div>
+                        </div>
+
+                        <!-- LOT TABLE -->
+                        <div class="space-y-2">
+                            <label class="text-xs font-mono uppercase text-slate-400 ml-1">Lotes Disponibles</label>
+                            <div class="border border-white/10 rounded-xl overflow-hidden bg-slate-900/30">
+                                <table class="w-full text-left text-xs font-mono">
+                                    <thead class="bg-white/5 text-slate-400 border-b border-white/10">
+                                        <tr>
+                                            ${state.costMethod === 'manual' ? '<th class="p-3 w-8">#</th>' : ''}
+                                            <th class="p-3 font-normal">Fecha</th>
+                                            <th class="p-3 font-normal text-right">Disp.</th>
+                                            <th class="p-3 font-normal text-right">Costo Unit.</th>
+                                            <th class="p-3 font-normal text-right text-brand-danger">Consumo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lots-tbody" class="divide-y divide-white/5 text-slate-300">
+                                        <!-- Injected via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- RIGHT COLUMN: Summary Sticky -->
+                    <div class="lg:col-span-5 relative">
+                        <div class="sticky top-0 bg-slate-950/40 rounded-xl border border-white/5 p-6 flex flex-col space-y-6">
+                            
+                            <div class="flex items-center justify-between border-b border-white/10 pb-4">
+                                <h3 class="font-display text-lg text-white">Resumen de Venta</h3>
+                                <span class="px-2 py-0.5 rounded bg-brand-danger/20 text-brand-danger text-[10px] font-bold uppercase tracking-wide">Egreso</span>
+                            </div>
+
+                            <div class="space-y-3 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Venta Bruta</span>
+                                    <span class="text-white font-mono">USD ${formatNum(state.computed.gross, 2)}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Comisión</span>
+                                    <span class="text-rose-400 font-mono">- USD ${formatNum(state.computed.fee, 2)}</span>
+                                </div>
+                                <div class="flex justify-between pt-2 border-t border-white/5">
+                                    <span class="text-slate-400 font-medium">Neto a Recibir</span>
+                                    <span class="text-white font-mono font-bold">USD ${formatNum(state.computed.net, 2)}</span>
+                                </div>
+                                <div class="text-[10px] text-right text-slate-600 font-mono uppercase mt-0.5">Se acredita en USDT</div>
+                            </div>
+
+                            <div class="bg-slate-900/50 rounded-lg p-4 space-y-2 border border-white/5">
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-slate-500">Costo Calculado (${state.costMethod.toUpperCase()})</span>
+                                    <span class="text-slate-300 font-mono">USD ${formatNum(state.computed.costBasis, 2)}</span>
+                                </div>
+                                <div class="flex justify-between text-sm pt-2 border-t border-white/5">
+                                    <span class="text-slate-400 font-medium">Resultado (P&L)</span>
+                                    <span class="font-mono font-bold ${state.computed.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}">
+                                        ${state.computed.pnl >= 0 ? '+' : ''}USD ${formatNum(state.computed.pnl, 2)}
+                                    </span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            `;
+            // Trigger logic
+            renderLots();
+            if(state.sellQty) recalcSell();
+        }
+
+        // --- STEP 3: CONFIRMATION ---
+        function renderStep3(container) {
+            const isBuy = state.mode === 'buy';
+            container.innerHTML = `
+                <div class="max-w-md mx-auto pt-10 text-center space-y-8 animate-fade-in">
+                    <div class="relative w-20 h-20 mx-auto flex items-center justify-center rounded-full ${isBuy ? 'bg-indigo-500/10 text-brand-primary' : 'bg-rose-500/10 text-brand-danger'}">
+                        <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${isBuy ? 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' : 'M13 17h8m0 0V9m0 8l-8-8-4 4-6-6'}"/></svg>
+                        <div class="absolute inset-0 rounded-full border border-white/10 animate-pulse"></div>
+                    </div>
+                    
+                    <div>
+                        <h2 class="text-3xl font-display font-bold text-white mb-2">Confirmar ${isBuy ? 'Compra' : 'Venta'}</h2>
+                        <p class="text-slate-400 text-sm">Se actualizarán tus saldos al instante.</p>
+                    </div>
+
+                    <div class="bg-slate-900/40 rounded-xl border border-white/10 p-6 space-y-4 text-sm text-left">
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">Cuenta</span>
+                            <span class="text-white font-medium">${state.account.name}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">Activo</span>
+                            <span class="text-white font-mono">${state.asset.symbol}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">Cantidad Final</span>
+                            <span class="text-white font-mono font-bold text-lg">${formatNum(state.computed.qtyFinal, 8)}</span>
+                        </div>
+                        <div class="w-full h-px bg-white/10 my-2"></div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-500">${isBuy ? 'Total Pagado' : 'Total Recibido'}</span>
+                            <span class="text-xl text-white font-mono font-bold">USD ${formatNum(isBuy ? state.computed.gross + state.computed.fee : state.computed.net, 2)}</span>
+                        </div>
+                         ${!isBuy ? `
+                            <div class="flex justify-between items-center text-xs mt-2">
+                                <span class="text-slate-500">Ganancia / Pérdida</span>
+                                <span class="font-mono ${state.computed.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}">
+                                    ${state.computed.pnl >= 0 ? '+' : ''}USD ${formatNum(state.computed.pnl, 2)}
+                                </span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- CORE LOGIC: TYPEAHEAD ---
+
+        function showDropdown(type, query) {
+            const drop = document.getElementById(`dropdown-${type}`);
+            const q = query.toLowerCase();
+            let html = '';
+
+            if (type === 'asset') {
+                MOCK.assetsList.forEach(a => {
+                    if (!a.name.toLowerCase().includes(q) && !a.symbol.toLowerCase().includes(q)) return;
+                    if (state.mode === 'sell' && getTotalHolding(a.symbol) <= 0) return;
+
+                    html += `
+                        <div class="p-3 hover:bg-white/5 cursor-pointer flex justify-between items-center transition" onclick="selectAsset('${a.symbol}')">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-white/5">${a.symbol[0]}</div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">${a.name}</div>
+                                    <div class="text-xs text-slate-500 font-mono">${a.symbol}</div>
+                                </div>
+                            </div>
+                            ${state.mode === 'sell' ? `<span class="text-xs font-mono text-emerald-400">${formatNum(getTotalHolding(a.symbol), 4)}</span>` : ''}
+                        </div>
+                    `;
+                });
+            } else {
+                MOCK.accounts.forEach(acc => {
+                    if (!acc.name.toLowerCase().includes(q)) return;
+                    if (state.mode === 'sell' && getQty(acc.id, state.asset.symbol) <= 0) return;
+
+                    html += `
+                        <div class="p-3 hover:bg-white/5 cursor-pointer flex justify-between items-center transition" onclick="selectAccount('${acc.id}')">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400">${acc.name[0]}</div>
+                                <div class="text-sm font-medium text-white">${acc.name}</div>
+                            </div>
+                            ${state.mode === 'sell' ? `<span class="text-xs font-mono text-slate-400">Disp: ${formatNum(getQty(acc.id, state.asset.symbol), 4)}</span>` : ''}
+                        </div>
+                    `;
+                });
+                
+                if (state.mode === 'buy' && query.length > 1) {
+                    html += `
+                        <div class="p-3 border-t border-white/5 hover:bg-brand-primary/10 cursor-pointer flex items-center gap-2 text-brand-primary transition" onclick="createAccount('${query}')">
+                            <span class="text-sm font-bold">+ Crear "${query}" como nueva cuenta</span>
+                        </div>
+                    `;
+                }
+            }
+
+            if (!html) html = '<div class="p-4 text-center text-xs text-slate-500">Sin resultados</div>';
+            drop.innerHTML = html;
+            drop.classList.remove('hidden');
+        }
+
+        function closeDropdowns(e) {
+            if (!e.target.closest('#container-asset')) document.getElementById('dropdown-asset')?.classList.add('hidden');
+            if (!e.target.closest('#container-account')) document.getElementById('dropdown-account')?.classList.add('hidden');
+        }
+
+        function selectAsset(symbol) {
+            state.asset = MOCK.assetsList.find(a => a.symbol === symbol);
+            state.account = null;
+            document.getElementById('input-asset').value = `${state.asset.name} (${state.asset.symbol})`;
+            document.getElementById('dropdown-asset').classList.add('hidden');
+            document.getElementById('input-account').value = '';
+            document.getElementById('container-account').classList.remove('opacity-50', 'pointer-events-none');
+            
+            // Auto-select logic for Sell
+            if (state.mode === 'sell') {
+                const validAccs = MOCK.accounts.filter(a => getQty(a.id, symbol) > 0);
+                if (validAccs.length === 1) selectAccount(validAccs[0].id);
+            }
+            updateNextBtn();
+        }
+
+        function selectAccount(id) {
+            state.account = MOCK.accounts.find(a => a.id === id);
+            document.getElementById('input-account').value = state.account.name;
+            document.getElementById('dropdown-account').classList.add('hidden');
+            if(state.mode === 'sell') renderStep1(document.getElementById('step-content')); // refresh for holding display
+            updateNextBtn();
+        }
+
+        function createAccount(name) {
+            const newAcc = { id: name.toLowerCase().replace(/\s/g,''), name: name, type: 'Exchange', cash: {USDT:0, ARS:0, USD:0} };
+            MOCK.accounts.push(newAcc);
+            MOCK.holdings[newAcc.id] = {}; 
+            selectAccount(newAcc.id);
+        }
+
+        // --- LOGIC: BUY ---
+        function toggleBuyMode(m) { state.buyMode = m; state.buyAmount=''; state.buyQty=''; renderBuyStep2(document.getElementById('step-content')); }
+        function handleBuyInput(v) { 
+            if(state.buyMode === 'amount') state.buyAmount = parseFloat(v);
+            else state.buyQty = parseFloat(v);
+            recalcBuy();
+            updateNextBtn();
+        }
+
+        function recalcBuy() {
+            const price = state.price || 0;
+            const feeVal = state.feeValue || 0;
+            let qty = 0, gross = 0, fee = 0;
+
+            if (state.buyMode === 'amount') {
+                const amount = state.buyAmount || 0;
+                if (state.feeMode === 'percent') {
+                    gross = amount / (1 + (feeVal/100));
+                    fee = amount - gross;
+                } else {
+                    fee = feeVal;
+                    gross = Math.max(0, amount - fee);
+                }
+                qty = price > 0 ? gross / price : 0;
+                state.buyQty = qty;
+            } else {
+                qty = state.buyQty || 0;
+                gross = qty * price;
+                if (state.feeMode === 'percent') fee = gross * (feeVal/100);
+                else fee = feeVal;
+                state.buyAmount = gross + fee;
+            }
+            state.computed = { gross, fee, qtyFinal: qty, net: 0, costBasis: 0, pnl: 0 };
+            
+            // DOM UPDATE ONLY (No re-render to avoid loop)
+            const dispQty = document.getElementById('disp-buy-qty');
+            if(dispQty) dispQty.textContent = `${formatNum(qty, 8)} ${state.asset.symbol}`;
+
+            const summaryFee = document.getElementById('summary-buy-fee');
+            if(summaryFee) summaryFee.textContent = `USD ${formatNum(fee, 2)}`;
+
+            const summaryTotal = document.getElementById('summary-buy-total');
+            if(summaryTotal) summaryTotal.textContent = `USD ${formatNum(state.buyMode === 'amount' ? state.buyAmount : gross + fee, 2)}`;
+        }
+
+        // --- LOGIC: SELL ---
+        function setCostMethod(m) { state.costMethod = m; state.selectedLots = {}; recalcSell(); renderLots(); renderSellStep2(document.getElementById('step-content')); }
+        function setSellQty(q) { state.sellQty = q; document.getElementById('input-sell-qty').value = q; recalcSell(); }
+        function handleSellInput(v) { state.sellQty = parseFloat(v); recalcSell(); updateNextBtn(); }
+        
+        function updatePrice(v) { state.price = parseFloat(v); if(state.mode==='buy') recalcBuy(); else recalcSell(); }
+        function updateFee(v) { state.feeValue = parseFloat(v); if(state.mode==='buy') recalcBuy(); else recalcSell(); }
+        function toggleFeeMode() { state.feeMode = state.feeMode === 'percent' ? 'fixed' : 'percent'; state.feeValue = state.feeMode==='percent'?0.1:0; 
+            if(state.mode==='buy') renderBuyStep2(document.getElementById('step-content')); 
+            else renderSellStep2(document.getElementById('step-content')); 
+        }
+        function fetchMarketPrice() { state.price = MOCK.marketPrices[state.asset.symbol]; 
+            if(state.mode==='buy') renderBuyStep2(document.getElementById('step-content')); 
+            else renderSellStep2(document.getElementById('step-content')); 
+        }
+
+        function recalcSell() {
+            let qty = state.sellQty || 0;
+            
+            // Manual Override
+            if (state.costMethod === 'manual') {
+                qty = Object.values(state.selectedLots).reduce((a,b)=>a+b, 0);
+                state.sellQty = qty;
+                document.getElementById('input-sell-qty').value = qty > 0 ? qty : '';
+            }
+
+            const price = state.price || 0;
+            const gross = qty * price;
+            let fee = 0;
+            if(state.feeMode==='percent') fee = gross * (state.feeValue/100);
+            else fee = state.feeValue || 0;
+
+            // Cost Basis Logic
+            let costBasis = 0;
+            const lots = (MOCK.lots[state.account.id]?.[state.asset.symbol] || []).map(l => ({...l})); // Clone
+            
+            // Sorting for auto methods
+            if (state.costMethod === 'peps') lots.sort((a,b) => new Date(a.date) - new Date(b.date));
+            if (state.costMethod === 'weps') lots.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+            if (state.costMethod === 'ppp') {
+                let totalH = 0, totalC = 0;
+                lots.forEach(l => { totalH += l.qty; totalC += (l.qty * l.unitCostUSD); });
+                const avg = totalH > 0 ? totalC/totalH : 0;
+                costBasis = qty * avg;
+            } else if (state.costMethod === 'manual') {
+                Object.entries(state.selectedLots).forEach(([id, selQty]) => {
+                    const l = lots.find(x => x.id === id);
+                    if(l) costBasis += selQty * l.unitCostUSD;
+                });
+            } else {
+                // FIFO/LIFO Simulation
+                let remaining = qty;
+                for (let l of lots) {
+                    if (remaining <= 0) break;
+                    const take = Math.min(l.qty, remaining);
+                    costBasis += take * l.unitCostUSD;
+                    remaining -= take;
+                }
+            }
+
+            state.computed = { gross, fee, net: Math.max(0, gross - fee), costBasis, pnl: (gross - fee) - costBasis, qtyFinal: qty };
+            renderLots(); // Re-render table to show consumption lines
+            // Don't re-render full step to avoid losing focus
+            // Update summary manually
+            updateNextBtn();
+        }
+
+        function renderLots() {
+            const tbody = document.getElementById('lots-tbody');
+            if(!tbody) return;
+            const lots = MOCK.lots[state.account.id]?.[state.asset.symbol] || [];
+            let html = '';
+            
+            // Simulation for display
+            let remainingToSim = state.sellQty || 0;
+            let sortedLots = [...lots];
+             if (state.costMethod === 'peps') sortedLots.sort((a,b) => new Date(a.date) - new Date(b.date));
+            if (state.costMethod === 'weps') sortedLots.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+            // Create a map of usage for display
+            let usageMap = {};
+            if (state.costMethod === 'manual') {
+                usageMap = state.selectedLots;
+            } else if (state.costMethod !== 'ppp') {
+                 for (let l of sortedLots) {
+                    if (remainingToSim <= 0) break;
+                    const take = Math.min(l.qty, remainingToSim);
+                    usageMap[l.id] = take;
+                    remainingToSim -= take;
+                }
+            }
+
+            lots.forEach(l => {
+                const consumed = usageMap[l.id] || 0;
+                const isManual = state.costMethod === 'manual';
+                
+                html += `
+                    <tr class="table-row-hover transition text-xs border-b border-white/5 last:border-0 ${consumed > 0 && !isManual ? 'bg-brand-danger/10' : ''}">
+                        ${isManual ? `
+                            <td class="p-3">
+                                <input type="checkbox" class="accent-brand-danger" 
+                                    onchange="toggleLot('${l.id}', this.checked, ${l.qty})" 
+                                    ${state.selectedLots[l.id] ? 'checked' : ''}>
+                            </td>
+                        ` : ''}
+                        <td class="p-3 font-mono text-slate-400">${l.date}</td>
+                        <td class="p-3 font-mono text-right">${formatNum(l.qty, 4)}</td>
+                        <td class="p-3 font-mono text-right text-slate-500">$${formatNum(l.unitCostUSD, 2)}</td>
+                        <td class="p-3 font-mono text-right">
+                            ${isManual ? `
+                                <input type="number" class="bg-slate-900 border border-white/10 rounded w-20 text-right px-1 text-xs text-white ${!state.selectedLots[l.id] ? 'opacity-30 pointer-events-none' : ''}" 
+                                    value="${state.selectedLots[l.id] || ''}" 
+                                    placeholder="0"
+                                    max="${l.qty}"
+                                    oninput="updateManualLot('${l.id}', this.value)"
+                                >
+                            ` : (consumed > 0 ? `<span class="text-brand-danger">-${formatNum(consumed, 4)}</span>` : '-')}
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function toggleLot(id, checked, maxQty) {
+            if(checked) state.selectedLots[id] = maxQty; // Default to max
+            else delete state.selectedLots[id];
+            recalcSell();
+        }
+        function updateManualLot(id, val) {
+            const num = parseFloat(val) || 0;
+            const max = MOCK.lots[state.account.id][state.asset.symbol].find(l=>l.id===id).qty;
+            state.selectedLots[id] = Math.min(num, max);
+            recalcSell();
+        }
+
+        function confirmTransaction() {
+            // Mock Update
+            const finalQty = state.computed.qtyFinal;
+            const finalNet = isNaN(state.computed.net) ? 0 : state.computed.net; // For buy it's 0 usually? No, buy doesn't affect cash here properly yet, simplified for sell mainly.
+            
+            const isBuy = state.mode === 'buy';
+            
+            if (isBuy) {
+                // Simplified Buy
+                if(!MOCK.holdings[state.account.id][state.asset.symbol]) MOCK.holdings[state.account.id][state.asset.symbol] = 0;
+                MOCK.holdings[state.account.id][state.asset.symbol] += finalQty;
+            } else {
+                // Sell
+                MOCK.holdings[state.account.id][state.asset.symbol] -= finalQty;
+                if(!MOCK.holdings[state.account.id]['USDT']) MOCK.holdings[state.account.id]['USDT'] = 0;
+                MOCK.holdings[state.account.id]['USDT'] += finalNet;
+            }
+            
+            // Show Toast
+            const toast = document.getElementById('toast');
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => location.reload(), 2000);
+        }
+
+        // --- UTILS ---
+        function getQty(acc, sym) { return MOCK.holdings[acc]?.[sym] || 0; }
+        function getTotalHolding(sym) { return Object.values(MOCK.holdings).reduce((a,b)=>a+(b[sym]||0),0); }
+        function formatNum(n, d) { return n?.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: d}) || '0,00'; }
+
+        // Start
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

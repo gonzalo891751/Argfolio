@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Nuevo Movimiento CEDEAR</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Configuration -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            primary: '#6366f1', // Indigo
+                            accent: '#0ea5e9', // Sky
+                        },
+                        semantic: {
+                            up: '#10b981', // Emerald
+                            down: '#f43f5e', // Rose
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+            --glass-border: rgba(255,255,255,0.08);
+            --glass-bg: rgba(21, 30, 50, 0.7);
+        }
+        
+        body { background-color: var(--bg-app); color: #F8FAFC; }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Hide number spin buttons */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; margin: 0; 
+        }
+        
+        .fade-enter { opacity: 0; transform: translateY(10px); }
+        .fade-enter-active { opacity: 1; transform: translateY(0); transition: opacity 300ms, transform 300ms; }
+    </style>
+</head>
+<body class="h-screen w-full flex items-center justify-center overflow-hidden bg-[url('https://grainy-gradients.vercel.app/noise.svg')]">
+
+    <!-- Modal Container -->
+    <div id="modal-container" class="w-full h-full md:h-auto md:max-w-6xl md:aspect-[16/10] glass-panel md:rounded-2xl flex flex-col relative overflow-hidden ring-1 ring-white/10 shadow-glow">
+        
+        <!-- Header -->
+        <header class="h-16 border-b border-white/5 flex items-center justify-between px-6 bg-slate-900/50 shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                </div>
+                <div>
+                    <h1 class="font-display font-bold text-lg leading-tight">Nuevo Movimiento</h1>
+                    <p class="text-[10px] font-mono text-slate-400 uppercase tracking-wider">CEDEAR</p>
+                </div>
+            </div>
+            <button onclick="window.location.reload()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </header>
+
+        <!-- Main Layout -->
+        <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+            
+            <!-- LEFT: Wizard & Form -->
+            <div class="flex-1 flex flex-col overflow-hidden relative z-10">
+                
+                <!-- Stepper -->
+                <div class="px-8 pt-6 pb-2 shrink-0">
+                    <div class="flex items-center gap-2 mb-6">
+                        <div id="step-ind-1" class="h-1 flex-1 rounded-full bg-brand-primary transition-all duration-300"></div>
+                        <div id="step-ind-2" class="h-1 flex-1 rounded-full bg-slate-800 transition-all duration-300"></div>
+                        <div id="step-ind-3" class="h-1 flex-1 rounded-full bg-slate-800 transition-all duration-300"></div>
+                    </div>
+                </div>
+
+                <!-- Form Content Scrollable -->
+                <div id="form-scroll-area" class="flex-1 overflow-y-auto px-8 pb-8 custom-scrollbar">
+                    
+                    <!-- STEP 1: Selección de Activo -->
+                    <div id="step-1" class="space-y-6 fade-enter-active">
+                        <!-- Buy/Sell Toggle -->
+                        <div class="inline-flex bg-slate-950 p-1 rounded-lg border border-white/5">
+                            <button id="btn-mode-buy" onclick="setMode('BUY')" class="px-6 py-2 rounded-md text-sm font-bold transition-all bg-brand-semantic-up/10 text-brand-semantic-up shadow-sm ring-1 ring-brand-semantic-up/20">
+                                Compra
+                            </button>
+                            <button id="btn-mode-sell" onclick="setMode('SELL')" class="px-6 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white transition-all">
+                                Venta
+                            </button>
+                        </div>
+
+                        <div class="space-y-5 max-w-lg">
+                            <!-- Ticker Input -->
+                            <div class="relative group z-30">
+                                <label class="block text-xs font-mono text-slate-400 mb-2 uppercase">Activo (CEDEAR)</label>
+                                <div class="relative">
+                                    <input type="text" id="input-ticker" placeholder="Buscar CEDEAR (ej: SPY, KO, MELI)..." 
+                                           class="w-full bg-slate-900 border border-white/10 rounded-lg py-3 px-4 text-white placeholder-slate-600 focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition font-mono"
+                                           autocomplete="off">
+                                    <div class="absolute right-3 top-3 text-slate-600">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                    </div>
+                                    <!-- Dropdown Results -->
+                                    <ul id="ticker-results" class="hidden absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-white/10 rounded-lg shadow-xl max-h-60 overflow-y-auto z-50"></ul>
+                                </div>
+                            </div>
+
+                            <!-- Broker Input -->
+                            <div class="relative z-20">
+                                <label class="block text-xs font-mono text-slate-400 mb-2 uppercase">Cuenta / Broker</label>
+                                <div class="relative">
+                                    <input type="text" id="input-broker" placeholder="Elegí o creá un broker..." 
+                                           class="w-full bg-slate-900 border border-white/10 rounded-lg py-3 px-4 text-white placeholder-slate-600 focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                           autocomplete="off">
+                                    <!-- Dropdown Brokers -->
+                                    <ul id="broker-results" class="hidden absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-white/10 rounded-lg shadow-xl max-h-60 overflow-y-auto z-50"></ul>
+                                </div>
+                                <p id="broker-helper" class="mt-2 text-[10px] text-slate-500 hidden"></p>
+                            </div>
+
+                            <!-- Date Input -->
+                            <div>
+                                <label class="block text-xs font-mono text-slate-400 mb-2 uppercase">Fecha</label>
+                                <input type="datetime-local" id="input-date" 
+                                       class="w-full bg-slate-900 border border-white/10 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition scheme-dark">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2: Detalles & Precios -->
+                    <div id="step-2" class="hidden space-y-8">
+                        
+                        <!-- Top Row: Currency & Price -->
+                        <div class="grid grid-cols-2 gap-6">
+                            <!-- Currency -->
+                            <div>
+                                <label class="block text-xs font-mono text-slate-400 mb-2 uppercase">Moneda</label>
+                                <div class="flex bg-slate-950 p-1 rounded-lg border border-white/10 w-fit">
+                                    <button onclick="setCurrency('ARS')" id="btn-curr-ars" class="px-4 py-1.5 rounded-md text-xs font-bold bg-white/10 text-white shadow-sm transition">ARS</button>
+                                    <button onclick="setCurrency('USD')" id="btn-curr-usd" class="px-4 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-white transition">USD (MEP)</button>
+                                </div>
+                                <p class="text-[10px] text-slate-500 mt-2">TC Ref: <span class="font-mono text-slate-300" id="ref-exchange-rate"></span></p>
+                            </div>
+
+                            <!-- Market Price -->
+                            <div>
+                                <label class="block text-xs font-mono text-slate-400 mb-2 uppercase">Precio Unitario</label>
+                                <div class="relative">
+                                    <div class="absolute left-3 top-2.5 text-slate-500 font-mono text-sm" id="symbol-price">$</div>
+                                    <input type="number" id="input-price" class="w-full pl-8 pr-16 py-2.5 bg-slate-900 border border-white/10 rounded-lg text-white font-mono focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition">
+                                    <button onclick="autoPrice()" class="absolute right-2 top-2 px-2 py-0.5 bg-brand-primary/20 text-brand-primary text-[10px] font-bold rounded uppercase hover:bg-brand-primary/30 transition">Auto</button>
+                                </div>
+                                <div class="text-[10px] text-slate-500 mt-1 flex justify-between">
+                                    <span>Mercado: <span id="market-price-display" class="text-slate-300">---</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quantity & Total -->
+                        <div class="p-6 bg-slate-900/40 border border-white/5 rounded-xl space-y-6">
+                            <!-- Quantity -->
+                            <div>
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-xs font-mono text-slate-400 uppercase">Cantidad (Nominales)</label>
+                                    <span class="text-xs text-slate-500" id="qty-helper"></span>
+                                </div>
+                                <input type="number" id="input-qty" step="1" min="1" placeholder="0"
+                                       class="w-full text-3xl font-display font-bold bg-transparent border-b border-white/10 pb-2 text-white placeholder-slate-700 focus:outline-none focus:border-brand-primary transition">
+                            </div>
+
+                            <!-- Total -->
+                            <div>
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-xs font-mono text-slate-400 uppercase">Total Operación</label>
+                                    <button id="btn-adjust-total" class="text-[10px] text-brand-primary hidden">Ajustado a enteros</button>
+                                </div>
+                                <div class="relative">
+                                    <span class="absolute left-0 top-1 text-xl text-slate-500 font-mono" id="symbol-total">$</span>
+                                    <input type="number" id="input-total" placeholder="0.00"
+                                           class="w-full pl-8 text-xl font-mono bg-transparent border-b border-white/10 pb-2 text-white placeholder-slate-700 focus:outline-none focus:border-brand-primary transition">
+                                </div>
+                            </div>
+
+                             <!-- Commission -->
+                             <div class="flex items-center gap-4 pt-2">
+                                <label class="text-xs font-mono text-slate-400 uppercase">Comisión</label>
+                                <div class="flex items-center bg-slate-950 rounded border border-white/10 overflow-hidden">
+                                    <button onclick="setCommType('%')" id="btn-comm-pct" class="px-2 py-1 text-xs font-medium bg-white/10 text-white">%</button>
+                                    <button onclick="setCommType('$')" id="btn-comm-fix" class="px-2 py-1 text-xs font-medium text-slate-500">$</button>
+                                </div>
+                                <input type="number" id="input-comm-val" value="0.6" class="w-20 bg-transparent border-b border-white/10 text-sm text-right text-white focus:outline-none focus:border-brand-primary">
+                            </div>
+                        </div>
+
+                        <!-- Sell Only: Lot Selection -->
+                        <div id="sell-lot-section" class="hidden space-y-4 pt-4 border-t border-white/5">
+                            <h3 class="font-display text-sm text-slate-300">Método de descarga (Costos)</h3>
+                            <div class="flex gap-2 mb-4">
+                                <button onclick="setCostMethod('PPP')" id="btn-method-ppp" class="px-3 py-1.5 rounded-full border border-brand-primary/50 bg-brand-primary/10 text-brand-primary text-xs font-bold">PPP</button>
+                                <button onclick="setCostMethod('PEPS')" id="btn-method-peps" class="px-3 py-1.5 rounded-full border border-white/10 text-slate-400 text-xs hover:text-white">PEPS (Primero entra)</button>
+                                <button onclick="setCostMethod('UEPS')" id="btn-method-ueps" class="px-3 py-1.5 rounded-full border border-white/10 text-slate-400 text-xs hover:text-white">UEPS (Último entra)</button>
+                                <button onclick="setCostMethod('MANUAL')" id="btn-method-manual" class="px-3 py-1.5 rounded-full border border-white/10 text-slate-400 text-xs hover:text-white">Manual</button>
+                            </div>
+                            
+                            <!-- Lot Table -->
+                            <div class="overflow-hidden rounded-lg border border-white/10">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-slate-950 text-slate-500 font-mono uppercase">
+                                        <tr>
+                                            <th class="px-4 py-2 font-normal">Fecha</th>
+                                            <th class="px-4 py-2 font-normal text-right">Orig. Qty</th>
+                                            <th class="px-4 py-2 font-normal text-right">Precio</th>
+                                            <th class="px-4 py-2 font-normal text-right">A Vender</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lot-table-body" class="divide-y divide-white/5 bg-slate-900/30">
+                                        <!-- Lots injected via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="lot-validation-msg" class="text-xs text-brand-semantic-down mt-2 hidden"></div>
+                        </div>
+
+                        <!-- Buy Only: Holdings Preview -->
+                        <div id="buy-holding-preview" class="hidden p-4 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+                            <p class="text-xs text-emerald-400 font-medium mb-1">Impacto en cartera</p>
+                            <p class="text-[11px] text-slate-400">Sumarás posición. Nuevo PPP estimado: <span id="new-ppp-preview" class="text-white font-mono">--</span></p>
+                        </div>
+                    </div>
+
+                    <!-- STEP 3: Confirmación -->
+                    <div id="step-3" class="hidden flex flex-col items-center justify-center h-full pt-10 text-center fade-enter-active">
+                        <div class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-6 ring-1 ring-white/10">
+                            <span class="text-3xl" id="confirm-icon">📄</span>
+                        </div>
+                        <h2 class="font-display text-2xl font-bold text-white mb-2">Revisá los datos</h2>
+                        <p class="text-slate-400 text-sm max-w-sm mx-auto mb-8">Estás a punto de registrar un movimiento en tu portafolio. Esto no opera en el mercado real.</p>
+                        
+                        <div class="w-full max-w-md bg-slate-900/50 rounded-xl border border-white/10 p-6 text-left space-y-4">
+                            <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                                <span class="text-sm text-slate-400">Operación</span>
+                                <span class="font-mono font-bold text-brand-primary" id="conf-type">COMPRA CEDEAR</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-400">Activo</span>
+                                <span class="font-mono text-white" id="conf-asset">AAPL</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-400">Cantidad</span>
+                                <span class="font-mono text-white" id="conf-qty">10</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-400">Precio</span>
+                                <span class="font-mono text-white" id="conf-price">$1.200,00</span>
+                            </div>
+                            <div class="flex justify-between items-center pt-3 border-t border-white/5">
+                                <span class="text-sm text-white font-medium">Total Final</span>
+                                <span class="font-mono font-bold text-white text-lg" id="conf-total">$12.000,00</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 space-y-3 w-full max-w-xs">
+                             <div class="text-xs text-slate-500 font-mono uppercase tracking-widest mb-2">Movimientos a generar</div>
+                             <div id="conf-movements-list" class="space-y-2 text-left">
+                                 <!-- Injected JS -->
+                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Actions -->
+                <div class="px-8 py-6 border-t border-white/5 bg-slate-900/80 backdrop-blur-md flex justify-between shrink-0">
+                    <button onclick="prevStep()" id="btn-back" class="hidden px-6 py-2.5 rounded-lg border border-white/10 text-slate-400 text-sm font-medium hover:bg-white/5 transition">
+                        Atrás
+                    </button>
+                    <div class="ml-auto"> <!-- Spacer --> </div>
+                    <button onclick="nextStep()" id="btn-next" disabled class="px-8 py-2.5 rounded-lg bg-brand-primary text-white text-sm font-bold shadow-glow hover:bg-brand-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
+                        Siguiente
+                    </button>
+                    <button onclick="confirmAction()" id="btn-confirm" class="hidden px-8 py-2.5 rounded-lg bg-brand-semantic-up text-white text-sm font-bold shadow-lg shadow-emerald-900/20 hover:bg-emerald-500 transition">
+                        Confirmar
+                    </button>
+                </div>
+            </div>
+
+            <!-- RIGHT: Summary Panel (Sticky/Fixed equivalent) -->
+            <div class="w-full md:w-80 border-l border-white/5 bg-slate-950/50 p-6 flex flex-col justify-center relative">
+                <!-- Decorative BG -->
+                <div class="absolute inset-0 grid-bg opacity-20 pointer-events-none" style="background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 20px 20px;"></div>
+                
+                <h3 class="font-display font-bold text-slate-400 uppercase text-xs tracking-widest mb-6 relative z-10">Resumen Estimado</h3>
+
+                <div class="space-y-6 relative z-10">
+                    <!-- Main Total Card -->
+                    <div class="p-4 rounded-xl border border-white/10 bg-slate-900/80 shadow-lg">
+                        <div class="text-xs text-slate-400 mb-1">Total a <span id="summ-action-label">Pagar</span></div>
+                        <div class="font-mono text-2xl font-bold text-white tracking-tight" id="summ-total-final">$0,00</div>
+                        <div class="text-[10px] text-slate-500 mt-1 font-mono" id="summ-total-alt">≈ USD 0.00</div>
+                    </div>
+
+                    <!-- Breakdown -->
+                    <div class="space-y-3 text-sm">
+                        <div class="flex justify-between items-baseline">
+                            <span class="text-slate-400">Subtotal</span>
+                            <span class="font-mono text-slate-300" id="summ-subtotal">$0,00</span>
+                        </div>
+                        <div class="flex justify-between items-baseline">
+                            <span class="text-slate-400">Comisión</span>
+                            <span class="font-mono text-brand-semantic-down" id="summ-commission">-$0,00</span>
+                        </div>
+                        <div class="h-px bg-white/10 my-2"></div>
+                        
+                        <!-- Sell Specific: Cost & Result -->
+                        <div id="summ-sell-details" class="hidden space-y-3">
+                             <div class="flex justify-between items-baseline">
+                                <span class="text-slate-400">Costo (Est.)</span>
+                                <span class="font-mono text-slate-500" id="summ-cost">$0,00</span>
+                            </div>
+                            <div class="flex justify-between items-center p-2 rounded bg-white/5 border border-white/5">
+                                <span class="text-xs font-bold text-white">Resultado</span>
+                                <span class="font-mono font-bold text-brand-semantic-up" id="summ-result">$0,00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Info Box -->
+                    <div class="p-3 rounded border border-blue-500/20 bg-blue-500/5 flex gap-3 items-start">
+                        <svg class="w-4 h-4 text-blue-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <p class="text-[10px] text-blue-300 leading-relaxed">
+                            Los valores en pesos son estimados. El impacto real en tu cuenta dependerá de la ejecución de la orden en el mercado.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full bg-brand-semantic-up text-white font-medium shadow-glow opacity-0 pointer-events-none transition-all duration-300 transform translate-y-4 z-50 flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+        <span id="toast-msg">Movimiento registrado</span>
+    </div>
+
+    <!-- Logic -->
+    <script>
+        // --- MOCK DATA ---
+        const MARKET_DATA = [
+            { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', priceArs: 11800, priceUsd: 8.15 },
+            { ticker: 'QQQ', name: 'Invesco QQQ Trust', priceArs: 9700, priceUsd: 6.70 },
+            { ticker: 'AAPL', name: 'Apple Inc.', priceArs: 8400, priceUsd: 5.80 },
+            { ticker: 'KO', name: 'Coca-Cola Company', priceArs: 5200, priceUsd: 3.60 },
+            { ticker: 'GGAL', name: 'Grupo Financiero Galicia', priceArs: 6300, priceUsd: 4.35 },
+            { ticker: 'MELI', name: 'MercadoLibre Inc.', priceArs: 15400, priceUsd: 10.60 },
+            { ticker: 'NVDA', name: 'NVIDIA Corp', priceArs: 12100, priceUsd: 8.35 },
+        ];
+
+        const BROKERS = ['IOL InvertirOnline', 'Balanz Capital', 'Banco Galicia', 'Bull Market'];
+
+        const FX = { mep: 1450, oficial: 1400 };
+
+        const USER_HOLDINGS = {
+            'SPY': {
+                'IOL InvertirOnline': [
+                    { id: 'L1', date: '2026-01-10', qty: 6, price: 10200, currency: 'ARS' },
+                    { id: 'L2', date: '2026-02-01', qty: 4, price: 12100, currency: 'ARS' }
+                ],
+                'Balanz Capital': [
+                    { id: 'L3', date: '2026-01-20', qty: 3, price: 7.10, currency: 'USD' }
+                ]
+            },
+            'QQQ': {
+                'IOL InvertirOnline': [
+                    { id: 'L4', date: '2026-01-05', qty: 10, price: 9000, currency: 'ARS' }
+                ]
+            }
+        };
+
+        // --- STATE ---
+        let state = {
+            step: 1,
+            mode: 'BUY', // BUY | SELL
+            ticker: null, // object
+            broker: null, // string
+            currency: 'ARS',
+            qty: 0,
+            price: 0,
+            total: 0,
+            commissionType: '%', // % | $
+            commissionVal: 0.6,
+            costMethod: 'PPP', // PPP | PEPS | UEPS | MANUAL
+            manualLots: {} // { lotId: qtyToSell }
+        };
+
+        // --- UTILS ---
+        const formatMoney = (val, curr) => {
+            return new Intl.NumberFormat('es-AR', { 
+                style: 'currency', 
+                currency: curr || state.currency 
+            }).format(val);
+        };
+
+        const getEl = (id) => document.getElementById(id);
+
+        // --- CORE LOGIC ---
+
+        function init() {
+            // Set Date to now
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            getEl('input-date').value = now.toISOString().slice(0,16);
+            
+            updateUI();
+        }
+
+        function setMode(mode) {
+            state.mode = mode;
+            // Reset selection if switching modes to avoid invalid state
+            state.ticker = null;
+            state.broker = null;
+            getEl('input-ticker').value = '';
+            getEl('input-broker').value = '';
+            
+            updateUI();
+        }
+
+        function nextStep() {
+            if (state.step < 3) state.step++;
+            if (state.step === 2) initializeStep2();
+            if (state.step === 3) initializeStep3();
+            updateUI();
+        }
+
+        function prevStep() {
+            if (state.step > 1) state.step--;
+            updateUI();
+        }
+
+        function updateUI() {
+            // Update Stepper
+            for(let i=1; i<=3; i++) {
+                const el = getEl(`step-ind-${i}`);
+                if(i <= state.step) {
+                    el.classList.remove('bg-slate-800');
+                    el.classList.add('bg-brand-primary');
+                } else {
+                    el.classList.remove('bg-brand-primary');
+                    el.classList.add('bg-slate-800');
+                }
+            }
+
+            // Show/Hide Steps
+            getEl('step-1').classList.add('hidden');
+            getEl('step-2').classList.add('hidden');
+            getEl('step-3').classList.add('hidden');
+            getEl(`step-${state.step}`).classList.remove('hidden');
+
+            // Button Logic
+            const btnNext = getEl('btn-next');
+            const btnBack = getEl('btn-back');
+            const btnConfirm = getEl('btn-confirm');
+
+            btnBack.classList.toggle('hidden', state.step === 1);
+            
+            if (state.step === 3) {
+                btnNext.classList.add('hidden');
+                btnConfirm.classList.remove('hidden');
+            } else {
+                btnNext.classList.remove('hidden');
+                btnConfirm.classList.add('hidden');
+            }
+
+            // Validation for Next button
+            let isValid = false;
+            if (state.step === 1) {
+                isValid = state.ticker && state.broker;
+            } else if (state.step === 2) {
+                isValid = state.qty > 0 && state.price > 0;
+                if(state.mode === 'SELL' && state.costMethod === 'MANUAL') {
+                     // Check manual sum
+                     const sumManual = Object.values(state.manualLots).reduce((a,b)=>a+b, 0);
+                     isValid = isValid && (sumManual === state.qty);
+                     getEl('lot-validation-msg').classList.toggle('hidden', isValid);
+                     getEl('lot-validation-msg').innerText = `Seleccionado: ${sumManual} / Requerido: ${state.qty}`;
+                }
+            }
+            btnNext.disabled = !isValid;
+
+            // Step 1 Specifics
+            const btnBuy = getEl('btn-mode-buy');
+            const btnSell = getEl('btn-mode-sell');
+            
+            if (state.mode === 'BUY') {
+                btnBuy.className = "px-6 py-2 rounded-md text-sm font-bold transition-all bg-brand-semantic-up/10 text-brand-semantic-up shadow-sm ring-1 ring-brand-semantic-up/20";
+                btnSell.className = "px-6 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white transition-all";
+            } else {
+                btnSell.className = "px-6 py-2 rounded-md text-sm font-bold transition-all bg-brand-semantic-down/10 text-brand-semantic-down shadow-sm ring-1 ring-brand-semantic-down/20";
+                btnBuy.className = "px-6 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white transition-all";
+            }
+        }
+
+        // --- STEP 1 LOGIC (SEARCH) ---
+
+        const inputTicker = getEl('input-ticker');
+        const listTicker = getEl('ticker-results');
+        const inputBroker = getEl('input-broker');
+        const listBroker = getEl('broker-results');
+
+        inputTicker.addEventListener('input', (e) => {
+            const val = e.target.value.toUpperCase();
+            let matches = [];
+
+            if (state.mode === 'BUY') {
+                matches = MARKET_DATA.filter(m => m.ticker.includes(val) || m.name.toUpperCase().includes(val));
+            } else {
+                // Sell Mode: Only holdings
+                const holdingKeys = Object.keys(USER_HOLDINGS);
+                const holdingData = MARKET_DATA.filter(m => holdingKeys.includes(m.ticker));
+                matches = holdingData.filter(m => m.ticker.includes(val));
+            }
+
+            renderDropdown(listTicker, matches, (item) => {
+                state.ticker = item;
+                inputTicker.value = `${item.ticker} - ${item.name}`;
+                listTicker.classList.add('hidden');
+                
+                // If Sell mode, check broker constraints
+                if(state.mode === 'SELL') {
+                    const brokersWithStock = Object.keys(USER_HOLDINGS[item.ticker]);
+                    if (brokersWithStock.length === 1) {
+                        state.broker = brokersWithStock[0];
+                        inputBroker.value = state.broker;
+                        inputBroker.disabled = true;
+                        getEl('broker-helper').classList.remove('hidden');
+                        getEl('broker-helper').innerText = "Única cuenta con tenencia disponible.";
+                    } else {
+                        inputBroker.value = '';
+                        state.broker = null;
+                        inputBroker.disabled = false;
+                        getEl('broker-helper').classList.add('hidden');
+                    }
+                }
+                updateUI();
+            }, 'ticker');
+        });
+
+        inputBroker.addEventListener('input', (e) => {
+            const val = e.target.value;
+            let matches = [];
+
+            if (state.mode === 'BUY') {
+                matches = BROKERS.filter(b => b.toLowerCase().includes(val.toLowerCase()));
+                // Add create option
+                if (val.length > 0 && !matches.includes(val)) {
+                    matches.push({ type: 'create', label: val });
+                }
+            } else {
+                // Sell mode: Only brokers with that ticker
+                if (!state.ticker) return;
+                const validBrokers = Object.keys(USER_HOLDINGS[state.ticker.ticker] || {});
+                matches = validBrokers.filter(b => b.toLowerCase().includes(val.toLowerCase()));
+            }
+
+            renderDropdown(listBroker, matches, (item) => {
+                const name = item.type === 'create' ? item.label : item;
+                state.broker = name;
+                inputBroker.value = name;
+                listBroker.classList.add('hidden');
+                updateUI();
+            }, 'broker');
+        });
+
+        function renderDropdown(el, items, onSelect, type) {
+            el.innerHTML = '';
+            if (items.length === 0) {
+                el.classList.add('hidden');
+                return;
+            }
+            el.classList.remove('hidden');
+
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = "px-4 py-3 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0 flex justify-between items-center";
+                
+                if (type === 'ticker') {
+                    // Holding count for sell
+                    let badge = '';
+                    if(state.mode === 'SELL') {
+                        const totalQty = Object.values(USER_HOLDINGS[item.ticker]).flat().reduce((a,b)=>a+b.qty, 0);
+                        badge = `<span class="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">Disp: ${totalQty}</span>`;
+                    }
+                    li.innerHTML = `<div><span class="font-bold text-white block">${item.ticker}</span><span class="text-xs text-slate-500">${item.name}</span></div>${badge}`;
+                } else if (type === 'broker') {
+                    if (item.type === 'create') {
+                        li.innerHTML = `<span class="text-brand-accent italic">+ Crear "${item.label}"</span>`;
+                    } else {
+                        li.innerHTML = `<span class="text-slate-300">${item}</span>`;
+                    }
+                }
+
+                li.onclick = () => onSelect(item);
+                el.appendChild(li);
+            });
+        }
+
+        // --- STEP 2 LOGIC (DETAILS) ---
+
+        function initializeStep2() {
+            autoPrice();
+            
+            // Sell UI Toggle
+            const sellSection = getEl('sell-lot-section');
+            const buyPreview = getEl('buy-holding-preview');
+            const summarySell = getEl('summ-sell-details');
+            const summActionLabel = getEl('summ-action-label');
+            
+            if (state.mode === 'SELL') {
+                sellSection.classList.remove('hidden');
+                buyPreview.classList.add('hidden');
+                summarySell.classList.remove('hidden');
+                summActionLabel.innerText = "Recibir (Neto)";
+                getEl('summ-total-final').classList.replace('text-white', 'text-brand-semantic-up');
+                
+                // Set max qty logic
+                const lots = USER_HOLDINGS[state.ticker.ticker][state.broker];
+                const totalDisp = lots.reduce((a,b)=>a+b.qty, 0);
+                getEl('qty-helper').innerText = `Máx: ${totalDisp}`;
+                getEl('input-qty').max = totalDisp;
+
+                renderLotTable();
+
+            } else {
+                sellSection.classList.add('hidden');
+                buyPreview.classList.remove('hidden');
+                summarySell.classList.add('hidden');
+                summActionLabel.innerText = "Pagar";
+                getEl('summ-total-final').classList.replace('text-brand-semantic-up', 'text-white');
+                getEl('qty-helper').innerText = '';
+                getEl('input-qty').removeAttribute('max');
+            }
+
+            updateSummary();
+        }
+
+        function setCurrency(curr) {
+            state.currency = curr;
+            const btnArs = getEl('btn-curr-ars');
+            const btnUsd = getEl('btn-curr-usd');
+            const symbolPrice = getEl('symbol-price');
+            const symbolTotal = getEl('symbol-total');
+
+            if(curr === 'ARS') {
+                btnArs.className = "px-4 py-1.5 rounded-md text-xs font-bold bg-white/10 text-white shadow-sm transition";
+                btnUsd.className = "px-4 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-white transition";
+                symbolPrice.innerText = '$';
+                symbolTotal.innerText = '$';
+            } else {
+                btnUsd.className = "px-4 py-1.5 rounded-md text-xs font-bold bg-white/10 text-white shadow-sm transition";
+                btnArs.className = "px-4 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-white transition";
+                symbolPrice.innerText = 'USD';
+                symbolTotal.innerText = 'USD';
+            }
+            
+            // Update rate display
+            getEl('ref-exchange-rate').innerText = `$${FX.mep}`;
+            autoPrice();
+        }
+
+        function autoPrice() {
+            if(!state.ticker) return;
+            const p = state.currency === 'ARS' ? state.ticker.priceArs : state.ticker.priceUsd;
+            state.price = p;
+            getEl('input-price').value = p;
+            getEl('market-price-display').innerText = formatMoney(p);
+            recalcTotalsFromQty();
+        }
+
+        // Inputs Binding
+        getEl('input-qty').addEventListener('input', (e) => {
+            state.qty = parseInt(e.target.value) || 0;
+            recalcTotalsFromQty();
+        });
+
+        getEl('input-price').addEventListener('input', (e) => {
+            state.price = parseFloat(e.target.value) || 0;
+            recalcTotalsFromQty(); // Keep Qty, update total
+        });
+
+        getEl('input-total').addEventListener('change', (e) => {
+            // Reverse calc
+            const total = parseFloat(e.target.value) || 0;
+            if (state.price > 0) {
+                const newQty = Math.floor(total / state.price);
+                state.qty = newQty;
+                getEl('input-qty').value = newQty;
+                
+                // Show Adjusted badge
+                getEl('btn-adjust-total').classList.remove('hidden');
+                setTimeout(() => getEl('btn-adjust-total').classList.add('hidden'), 3000);
+                
+                recalcTotalsFromQty();
+            }
+        });
+
+        getEl('input-comm-val').addEventListener('input', (e) => {
+            state.commissionVal = parseFloat(e.target.value) || 0;
+            updateSummary();
+        });
+
+        function recalcTotalsFromQty() {
+            state.total = state.qty * state.price;
+            getEl('input-total').value = state.total.toFixed(2);
+            updateSummary();
+        }
+
+        function setCommType(type) {
+            state.commissionType = type;
+            const btnPct = getEl('btn-comm-pct');
+            const btnFix = getEl('btn-comm-fix');
+            
+            if(type === '%') {
+                btnPct.className = "px-2 py-1 text-xs font-medium bg-white/10 text-white";
+                btnFix.className = "px-2 py-1 text-xs font-medium text-slate-500";
+            } else {
+                btnFix.className = "px-2 py-1 text-xs font-medium bg-white/10 text-white";
+                btnPct.className = "px-2 py-1 text-xs font-medium text-slate-500";
+            }
+            updateSummary();
+        }
+
+        function setCostMethod(m) {
+            state.costMethod = m;
+            ['PPP', 'PEPS', 'UEPS', 'MANUAL'].forEach(method => {
+                const el = getEl(`btn-method-${method.toLowerCase()}`);
+                if(method === m) {
+                    el.className = "px-3 py-1.5 rounded-full border border-brand-primary/50 bg-brand-primary/10 text-brand-primary text-xs font-bold";
+                } else {
+                    el.className = "px-3 py-1.5 rounded-full border border-white/10 text-slate-400 text-xs hover:text-white";
+                }
+            });
+            renderLotTable();
+            updateSummary();
+        }
+
+        function renderLotTable() {
+            if(state.mode !== 'SELL' || !state.ticker) return;
+            const lots = [...(USER_HOLDINGS[state.ticker.ticker][state.broker] || [])];
+            
+            // Sort logic for display logic if needed, but usually we just show them
+            const tbody = getEl('lot-table-body');
+            tbody.innerHTML = '';
+
+            // Calculate auto-selection for PEPS/UEPS to show visual indicators
+            let remainingToSell = state.qty;
+            const autoSelected = {}; // {id: qty}
+
+            if (state.costMethod === 'PEPS') lots.sort((a,b) => new Date(a.date) - new Date(b.date));
+            if (state.costMethod === 'UEPS') lots.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+            if (state.costMethod !== 'MANUAL' && state.costMethod !== 'PPP') {
+                lots.forEach(lot => {
+                    if (remainingToSell > 0) {
+                        const take = Math.min(lot.qty, remainingToSell);
+                        autoSelected[lot.id] = take;
+                        remainingToSell -= take;
+                    }
+                });
+            }
+
+            lots.forEach(lot => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-white/5 last:border-0";
+                
+                // Determine styling based on selection
+                let toSell = 0;
+                let rowClass = "";
+                
+                if (state.costMethod === 'MANUAL') {
+                    toSell = state.manualLots[lot.id] || 0;
+                    if(toSell > 0) rowClass = "bg-brand-primary/10";
+                } else if (state.costMethod !== 'PPP') {
+                    toSell = autoSelected[lot.id] || 0;
+                    if(toSell > 0) rowClass = "bg-brand-primary/10";
+                }
+
+                tr.className += " " + rowClass;
+
+                // Manual Input
+                let actionCol = `<span class="text-slate-500">-</span>`;
+                if (state.costMethod === 'MANUAL') {
+                    actionCol = `<input type="number" min="0" max="${lot.qty}" value="${toSell}" 
+                        data-id="${lot.id}"
+                        class="manual-lot-input w-16 bg-slate-950 border border-white/10 rounded px-2 py-1 text-right text-white text-xs focus:border-brand-primary focus:outline-none">`;
+                } else if (toSell > 0) {
+                     actionCol = `<span class="text-brand-primary font-bold">-${toSell}</span>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="px-4 py-2 text-slate-300 font-mono">${lot.date}</td>
+                    <td class="px-4 py-2 text-slate-300 text-right font-mono">${lot.qty}</td>
+                    <td class="px-4 py-2 text-slate-400 text-right font-mono text-[10px]">${lot.currency} ${lot.price}</td>
+                    <td class="px-4 py-2 text-right">${actionCol}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Bind inputs
+            if (state.costMethod === 'MANUAL') {
+                document.querySelectorAll('.manual-lot-input').forEach(input => {
+                    input.addEventListener('input', (e) => {
+                        const val = parseInt(e.target.value) || 0;
+                        state.manualLots[e.target.dataset.id] = val;
+                        renderLotTable(); // Re-render to update highlights
+                        updateUI(); // Check validation
+                        updateSummary(); // Recalc costs
+                    });
+                });
+            }
+        }
+
+        function updateSummary() {
+            // Calc Commission
+            let comm = 0;
+            if (state.commissionType === '%') {
+                comm = state.total * (state.commissionVal / 100);
+            } else {
+                comm = state.commissionVal;
+            }
+
+            let totalFinal = state.mode === 'BUY' ? (state.total + comm) : (state.total - comm);
+            
+            // Render basic summary
+            getEl('summ-subtotal').innerText = formatMoney(state.total);
+            getEl('summ-commission').innerText = (state.mode === 'BUY' ? '+' : '-') + formatMoney(comm);
+            getEl('summ-total-final').innerText = formatMoney(totalFinal);
+
+            // Alt Currency
+            const rate = FX.mep;
+            let altVal = 0;
+            let altSym = '';
+            if (state.currency === 'ARS') {
+                altVal = totalFinal / rate;
+                altSym = 'USD';
+            } else {
+                altVal = totalFinal * rate;
+                altSym = 'ARS';
+            }
+            getEl('summ-total-alt').innerText = `≈ ${altSym} ${new Intl.NumberFormat('es-AR').format(altVal.toFixed(2))}`;
+
+            // Sell Cost Logic
+            if (state.mode === 'SELL') {
+                let cost = 0;
+                // Simplified Cost Calc for Prototype
+                // Ideally we map lots currency to current currency, but let's assume raw sum for demo
+                const lots = USER_HOLDINGS[state.ticker.ticker][state.broker];
+                
+                // Determine Qty per lot based on method (Reuse logic from Render)
+                let remaining = state.qty;
+                const used = {}; // id: qty
+                
+                let sortedLots = [...lots];
+                if(state.costMethod === 'PEPS') sortedLots.sort((a,b)=>new Date(a.date)-new Date(b.date));
+                if(state.costMethod === 'UEPS') sortedLots.sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+                if(state.costMethod === 'MANUAL') {
+                     // Use state.manualLots
+                     lots.forEach(l => {
+                         if(state.manualLots[l.id]) cost += state.manualLots[l.id] * l.price; // Simplified (ignoring currency mix for demo)
+                     });
+                } else if (state.costMethod === 'PPP') {
+                     // Weighted Avg
+                     const totalCost = lots.reduce((a,b) => a + (b.qty * b.price), 0);
+                     const totalQ = lots.reduce((a,b) => a + b.qty, 0);
+                     const avg = totalCost / totalQ;
+                     cost = avg * state.qty;
+                } else {
+                    sortedLots.forEach(l => {
+                        if(remaining > 0) {
+                            const take = Math.min(l.qty, remaining);
+                            cost += take * l.price;
+                            remaining -= take;
+                        }
+                    });
+                }
+
+                const result = (state.total - comm) - cost;
+                
+                getEl('summ-cost').innerText = formatMoney(cost);
+                const resEl = getEl('summ-result');
+                resEl.innerText = formatMoney(result);
+                resEl.className = result >= 0 
+                    ? "font-mono font-bold text-brand-semantic-up" 
+                    : "font-mono font-bold text-brand-semantic-down";
+            }
+            
+            // Update Preview in Validation (Next button state check happens in updateUI)
+            updateUI();
+        }
+
+        // --- STEP 3 LOGIC (CONFIRM) ---
+        function initializeStep3() {
+            getEl('conf-type').innerText = `${state.mode === 'BUY' ? 'COMPRA' : 'VENTA'} CEDEAR`;
+            getEl('conf-type').className = `font-mono font-bold ${state.mode === 'BUY' ? 'text-brand-semantic-up' : 'text-brand-semantic-down'}`;
+            getEl('confirm-icon').innerText = state.mode === 'BUY' ? '📥' : '📤';
+            
+            getEl('conf-asset').innerText = `${state.ticker.ticker} (${state.broker})`;
+            getEl('conf-qty').innerText = state.qty;
+            getEl('conf-price').innerText = formatMoney(state.price);
+            getEl('conf-total').innerText = getEl('summ-total-final').innerText;
+
+            const list = getEl('conf-movements-list');
+            list.innerHTML = '';
+
+            const createMov = (text, type='neutral') => {
+                const colors = {
+                    neutral: 'bg-white/5 border-white/10 text-slate-300',
+                    up: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+                    down: 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                };
+                return `<div class="p-3 rounded border ${colors[type]} text-xs font-mono flex items-center gap-2">
+                    <div class="w-1.5 h-1.5 rounded-full bg-current"></div>
+                    ${text}
+                </div>`;
+            }
+
+            if(state.mode === 'BUY') {
+                list.innerHTML += createMov(`Egreso Liquidez: ${getEl('summ-total-final').innerText}`, 'down');
+                list.innerHTML += createMov(`Alta Título: ${state.ticker.ticker} x ${state.qty}`, 'up');
+            } else {
+                list.innerHTML += createMov(`Baja Título: ${state.ticker.ticker} x ${state.qty}`, 'down');
+                list.innerHTML += createMov(`Ingreso Liquidez: ${getEl('summ-total-final').innerText}`, 'up');
+            }
+        }
+
+        function confirmAction() {
+            const toast = getEl('toast');
+            toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+            
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        }
+
+        // Init
+        init();
+
+    </script>
+</body>
+</html>

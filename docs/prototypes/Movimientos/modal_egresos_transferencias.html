@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Nuevo Movimiento</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Configuración basada en Brand Book -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a', 
+                            800: '#1e293b',
+                            primary: '#6366f1', // Indigo (Ingreso)
+                            danger: '#f43f5e',  // Rose (Egreso)
+                            accent: '#0ea5e9',  // Sky (Transfer)
+                            success: '#10b981',
+                        }
+                    },
+                    animation: {
+                        'shake': 'shake 0.82s cubic-bezier(.36,.07,.19,.97) both',
+                        'fade-in': 'fadeIn 0.3s ease-out forwards',
+                    },
+                    keyframes: {
+                        shake: {
+                            '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
+                            '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
+                            '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
+                            '40%, 60%': { transform: 'translate3d(4px, 0, 0)' }
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+        }
+        body {
+            background-color: var(--bg-app);
+            color: #F8FAFC;
+        }
+        
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        
+        .input-base {
+            background: #020617; /* Slate 950 */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            transition: all 0.2s;
+        }
+        .input-base:focus {
+            outline: none;
+            border-color: var(--active-color);
+            box-shadow: 0 0 0 1px var(--active-color);
+        }
+        .input-base:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+        /* Typeahead z-index fix */
+        .typeahead-dropdown {
+            z-index: 9999 !important;
+        }
+    </style>
+</head>
+<body class="h-screen w-full overflow-hidden flex items-center justify-center relative">
+
+    <!-- Fondo Decorativo -->
+    <div class="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-brand-primary/10 rounded-full blur-[120px]"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-brand-accent/10 rounded-full blur-[120px]"></div>
+    </div>
+
+    <!-- Botón para abrir modal (Demo) -->
+    <div id="demo-trigger" class="text-center z-10 transition-opacity duration-300">
+        <h1 class="font-display text-4xl font-bold mb-4">Argfolio UI Prototype</h1>
+        <p class="text-slate-400 mb-8">Concepto de "Nuevo Movimiento" v2.1 (Fixed)</p>
+        <button onclick="openModal()" class="px-6 py-3 bg-brand-primary hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-500/20 transition transform hover:scale-105">
+            + Nuevo Movimiento
+        </button>
+    </div>
+
+    <!-- MODAL OVERLAY -->
+    <div id="modal-overlay" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+        
+        <!-- MODAL CONTAINER -->
+        <div id="modal-container" class="glass-panel w-full max-w-4xl rounded-2xl flex flex-col max-h-[90vh] transform scale-95 transition-transform duration-300 relative overflow-hidden">
+            
+            <!-- HEADER -->
+            <header class="flex justify-between items-center p-6 border-b border-white/5">
+                <div>
+                    <h2 class="font-display text-xl font-bold text-white tracking-tight">Nuevo Movimiento</h2>
+                    <p class="text-sm text-slate-400 mt-0.5">Ajustá manualmente tus saldos o registrá operaciones.</p>
+                </div>
+                <button onclick="closeModal()" class="p-2 hover:bg-white/5 rounded-full text-slate-400 hover:text-white transition">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </header>
+
+            <!-- CONTROLS & STEPPER -->
+            <div class="px-6 pt-6 pb-2">
+                <!-- Type Selector -->
+                <div class="flex p-1 bg-slate-950/50 rounded-lg border border-white/5 mb-8 max-w-md mx-auto relative">
+                    <div id="type-indicator" class="absolute h-[calc(100%-8px)] top-1 rounded-md bg-brand-primary transition-all duration-300 ease-out shadow-lg" style="width: 33.33%; left: 4px;"></div>
+                    
+                    <button onclick="setType('income')" class="relative z-10 flex-1 py-1.5 text-sm font-medium text-center rounded-md transition-colors duration-200" id="btn-type-income">Ingreso</button>
+                    <button onclick="setType('expense')" class="relative z-10 flex-1 py-1.5 text-sm font-medium text-center rounded-md transition-colors duration-200" id="btn-type-expense">Egreso</button>
+                    <button onclick="setType('transfer')" class="relative z-10 flex-1 py-1.5 text-sm font-medium text-center rounded-md transition-colors duration-200 flex items-center justify-center gap-2" id="btn-type-transfer">
+                        <span>Transferencia</span>
+                        <svg class="w-3.5 h-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                    </button>
+                </div>
+
+                <!-- Stepper -->
+                <div class="flex items-center justify-center gap-4 mb-2">
+                    <div class="flex items-center gap-2">
+                        <div id="step-1-dot" class="w-8 h-8 rounded-full bg-brand-primary text-white flex items-center justify-center text-xs font-bold font-mono transition-colors">1</div>
+                        <span id="step-1-label" class="text-xs font-medium text-white hidden sm:block">Datos</span>
+                    </div>
+                    <div class="w-12 h-px bg-white/10"></div>
+                    <div class="flex items-center gap-2">
+                        <div id="step-2-dot" class="w-8 h-8 rounded-full bg-slate-800 border border-white/10 text-slate-500 flex items-center justify-center text-xs font-bold font-mono transition-colors">2</div>
+                        <span id="step-2-label" class="text-xs font-medium text-slate-500 hidden sm:block">Monto</span>
+                    </div>
+                    <div class="w-12 h-px bg-white/10"></div>
+                    <div class="flex items-center gap-2">
+                        <div id="step-3-dot" class="w-8 h-8 rounded-full bg-slate-800 border border-white/10 text-slate-500 flex items-center justify-center text-xs font-bold font-mono transition-colors">3</div>
+                        <span id="step-3-label" class="text-xs font-medium text-slate-500 hidden sm:block">Confirmar</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DYNAMIC CONTENT -->
+            <div id="modal-body" class="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar min-h-[350px] relative">
+                <!-- Content injected via JS -->
+            </div>
+
+            <!-- FOOTER -->
+            <footer class="p-6 border-t border-white/5 flex justify-between bg-slate-900/30 relative z-20">
+                <button onclick="prevStep()" id="btn-back" class="px-4 py-2 text-slate-400 hover:text-white text-sm font-medium transition invisible">
+                    ← Atrás
+                </button>
+                <div class="flex gap-3">
+                    <button onclick="closeModal()" class="px-5 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-slate-300 text-sm font-medium transition">
+                        Cancelar
+                    </button>
+                    <button onclick="nextStep()" id="btn-next" class="px-6 py-2 rounded-lg bg-brand-primary hover:bg-opacity-90 text-white text-sm font-medium shadow-lg shadow-indigo-500/20 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span>Siguiente</span>
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                    </button>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 border border-emerald-500/30 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 translate-y-20 opacity-0 transition-all duration-500 z-[60]">
+        <div class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+        </div>
+        <span class="font-medium text-sm">Movimiento registrado correctamente</span>
+    </div>
+
+    <!-- LOGIC -->
+    <script>
+        // --- DATA MOCK ---
+        const accounts = [
+            { id: '1', name: 'Carrefour', provider: 'Billetera', type: 'wallet', balances: { ARS: 237785.00 } },
+            { id: '2', name: 'Fiwin', provider: 'Billetera', type: 'wallet', balances: { ARS: 52120.35 } },
+            { id: '3', name: 'Binance Spot', provider: 'Exchange', type: 'crypto', balances: { USDT: 415.20, ARS: 0 } },
+            { id: '4', name: 'Banco Galicia', provider: 'Banco', type: 'bank', balances: { ARS: 1250000.00, USD: 120.00 }, remunerada: true },
+            { id: '5', name: 'Naranja X', provider: 'Billetera', type: 'wallet', balances: { ARS: 0.00 } }, // Sin saldo
+            { id: '6', name: 'Efectivo', provider: 'Caja', type: 'cash', balances: { ARS: 18000.00 } }
+        ];
+
+        // --- STATE ---
+        const state = {
+            isOpen: false,
+            type: 'income', // income | expense | transfer
+            step: 1,
+            datetime: new Date().toISOString().slice(0, 16),
+            accountId: null,
+            toAccountId: null, // For transfer
+            currency: 'ARS',
+            amount: '',
+            note: '',
+            isRemunerada: false, // Ingreso only
+            adjustmentMode: false // Egreso logic
+        };
+
+        // --- COLORS & THEME ---
+        const themes = {
+            income: { color: '#6366f1', name: 'brand-primary', label: 'Ingreso', border: 'border-brand-primary' },
+            expense: { color: '#f43f5e', name: 'brand-danger', label: 'Egreso', border: 'border-brand-danger' },
+            transfer: { color: '#0ea5e9', name: 'brand-accent', label: 'Transferencia', border: 'border-brand-accent' }
+        };
+
+        // --- HELPERS ---
+        const formatMoney = (amount, currency) => {
+            const formatter = new Intl.NumberFormat('es-AR', {
+                style: 'currency',
+                currency: currency === 'USDT' ? 'USD' : currency,
+                minimumFractionDigits: 2
+            });
+            let val = formatter.format(amount || 0);
+            if(currency === 'USDT') val = val.replace('US$', 'USDT ');
+            return val;
+        };
+
+        const getActiveTheme = () => themes[state.type];
+
+        // --- CORE RENDER ---
+        function render() {
+            renderControls();
+            renderStepper();
+            renderBody();
+            renderFooter();
+            updateCSSVars();
+        }
+
+        function updateCSSVars() {
+            document.documentElement.style.setProperty('--active-color', themes[state.type].color);
+        }
+
+        // --- CONTROLS RENDER ---
+        function renderControls() {
+            const indicator = document.getElementById('type-indicator');
+            const btns = ['income', 'expense', 'transfer'];
+            const theme = getActiveTheme();
+
+            btns.forEach(t => {
+                const btn = document.getElementById(`btn-type-${t}`);
+                if (state.type === t) {
+                    btn.classList.add('text-white');
+                    btn.classList.remove('text-slate-400', 'hover:text-white', 'hover:bg-white/5');
+                } else {
+                    btn.classList.remove('text-white');
+                    btn.classList.add('text-slate-400', 'hover:text-white', 'hover:bg-white/5');
+                }
+            });
+
+            indicator.className = `absolute h-[calc(100%-8px)] top-1 rounded-md transition-all duration-300 ease-out shadow-lg shadow-${theme.name}/20`;
+            indicator.style.backgroundColor = theme.color;
+
+            if (state.type === 'income') indicator.style.left = '4px';
+            if (state.type === 'expense') indicator.style.left = '33.33%';
+            if (state.type === 'transfer') indicator.style.left = 'calc(66.66% - 4px)';
+        }
+
+        function renderStepper() {
+            const theme = getActiveTheme();
+            const stepClass = `bg-[${theme.color}] text-white border-transparent`;
+            const inactiveClass = `bg-slate-800 border border-white/10 text-slate-500`;
+
+            for (let i = 1; i <= 3; i++) {
+                const dot = document.getElementById(`step-${i}-dot`);
+                const label = document.getElementById(`step-${i}-label`);
+                
+                if (i <= state.step) {
+                    dot.style.backgroundColor = theme.color;
+                    dot.style.borderColor = 'transparent';
+                    dot.className = `w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold font-mono transition-colors shadow-glow-sm`;
+                    label.className = "text-xs font-medium text-white hidden sm:block";
+                } else {
+                    dot.style.backgroundColor = '';
+                    dot.style.borderColor = '';
+                    dot.className = "w-8 h-8 rounded-full bg-slate-800 border border-white/10 text-slate-500 flex items-center justify-center text-xs font-bold font-mono transition-colors";
+                    label.className = "text-xs font-medium text-slate-500 hidden sm:block";
+                }
+            }
+        }
+
+        // --- BODY RENDER LOGIC ---
+        function renderBody() {
+            const body = document.getElementById('modal-body');
+            body.innerHTML = ''; // Clear
+
+            const container = document.createElement('div');
+            container.className = "space-y-6 animate-fade-in pb-20"; // pb-20 for scrolling space
+
+            if (state.step === 1) renderStep1(container);
+            else if (state.step === 2) renderStep2(container);
+            else if (state.step === 3) renderStep3(container);
+
+            body.appendChild(container);
+            
+            // --- CRITICAL FIX: Attach listeners AFTER appending to DOM ---
+            if (state.step === 1) {
+                setTimeout(setupTypeaheadListeners, 0);
+            }
+        }
+
+        // --- STEP 1: SELECCION DE CUENTA & FECHA ---
+        function renderStep1(container) {
+            // Fecha Input (Común)
+            const dateSection = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-2">
+                        <label class="text-xs font-mono text-slate-400 uppercase tracking-wider">Fecha y Hora</label>
+                        <input type="datetime-local" value="${state.datetime}" 
+                            class="input-base w-full rounded-lg px-4 py-3 text-sm font-mono"
+                            onchange="state.datetime = this.value">
+                    </div>
+                     <div class="space-y-2 relative z-50">
+                        <label class="text-xs font-mono text-slate-400 uppercase tracking-wider">
+                            ${state.type === 'transfer' ? 'Desde (Origen)' : 'Cuenta'}
+                        </label>
+                        ${renderTypeahead('accountId', state.type !== 'income')}
+                        ${state.type === 'expense' && !state.accountId ? '<p class="text-[10px] text-slate-500 mt-1">Solo mostramos cuentas con saldo positivo.</p>' : ''}
+                        ${renderAccountBalance(state.accountId)}
+                    </div>
+                </div>
+            `;
+            
+            let extraSection = '';
+
+            // Ingreso: Checkbox remunerada
+            if (state.type === 'income' && state.accountId) {
+                const acct = accounts.find(a => a.id === state.accountId);
+                if (acct && (acct.type === 'bank' || acct.type === 'wallet')) {
+                    extraSection = `
+                        <div class="flex items-center gap-3 p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 mt-4">
+                            <input type="checkbox" id="chk-remunerada" ${state.isRemunerada ? 'checked' : ''} 
+                                onchange="state.isRemunerada = this.checked"
+                                class="w-4 h-4 rounded bg-slate-900 border-white/20 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900">
+                            <label for="chk-remunerada" class="text-sm text-indigo-200 select-none cursor-pointer">Marcar como cuenta remunerada</label>
+                        </div>
+                    `;
+                }
+            }
+
+            // Transferencia: Destino
+            if (state.type === 'transfer') {
+                extraSection = `
+                    <div class="relative py-4 flex items-center justify-center -z-10">
+                        <div class="w-full h-px bg-white/5 absolute"></div>
+                        <div class="relative z-10 w-8 h-8 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-brand-accent">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                        </div>
+                    </div>
+                    <div class="space-y-2 relative z-40">
+                         <label class="text-xs font-mono text-slate-400 uppercase tracking-wider">Hacia (Destino)</label>
+                         ${renderTypeahead('toAccountId', false)} <!-- Destino no filtra por saldo -->
+                         ${renderAccountBalance(state.toAccountId)}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = dateSection + extraSection;
+            // Removed setupTypeaheadListeners() from here, moved to renderBody
+        }
+
+        // --- STEP 2: MONTO & MONEDA ---
+        function renderStep2(container) {
+            const account = accounts.find(a => a.id === state.accountId);
+            const availableCurrencies = account ? Object.keys(account.balances) : ['ARS'];
+            
+            // Filtrar monedas con saldo 0 en egreso
+            let validCurrencies = availableCurrencies;
+            if (state.type === 'expense' || state.type === 'transfer') {
+                validCurrencies = availableCurrencies.filter(c => account.balances[c] > 0);
+            }
+            if (validCurrencies.length === 0) validCurrencies = ['ARS']; // Fallback
+            
+            // Auto-select currency if current not valid
+            if (!validCurrencies.includes(state.currency)) state.currency = validCurrencies[0];
+
+            const theme = getActiveTheme();
+
+            const currencySelector = `
+                <div class="flex gap-2 mb-6">
+                    ${validCurrencies.map(curr => `
+                        <button onclick="setCurrency('${curr}')" 
+                            class="px-4 py-2 rounded-lg text-sm font-bold font-mono border transition ${state.currency === curr 
+                                ? `bg-${theme.name}/20 border-${theme.name} text-${theme.name.replace('brand-', '')}-400` 
+                                : 'bg-slate-950 border-white/10 text-slate-400 hover:text-white'
+                            }">
+                            ${curr}
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+
+            const maxBalance = account ? account.balances[state.currency] || 0 : 0;
+            
+            let quickActions = '';
+            if (state.type !== 'income') {
+                quickActions = `
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="setAmountPercentage(0.25)" class="text-xs px-2 py-1 rounded bg-slate-800 text-slate-400 hover:text-white border border-white/5">25%</button>
+                        <button onclick="setAmountPercentage(0.50)" class="text-xs px-2 py-1 rounded bg-slate-800 text-slate-400 hover:text-white border border-white/5">50%</button>
+                        <button onclick="setAmountPercentage(1.00)" class="text-xs px-2 py-1 rounded bg-slate-800 text-slate-400 hover:text-white border border-white/5">MAX</button>
+                         <span class="ml-auto text-xs font-mono text-slate-500 pt-1">Disponible: ${formatMoney(maxBalance, state.currency)}</span>
+                    </div>
+                `;
+            }
+
+            // AJUSTE RÁPIDO (Solo Egreso)
+            let adjustmentSection = '';
+            if (state.type === 'expense') {
+                adjustmentSection = `
+                    <div class="mt-8 border-t border-white/5 pt-6">
+                        <button onclick="toggleAdjustment()" class="flex items-center justify-between w-full text-left group">
+                            <div>
+                                <h4 class="text-sm font-medium text-white flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-brand-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    Ajuste Rápido
+                                </h4>
+                                <p class="text-xs text-slate-400 mt-1">Calculá el egreso ingresando el saldo que ves en tu banco.</p>
+                            </div>
+                            <svg class="w-5 h-5 text-slate-500 transform transition ${state.adjustmentMode ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+
+                        ${state.adjustmentMode ? `
+                            <div class="mt-4 p-4 rounded-xl bg-slate-900/50 border border-white/10 animate-fade-in">
+                                <label class="text-xs font-mono text-slate-400 uppercase">Saldo Actual (Real)</label>
+                                <div class="relative mt-2">
+                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-mono">$</span>
+                                    <input type="number" id="input-real-balance" placeholder="0.00"
+                                        class="input-base w-full pl-8 pr-4 py-3 rounded-lg font-mono text-lg"
+                                        oninput="calculateAdjustment(this.value)">
+                                </div>
+                                <div id="adjustment-feedback" class="mt-3 text-xs"></div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            // NOTA (Para Transfer)
+            let transferNote = state.type === 'transfer' ? 
+                `<div class="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex gap-3 text-blue-200 text-xs">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <p>Se crearán 2 movimientos enlazados: un egreso en ${account.name} y un ingreso en la cuenta destino.</p>
+                 </div>` : '';
+
+            container.innerHTML = `
+                <div class="glass-panel p-6 rounded-xl">
+                    <label class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-2 block">Moneda</label>
+                    ${currencySelector}
+
+                    <label class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-2 block">Monto del movimiento</label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-xl font-mono">$</span>
+                        <input type="number" id="input-amount" value="${state.amount}" 
+                            class="input-base w-full pl-10 pr-4 py-4 rounded-lg font-mono text-3xl font-bold tracking-tight bg-slate-950 focus:ring-2 focus:ring-${theme.name} placeholder-slate-700"
+                            placeholder="0.00" autofocus
+                            oninput="validateAmount(this.value)">
+                    </div>
+                    ${quickActions}
+                    
+                    <div class="mt-6 space-y-2">
+                        <label class="text-xs font-mono text-slate-400 uppercase tracking-wider">Nota (Opcional)</label>
+                        <input type="text" value="${state.note}" oninput="state.note = this.value"
+                            class="input-base w-full px-4 py-2 rounded-lg text-sm" placeholder="Ej: Compra supermercado, Ahorro...">
+                    </div>
+                </div>
+                ${transferNote}
+                ${adjustmentSection}
+            `;
+            
+            // Add listeners after render
+            setTimeout(() => {
+                const input = document.getElementById('input-amount');
+                if(input) {
+                    input.focus();
+                    validateAmount(state.amount); // Initial check
+                }
+            }, 50);
+        }
+
+        // --- STEP 3: CONFIRM ---
+        function renderStep3(container) {
+            const fromAcct = accounts.find(a => a.id === state.accountId);
+            const toAcct = state.toAccountId ? accounts.find(a => a.id === state.toAccountId) : null;
+            const theme = getActiveTheme();
+
+            // Cálculos
+            const amount = parseFloat(state.amount);
+            const currency = state.currency;
+            
+            const renderBalanceChange = (acct, isAdding) => {
+                const current = acct.balances[currency] || 0;
+                const future = isAdding ? current + amount : current - amount;
+                const color = isAdding ? 'text-emerald-400' : 'text-rose-400';
+                const sign = isAdding ? '+' : '-';
+                
+                return `
+                    <div class="mt-2 pt-2 border-t border-white/5 flex justify-between items-center text-xs font-mono">
+                        <span class="text-slate-500">Saldo ${isAdding ? 'final' : 'restante'}</span>
+                        <div class="text-right">
+                             <span class="text-slate-300 line-through mr-2 opacity-50">${formatMoney(current, currency)}</span>
+                             <span class="${color}">${formatMoney(future, currency)}</span>
+                        </div>
+                    </div>
+                `;
+            };
+
+            const card = (title, acct, isAdding) => `
+                <div class="bg-slate-950/50 p-4 rounded-xl border border-white/10">
+                    <div class="text-[10px] font-mono text-slate-500 uppercase mb-1">${title}</div>
+                    <div class="flex items-center gap-3 mb-2">
+                        ${getProviderIcon(acct.provider)}
+                        <span class="font-medium text-white">${acct.name}</span>
+                    </div>
+                    ${renderBalanceChange(acct, isAdding)}
+                </div>
+            `;
+
+            let content = '';
+            if (state.type === 'transfer') {
+                content = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${card('Sale de', fromAcct, false)}
+                        ${card('Entra en', toAcct, true)}
+                    </div>
+                    <div class="flex justify-center my-4">
+                        <div class="bg-slate-800 rounded-full p-2 border border-white/10">
+                            <svg class="w-6 h-6 text-brand-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Ingreso o Egreso
+                content = card(state.type === 'income' ? 'Cuenta Destino' : 'Cuenta Origen', fromAcct, state.type === 'income');
+            }
+
+            container.innerHTML = `
+                <div class="text-center mb-6">
+                    <p class="text-slate-400 text-sm mb-1">Vas a registrar un</p>
+                    <h3 class="font-display text-3xl font-bold text-white capitalize">${themes[state.type].label}</h3>
+                    <div class="mt-2 inline-block px-4 py-1 rounded-full bg-${theme.name}/10 border border-${theme.name}/20 text-${theme.name.replace('brand-', '')}-400 font-mono text-lg font-bold">
+                        ${formatMoney(amount, currency)}
+                    </div>
+                </div>
+
+                ${content}
+
+                <div class="mt-6 flex gap-4 text-xs text-slate-500 justify-center">
+                    <span class="flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        ${new Date(state.datetime).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })}
+                    </span>
+                    ${state.note ? `<span class="flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+                        "${state.note}"
+                    </span>` : ''}
+                </div>
+            `;
+        }
+
+
+        // --- COMPONENTS & LOGIC ---
+
+        function getProviderIcon(provider) {
+            let colorClass = 'bg-slate-700 text-slate-300';
+            let iconPath = 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z'; // Credit card default
+            
+            if (provider === 'Banco') {
+                colorClass = 'bg-rose-500/20 text-rose-400';
+                iconPath = 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4';
+            } else if (provider === 'Billetera') {
+                colorClass = 'bg-indigo-500/20 text-indigo-400';
+            } else if (provider === 'Exchange') {
+                colorClass = 'bg-amber-500/20 text-amber-400';
+                iconPath = 'M13 10V3L4 14h7v7l9-11h-7z';
+            } else if (provider === 'Caja') {
+                colorClass = 'bg-emerald-500/20 text-emerald-400';
+                iconPath = 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a1 1 0 11-2 0 1 1 0 012 0z';
+            }
+
+            return `
+                <div class="w-8 h-8 rounded-full ${colorClass} flex items-center justify-center">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}" /></svg>
+                </div>
+            `;
+        }
+
+        function renderAccountBalance(id) {
+            if (!id) return '';
+            const acct = accounts.find(a => a.id === id);
+            if (!acct) return '';
+
+            const bals = Object.entries(acct.balances).map(([curr, val]) => `
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 border border-white/10 text-slate-300">
+                    <span class="text-slate-500 mr-1">${curr}</span> ${formatMoney(val, curr).replace('$', '')}
+                </span>
+            `).join('');
+
+            return `<div class="flex flex-wrap gap-2 mt-2">${bals}</div>`;
+        }
+
+        function renderTypeahead(stateKey, filterPositive = false) {
+            const currentId = state[stateKey];
+            const selected = accounts.find(a => a.id === currentId);
+
+            if (selected) {
+                return `
+                    <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-brand-primary/50 ring-1 ring-brand-primary/20 animate-fade-in group hover:bg-slate-800 transition">
+                        <div class="flex items-center gap-3">
+                            ${getProviderIcon(selected.provider)}
+                            <div>
+                                <div class="text-sm font-medium text-white">${selected.name}</div>
+                                <div class="text-xs text-slate-500">${selected.provider}</div>
+                            </div>
+                        </div>
+                        <button onclick="clearSelection('${stateKey}')" class="p-1 text-slate-500 hover:text-white rounded hover:bg-white/10">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Unselected State
+            return `
+                <div class="relative typeahead-container">
+                    <div class="relative">
+                        <input type="text" placeholder="Buscar cuenta..." 
+                            class="input-base w-full pl-9 pr-4 py-3 rounded-lg text-sm typeahead-input"
+                            data-target="${stateKey}" data-filter="${filterPositive}">
+                        <svg class="w-4 h-4 text-slate-500 absolute left-3 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    </div>
+                    <div class="hidden absolute z-50 w-full mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scrollbar typeahead-dropdown">
+                        <!-- Options populated via JS -->
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- EVENTS & ACTIONS ---
+
+        function openModal() {
+            document.getElementById('demo-trigger').classList.add('opacity-0');
+            state.isOpen = true;
+            resetState();
+            
+            const overlay = document.getElementById('modal-overlay');
+            const container = document.getElementById('modal-container');
+            
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+            container.classList.remove('scale-95');
+            container.classList.add('scale-100');
+            
+            render();
+        }
+
+        function closeModal() {
+            document.getElementById('demo-trigger').classList.remove('opacity-0');
+            state.isOpen = false;
+            
+            const overlay = document.getElementById('modal-overlay');
+            const container = document.getElementById('modal-container');
+            
+            overlay.classList.add('opacity-0', 'pointer-events-none');
+            container.classList.remove('scale-100');
+            container.classList.add('scale-95');
+        }
+
+        function resetState() {
+            state.step = 1;
+            state.accountId = null;
+            state.toAccountId = null;
+            state.amount = '';
+            state.note = '';
+            state.currency = 'ARS';
+            state.adjustmentMode = false;
+        }
+
+        function setType(type) {
+            state.type = type;
+            state.step = 1; 
+
+            // SAFETY CHECK: If switching to Expense, validate existing selection
+            if(type !== 'income' && state.accountId) {
+                const acct = accounts.find(a => a.id === state.accountId);
+                const hasBalance = Object.values(acct.balances).some(b => b > 0);
+                if(!hasBalance) {
+                    state.accountId = null; // Reset selection if invalid for expense
+                }
+            }
+
+            render();
+        }
+
+        function nextStep() {
+            if (state.step < 3) {
+                state.step++;
+                render();
+            } else {
+                confirmTransaction();
+            }
+        }
+
+        function prevStep() {
+            if (state.step > 1) {
+                state.step--;
+                render();
+            }
+        }
+
+        function renderFooter() {
+            const btnBack = document.getElementById('btn-back');
+            const btnNext = document.getElementById('btn-next');
+            
+            if (state.step === 1) btnBack.classList.add('invisible');
+            else btnBack.classList.remove('invisible');
+
+            // Validar botón Next
+            let isValid = false;
+            if (state.step === 1) {
+                if (state.type === 'transfer') isValid = state.accountId && state.toAccountId;
+                else isValid = !!state.accountId;
+            } else if (state.step === 2) {
+                const amt = parseFloat(state.amount);
+                isValid = amt > 0;
+                // Extra validation for expense/transfer logic
+                if (state.type !== 'income') {
+                    const acct = accounts.find(a => a.id === state.accountId);
+                    const bal = acct ? (acct.balances[state.currency] || 0) : 0;
+                    if (amt > bal) isValid = false;
+                }
+            } else if (state.step === 3) {
+                isValid = true;
+            }
+
+            btnNext.disabled = !isValid;
+            
+            // Text changes
+            const btnNextSpan = btnNext.querySelector('span');
+            const theme = getActiveTheme();
+
+            if (state.step === 3) {
+                btnNextSpan.textContent = "Confirmar";
+                btnNext.className = `px-6 py-2 rounded-lg text-white text-sm font-medium shadow-lg shadow-${theme.name}/20 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed bg-${theme.name} hover:bg-opacity-90`;
+            } else {
+                btnNextSpan.textContent = "Siguiente";
+                btnNext.className = "px-6 py-2 rounded-lg bg-brand-primary hover:bg-opacity-90 text-white text-sm font-medium shadow-lg shadow-indigo-500/20 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed";
+            }
+        }
+
+        // --- TYPEAHEAD LOGIC ---
+        function setupTypeaheadListeners() {
+            document.querySelectorAll('.typeahead-input').forEach(input => {
+                const targetKey = input.dataset.target;
+                const shouldFilter = input.dataset.filter === 'true';
+                const container = input.closest('.typeahead-container');
+                const dropdown = container.querySelector('.typeahead-dropdown');
+
+                input.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase();
+                    dropdown.classList.remove('hidden');
+                    
+                    const filtered = accounts.filter(acc => {
+                        // Nombre match
+                        const matchName = acc.name.toLowerCase().includes(query) || acc.provider.toLowerCase().includes(query);
+                        // Saldo match
+                        if (!shouldFilter) return matchName;
+                        const hasBalance = Object.values(acc.balances).some(b => b > 0);
+                        return matchName && hasBalance;
+                    });
+
+                    if (filtered.length === 0) {
+                        dropdown.innerHTML = `<div class="p-3 text-xs text-slate-500 text-center">No encontramos cuentas.</div>`;
+                    } else {
+                        dropdown.innerHTML = filtered.map(acc => {
+                            const disabled = shouldFilter && !Object.values(acc.balances).some(b => b > 0); // Extra safety
+                            return `
+                                <div class="p-3 hover:bg-white/5 cursor-pointer flex items-center justify-between border-b border-white/5 last:border-0 transition"
+                                    onclick="selectAccount('${targetKey}', '${acc.id}')">
+                                    <div class="flex items-center gap-3">
+                                        ${getProviderIcon(acc.provider)}
+                                        <div>
+                                            <div class="text-sm text-white font-medium">${acc.name}</div>
+                                            <div class="text-xs text-slate-500">${acc.provider}</div>
+                                        </div>
+                                    </div>
+                                    ${shouldFilter ? `<div class="text-xs font-mono text-slate-400">${renderAccountBalanceSimple(acc)}</div>` : ''}
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                });
+
+                // Close on click outside
+                document.addEventListener('click', (e) => {
+                    if (!container.contains(e.target)) dropdown.classList.add('hidden');
+                });
+                
+                input.addEventListener('focus', () => input.dispatchEvent(new Event('input')));
+            });
+        }
+
+        function renderAccountBalanceSimple(acc) {
+            return Object.entries(acc.balances).map(([k,v]) => `${k} ${v.toFixed(0)}`).join(' · ');
+        }
+
+        function selectAccount(key, id) {
+            state[key] = id;
+            
+            // Si elige "Desde", resetear moneda y monto para evitar inconsistencias
+            if (key === 'accountId') {
+                state.currency = 'ARS'; 
+                state.amount = '';
+            }
+            
+            render();
+        }
+
+        function clearSelection(key) {
+            state[key] = null;
+            render();
+        }
+
+        // --- STEP 2 ACTIONS ---
+        function setCurrency(c) {
+            state.currency = c;
+            // Re-validar monto porque el saldo disponible cambió
+            state.amount = ''; 
+            state.adjustmentMode = false;
+            render(); 
+        }
+
+        function validateAmount(val) {
+            state.amount = val;
+            const input = document.getElementById('input-amount');
+            const feedback = document.getElementById('adjustment-feedback');
+            
+            if (state.type !== 'income') {
+                const acct = accounts.find(a => a.id === state.accountId);
+                const max = acct.balances[state.currency] || 0;
+                
+                if (parseFloat(val) > max) {
+                    input.classList.add('border-brand-danger', 'text-brand-danger', 'animate-shake');
+                    input.classList.remove('focus:ring-brand-primary', 'focus:ring-brand-danger', 'focus:ring-brand-accent'); // Clean rings
+                    setTimeout(() => input.classList.remove('animate-shake'), 820);
+                } else {
+                    input.classList.remove('border-brand-danger', 'text-brand-danger');
+                    // Restaurar ring correcto
+                    const theme = getActiveTheme();
+                    input.classList.add(`focus:ring-${theme.name}`);
+                }
+            }
+            renderFooter(); // Update button state
+        }
+        
+        function setAmountPercentage(pct) {
+            const acct = accounts.find(a => a.id === state.accountId);
+            const max = acct.balances[state.currency] || 0;
+            const newVal = (max * pct).toFixed(2);
+            state.amount = newVal;
+            
+            const input = document.getElementById('input-amount');
+            if(input) {
+                input.value = newVal;
+                validateAmount(newVal);
+            }
+        }
+
+        // --- LOGICA EGRESO AJUSTE RAPIDO ---
+        function toggleAdjustment() {
+            state.adjustmentMode = !state.adjustmentMode;
+            render();
+        }
+
+        function calculateAdjustment(realBalance) {
+            const acct = accounts.find(a => a.id === state.accountId);
+            const sysBalance = acct.balances[state.currency] || 0;
+            const real = parseFloat(realBalance);
+            const feedback = document.getElementById('adjustment-feedback');
+            
+            if (isNaN(real)) return;
+
+            if (real > sysBalance) {
+                // Caso: Saldo Real > Sistema (Es un INGRESO)
+                feedback.innerHTML = `
+                    <div class="text-brand-danger flex items-start gap-2 bg-brand-danger/10 p-2 rounded">
+                        <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        <span>Tu saldo es mayor al del sistema. Esto debería ser un <b>Ingreso</b> de ${formatMoney(real - sysBalance, state.currency)}.</span>
+                    </div>
+                    <button onclick="switchToIncomeAdjust(${real - sysBalance})" class="mt-2 text-brand-primary underline hover:text-white">Cambiar a Ingreso y precargar</button>
+                `;
+            } else {
+                // Caso Normal: Egreso
+                const diff = sysBalance - real;
+                state.amount = diff.toFixed(2);
+                document.getElementById('input-amount').value = state.amount;
+                feedback.innerHTML = `<span class="text-emerald-400">Egreso calculado: ${formatMoney(diff, state.currency)}</span>`;
+                validateAmount(state.amount);
+            }
+        }
+
+        function switchToIncomeAdjust(diff) {
+            state.type = 'income';
+            state.amount = diff.toFixed(2);
+            state.adjustmentMode = false;
+            // Mantener cuenta y moneda
+            render();
+        }
+
+        // --- FINALIZAR ---
+        function confirmTransaction() {
+            // Toast Animation
+            const toast = document.getElementById('toast');
+            toast.classList.remove('opacity-0', 'translate-y-20');
+            
+            closeModal();
+            
+            // Hide toast after 3s
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-20');
+            }, 3000);
+
+            // Logica simulada de actualización (en memoria)
+            const amt = parseFloat(state.amount);
+            const from = accounts.find(a => a.id === state.accountId);
+            
+            if (state.type === 'income') {
+                if(!from.balances[state.currency]) from.balances[state.currency] = 0;
+                from.balances[state.currency] += amt;
+            } else if (state.type === 'expense') {
+                from.balances[state.currency] -= amt;
+            } else if (state.type === 'transfer') {
+                const to = accounts.find(a => a.id === state.toAccountId);
+                from.balances[state.currency] -= amt;
+                if(!to.balances[state.currency]) to.balances[state.currency] = 0;
+                to.balances[state.currency] += amt;
+            }
+        }
+    </script>
+</body>
+</html>

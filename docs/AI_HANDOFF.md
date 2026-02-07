@@ -24,8 +24,14 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 # Current Focus (WIP)
 - ~~Implementar fixes de auditoría de Liquidez:~~ ✅ COMPLETADO
+- ~~WalletCashWizard (Ingreso/Egreso/Transferencia):~~ ✅ IMPLEMENTADO (2026-02-07)
+- ~~CryptoBuySellWizard (Compra/Venta Cripto):~~ ✅ MVP IMPLEMENTADO (2026-02-07)
+- ~~PF Wizard: TEA + Rescatar UX:~~ ✅ IMPLEMENTADO (2026-02-07)
+- ~~FciBuySellWizard (Suscripción/Rescate FCI):~~ ✅ IMPLEMENTADO (2026-02-07)
+- ~~CedearBuySellWizard (Compra/Venta CEDEARs):~~ ✅ IMPLEMENTADO (2026-02-07)
 - Eliminar mocks de precios / formalizar fuentes (Yahoo Finance?)
 - Unificar Mis Activos (AssetsPage -> engine único)
+- Fix vitest 4.x test suite detection (all 9 test files affected)
 
 ---
 
@@ -44,6 +50,293 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 ---
 
 # Changelog / Sessions
+
+### 2026-02-07 — Claude Opus 4.6 — Feat: CedearBuySellWizard (Compra / Venta CEDEARs)
+
+**Goal:** Implementar flujo completo de Compra y Venta de CEDEARs dentro del MovementWizard, con soporte bimonetario (ARS / USD-MEP), métodos de costeo (PPP/PEPS/UEPS/Manual), y tabla de lotes para ventas.
+
+**Scope touched:**
+- `src/pages/movements/components/cedear/CedearBuySellWizard.tsx` (NEW — ~700 lines)
+- `src/pages/movements/components/cedear/index.ts` (NEW — barrel export)
+- `src/pages/movements/components/MovementWizard.tsx` (MODIFY — delegation + stepper + label)
+
+**Key Changes:**
+1. **CedearBuySellWizard** — Self-contained 3-step sub-wizard following CryptoBuySellWizard pattern:
+   - Step 1 (Activo): Buy/Sell toggle (emerald/rose), CEDEAR typeahead via `AssetTypeahead` + `listCedears()`, account selector via `AccountSelectCreatable`, datetime picker. Sell mode filters to owned tickers and accounts with balance.
+   - Step 2 (Detalles): Currency toggle ARS/USD(MEP), price with "Auto" market data from `useCedearPrices()`, integer qty enforcement, editable total (floor to int), commission %/$. Buy shows holding preview (new PPP). Sell shows costing method pills + `LotTable` sub-component with FIFO lot highlighting (auto methods) or manual input fields.
+   - Step 3 (Confirmar): Preview card with all details, movements to generate list, confirm button.
+   - Summary panel: subtotal, commission, net, cost basis (sell), result with color-coded P&L.
+2. **Dual currency:** ARS native, USD(MEP) = ARS / mepRate. `fxAtTrade` always stored as MEP sell rate. `fx` snapshot includes kind/rate/side/asOf.
+3. **Lot-based costing:** Reuses `allocateSale()` from `lot-allocation.ts` + `buildFifoLots()` from `fifo.ts`. Supports PPP/PEPS(FIFO)/UEPS(LIFO)/Manual. Manual mode validates sum equals sell qty.
+4. **MovementWizard changes:** Import + delegation at `step >= 2 && assetClass === 'cedear'`, stepper hidden, subtitle "Compra o venta de CEDEARs.", card label changed from "CEDEAR / Acción" to "CEDEAR".
+5. **Validations:** asset/account/price/qty required, sell qty <= available, manual allocs sum match, integer qty, NaN prevention via `safeFloat()`.
+
+**Reuse (no changes):** `lot-allocation.ts`, `fifo.ts`, `cedears/master.ts`, `use-cedear-prices.ts`, `use-fx-rates.ts`, `AssetTypeahead`, `AccountSelectCreatable`, `wizard-helpers.ts`.
+
+**Build:** ✅ 0 errors. **Lint:** ✅ 0 errors (120 warnings pre-existing).
+
+**Testing checklist (manual):**
+- [ ] Compra ARS: Select ticker, broker, set qty/price → verify summary → confirm
+- [ ] Compra USD(MEP): Toggle to USD, verify price conversion, verify "US$ X" format
+- [ ] Venta PPP/PEPS/UEPS: Select sell, pick ticker with position, verify lot table, verify result color
+- [ ] Venta Manual: Select manual, pick lots, verify qty cap, confirm
+- [ ] Verify movement appears in Movimientos list
+- [ ] Verify Mis Activos reflects updated position
+
+---
+
+### 2026-02-07 — Claude Opus 4.6 — Feat: PF Wizard Improvements (TEA + Rescatar UX)
+
+**Goal:** Mejorar el flujo de Plazos Fijos en el MovementWizard: (A) mostrar TEA calculada en Constituir derivada de TNA y Plazo, (B) rediseñar Rescatar con UI separada, bancos filtrados, selección de PF vigente, fecha validada, y campos readonly de confirmación.
+
+**Scope touched:** `src/domain/yield/accrual.ts` (EXTEND), `src/pages/movements/components/MovementWizard.tsx` (MODIFY).
+
+**Key Changes:**
+
+1. **`computeTermTEA(tna, termDays)` utility (`accrual.ts` — EXTEND):**
+   - Nueva función para TEA específica por plazo: `(1 + TNA/100 * days/365)^(365/days) - 1`
+   - Guards: retorna 0 si days <= 0 o TNA inválido
+
+2. **Constituir PF — TEA visible (Step 3):**
+   - Chip TEA emerald-400 debajo de inputs Plazo/TNA
+   - TEA también en panel derecho (Resumen Estimado) como línea TNA/TEA
+
+3. **Rescatar PF — UI separada:**
+   - **Step 2:** Banco filtrado a bancos con PF vigentes. PF Selector con auto-select si 1 solo PF. Filtra PFs redimidos.
+   - **Step 3:** Card readonly con datos del PF original + date picker [vencimiento, vencimiento+3d].
+   - **Step 4:** Layout específico rescate con código PF, capital, TNA/TEA, interés, total.
+
+4. **State management:** Tab switch resetea estado PF. Cambio de banco resetea PF seleccionado.
+
+5. **Bug fixes:** Step 4 bank name, pfFixedDepositMeta.providerName, maturityDate variable, ExistingPFSelector filter redeemed.
+
+**Files Changed:**
+- `src/domain/yield/accrual.ts` — EXTEND: `computeTermTEA()`
+- `src/pages/movements/components/MovementWizard.tsx` — MODIFY: PF wizard flow
+
+**Validación:**
+- `npm run build` ✅ (13.73s)
+- `npm run lint` ✅ (0 errors, 116 warnings — pre-existing)
+
+**Pendientes:**
+- [ ] Tooltip TEA en hover del chip
+- [ ] Verificación de cuenta cash destino antes de DEPOSIT
+- [ ] Tests unitarios para computeTermTEA y getActivePFs
+
+---
+
+### 2026-02-07 — Claude Opus 4.6 — Feat: CryptoBuySellWizard (Compra / Venta Cripto)
+
+**Goal:** Implementar sub-wizard dedicado para compra/venta de criptoactivos dentro del MovementWizard, siguiendo prototipo `modal_criptos.html` — con tabs Compra/Venta, toggle Monto/Qty, precio de mercado auto-fetch, métodos de costeo (PPP/PEPS/UEPS/Manual), tabla de lotes FIFO para ventas, y resumen con PnL.
+
+**Scope touched:** `src/pages/movements/components/crypto/CryptoBuySellWizard.tsx` (NEW), `src/pages/movements/components/crypto/index.ts` (NEW), `src/pages/movements/components/MovementWizard.tsx` (MODIFY).
+
+**Key Changes:**
+
+1. **CryptoBuySellWizard (`crypto/CryptoBuySellWizard.tsx` — NEW, ~1140 lines):**
+   - Self-contained 3-step sub-wizard with internal state machine
+   - **Mode tabs**: Compra (#6366F1 indigo) / Venta (#F43F5E rose) with glass-panel styling
+   - **Step 1 (Activo)**: CryptoTypeahead for asset search + AccountSelectCreatable for account. Sell mode filters to assets/accounts with balance > 0. Shows "Disponible" badge with qty + value.
+   - **Step 2 Buy (Detalles)**: Toggle Monto/Qty input, auto price from `useCryptoPrices()` with "Traer Mercado" button, fee toggle %/monto, datetime picker, summary card (precio, comisión, recibís, total)
+   - **Step 2 Sell (Detalles)**: Costing method pills (PPP/PEPS/UEPS/Baratos/Manual) from `COSTING_METHODS`, qty input with 25%/50%/MAX buttons, lot table from `buildFifoLots()` with auto-consumed highlight (non-manual) or checkbox+input (manual), summary card (bruto, comisión, neto, costo, PnL color-coded)
+   - **Step 3 (Confirmar)**: Preview card with all details, auto-balance USDT checkbox for exchanges, CTA "Confirmar Compra/Venta"
+   - **Persistence**: Finds/creates instrument, builds Movement with correct shape (BUY/SELL), `meta.allocations` + `meta.costingMethod` for sells, auto-balance USDT movement for non-stablecoin trades on exchanges
+   - **Validation**: No NaN (safeFloat), qty > 0, sell <= balance, manual allocation sum > 0, disabled buttons when invalid
+
+2. **MovementWizard delegation (`MovementWizard.tsx` — MODIFY):**
+   - When `assetClass === 'crypto'` and `step >= 2`, renders `<CryptoBuySellWizard>` instead of generic steps
+   - Hides stepper dots for crypto (same as wallet)
+   - Shows crypto-specific subtitle "Compra o venta de criptoactivos."
+
+**Reuse Points:**
+- `CryptoTypeahead` for asset search (CoinGecko API + local fallback)
+- `AccountSelectCreatable` for account picker
+- `useCryptoPrices(symbols)` for auto market pricing
+- `useFxRates()` for ARS conversion
+- `buildFifoLots()` for lot computation
+- `allocateSale()` + `COSTING_METHODS` for multi-method costing
+- `useCreateMovement()` / `useCreateInstrument()` for persistence
+- `sortAccountsForAssetClass()` for account ordering
+
+**Movement Shapes:**
+- **BUY**: type='BUY', assetClass='crypto', tradeCurrency='USD', fee object, netAmount=gross+fee, fx snapshot
+- **SELL**: type='SELL', assetClass='crypto', tradeCurrency='USD', fee object, netAmount=gross-fee, meta.allocations, meta.costingMethod, stablecoin settlementCurrency='ARS'
+- **Auto USDT**: isAuto=true, linkedMovementId, reason='auto_usdt_balance'
+
+**Files Changed:**
+- `src/pages/movements/components/crypto/CryptoBuySellWizard.tsx` — NEW: sub-wizard (~1140 lines)
+- `src/pages/movements/components/crypto/index.ts` — NEW: barrel export
+- `src/pages/movements/components/MovementWizard.tsx` — MODIFY: crypto delegation + stepper + subtitle
+
+**Decisions:**
+- **Sub-wizard pattern**: Same architecture as WalletCashWizard — self-contained, takes over body+footer when crypto is selected
+- **1 movement, not 2 legs**: Existing `autoBalanceUsdt` mechanism creates the USDT counterpart (not a 2-leg transaction)
+- **FIFO for lot display**: Builder uses FIFO for lot construction; costing method only affects sale allocation computation
+- **No engine changes**: fifo.ts, lot-allocation.ts, builder.ts, average-cost.ts untouched
+- **No new dependencies**: Pure React + existing project utilities
+
+**Validación:**
+- `npx tsc --noEmit` ✅ (0 errors)
+- `npm run build` ✅ (11.80s)
+- `npm run lint` ✅ (0 errors, 1 warning — pre-existing `no-explicit-any`)
+
+**Checklist de aceptación:**
+- [x] Tabs Compra/Venta con estilos del prototipo (indigo/rose)
+- [x] Step 1: CryptoTypeahead + AccountSelectCreatable + balance badge (sell)
+- [x] Step 2 Buy: Toggle Monto/Qty, auto price, fee, summary
+- [x] Step 2 Sell: Costing pills, qty with 25%/50%/MAX, lot table, PnL summary
+- [x] Step 3: Confirm preview + auto-balance USDT checkbox
+- [x] BUY movement persisted correctly
+- [x] SELL movement with meta.allocations + meta.costingMethod
+- [x] Auto-balance USDT for exchanges (non-stablecoin)
+- [x] Validation: sell <= balance, manual > 0, qty > 0
+- [x] Sin dependencias nuevas
+- [x] Build + lint pasan
+
+**Pendientes (Phase 2 — Hardening):**
+- [ ] Prefill mode from `prefillMovement` prop (edit existing movement)
+- [ ] Stablecoin sell: ARS settlement amount input (currently tags settlementCurrency='ARS' but no amount input)
+- [ ] Notes/comentarios input field in Step 2
+- [ ] Mobile responsive fine-tuning (lot table horizontal scroll)
+- [ ] Accessibility: aria labels, keyboard navigation
+- [ ] Performance: virtualized lot table for large histories
+- [ ] Unit tests for wizard state transitions
+
+---
+
+### 2026-02-07 — Claude Opus 4.6 — Fix: WalletCashWizard Footer/Navigation/Layout
+
+**Goal:** Corregir 3 bugs en el WalletCashWizard recién implementado: footer clipped (invisible en step 2), navegación Step2→Step3 bloqueada, y layout de transferencia (Desde/Hacia) no side-by-side.
+
+**Root Causes:**
+1. **Footer clipped**: Outer div usaba `h-full` en vez de `flex-1 min-h-0`. Como flex child del modal (85vh), `h-full` intentaba 100% del parent, overflow + `overflow-hidden` del modal clipeaba el footer.
+2. **Navigation bloqueada**: Mismo root cause — el botón "Siguiente" existía pero quedaba fuera del viewport.
+3. **Transfer layout stacked**: Desde/Hacia estaban apilados verticalmente; user requería side-by-side con arrow center.
+
+**Fixes Applied:**
+- `WalletCashWizard.tsx` L444: `h-full` → `flex-1 min-h-0`
+- `WalletCashWizard.tsx` L503: Removed `min-h-[300px]` from body (forced overflow)
+- `WalletCashWizard.tsx` L535: Footer upgraded to `bg-slate-900/80 backdrop-blur-sm relative z-20`
+- `WalletCashWizard.tsx` Step1Datos: Transfer layout restructured to `grid-cols-[1fr_auto_1fr]` with `ArrowLeftRight` icon center (desktop), `ArrowDown` stacked (mobile)
+- `WalletCashWizard.tsx` L767: Fixed CSS `focus:ring-[${theme.color}]` (invalid dynamic Tailwind class) → inline `--tw-ring-color` style
+- Added empty state messages for egreso/transfer when no accounts have positive balance
+
+**Files Changed:**
+- `src/pages/movements/components/wallet/WalletCashWizard.tsx` — FIX: layout, footer, transfer grid, CSS ring, empty states
+
+**Validación:**
+- `npx tsc --noEmit` ✅
+- `npm run build` ✅ (20.36s, CSS warnings about `${theme.color}` eliminated)
+- `npm run lint` ✅ (0 errors, 114 warnings)
+
+---
+
+### 2026-02-07 — Claude Opus 4.6 — Feat: WalletCashWizard (Ingreso / Egreso / Transferencia)
+
+**Goal:** Implementar sub-wizard dedicado para operaciones de billetera (Ingreso, Egreso con validación de saldo, Transferencia atómica) dentro del MovementWizard existente, siguiendo prototipo `modal_egresos_transferencias.html`.
+
+**Scope touched:** `src/domain/types.ts`, `src/pages/movements/components/wallet/WalletCashWizard.tsx` (NEW), `src/pages/movements/components/MovementWizard.tsx`, `src/index.css`.
+
+**Key Changes:**
+
+1. **Transfer meta fields (`types.ts` — EXTEND):**
+   - `meta.transferGroupId?: string` — Links TRANSFER_OUT and TRANSFER_IN movements
+   - `meta.counterpartyAccountId?: string` — The other account in a transfer
+   - `meta.direction?: 'in' | 'out'` — Direction of the transfer movement
+
+2. **WalletCashWizard (`wallet/WalletCashWizard.tsx` — NEW, ~990 lines):**
+   - Self-contained 3-step sub-wizard with internal state machine
+   - **Segmented control**: Ingreso (#6366F1) / Egreso (#F43F5E) / Transferencia (#0EA5E9) with sliding indicator
+   - **Step 1 (Datos)**: Date picker, account selector (filtered by balance for Egreso/Transfer), remunerada checkbox with TNA/TEA for Ingreso, destination account for Transfer
+   - **Step 2 (Monto)**: Currency selector (filtered by positive balance), large amount input, quick actions (25%/50%/MAX), Ajuste Rápido for Egreso (auto-calculate from real balance, switch-to-income CTA), shake animation on exceeding balance
+   - **Step 3 (Confirmar)**: Summary header with formatted amount badge, balance impact cards (current → new), date + note display
+   - **Persistence**:
+     - Ingreso: single DEPOSIT via `useCreateMovement` + optional cashYield update
+     - Egreso: single WITHDRAW with hard balance validation
+     - Transfer: atomic `db.transaction('rw', db.movements, bulkAdd)` for TRANSFER_OUT + TRANSFER_IN, manual React Query invalidation
+   - **Sub-components**: `Step1Datos`, `Step2Monto`, `Step3Confirm`, `BalanceChips`, `BalanceCard`, `AdjustmentFeedback`
+
+3. **MovementWizard delegation (`MovementWizard.tsx` — MODIFY):**
+   - When `assetClass === 'wallet'` and `step >= 2`, renders `<WalletCashWizard>` instead of generic steps 2-4
+   - Hides 4-step progress bar, shows wallet-specific subtitle
+   - All other asset classes unchanged
+
+4. **Shake animation (`index.css` — EXTEND):**
+   - Added `@keyframes shake` for validation feedback on amount exceeding balance
+
+**Reuse Points:**
+- `computeCashBalances()` from `cash-ledger.ts` for real-time balances
+- `AccountSelectCreatable` for account typeahead with create
+- `useCreateMovement()` for single movement persistence
+- `db.transaction()` for atomic transfer writes
+- `formatMoneyARS()`/`formatMoneyUSD()` for money formatting
+- `computeTEA()` for yield calculations
+
+**Edge Cases Handled:**
+- Origin === Destination blocked for transfers (validation + visual warning)
+- Account reset when switching to Egreso/Transfer if current account has no balance
+- Currency auto-reset when switching accounts (selects first valid currency)
+- Amount cleared on account/currency change
+- Double-submit protection via `submitting` flag
+- Ajuste Rápido: real > system → "Switch to Income" CTA with auto-prefill
+
+**Files Changed:**
+- `src/domain/types.ts` — EXTEND: 3 new meta fields for transfers
+- `src/pages/movements/components/wallet/WalletCashWizard.tsx` — NEW: sub-wizard (~990 lines)
+- `src/pages/movements/components/MovementWizard.tsx` — MODIFY: wallet delegation
+- `src/index.css` — EXTEND: shake keyframe animation
+
+**Decisions:**
+- **Sub-wizard pattern**: WalletCashWizard is self-contained within the modal, taking over body+footer when wallet is selected. This avoids modifying the 1400-line MovementWizard inline.
+- **Atomic transfers**: Used Dexie `db.transaction('rw', ...)` with `bulkAdd` for 2 linked movements, bypassing the hook and manually invalidating React Query caches.
+- **Balance computation**: Reused `computeCashBalances()` from `cash-ledger.ts` (already supports TRANSFER_IN/OUT) rather than new logic.
+- **No new dependencies**: Pure React + existing project utilities.
+
+**Validación:**
+- `npx tsc --noEmit` ✅ (0 errors)
+- `npm run build` ✅ (12.89s)
+- `npm run lint` ✅ (0 errors, 114 warnings — pre-existing)
+- `npm test` ⚠️ Vitest 4.x "No test suite found" on all 9 test files — pre-existing environment issue, not caused by these changes (no test files modified)
+
+**Checklist de aceptación:**
+- [x] Segmented control Ingreso/Egreso/Transferencia con sliding indicator
+- [x] Ingreso crea DEPOSIT + optional cashYield update
+- [x] Egreso valida saldo disponible (hard block)
+- [x] Quick actions 25%/50%/MAX en Egreso
+- [x] Ajuste Rápido calcula egreso desde saldo real del banco
+- [x] Ajuste Rápido → "Cambiar a Ingreso" si real > sistema
+- [x] Transferencia crea 2 movimientos atómicos (TRANSFER_OUT + TRANSFER_IN)
+- [x] Transferencia bloquea origen === destino
+- [x] Balance impact preview en Step 3
+- [x] Shake animation cuando monto excede saldo
+- [x] Sin dependencias nuevas
+- [x] Build + lint pasan
+
+**Pendientes (nice-to-have):**
+- [ ] Edición/eliminación de transferencias (borrar ambas piernas)
+- [ ] Transferencia cross-currency (ARS→USD con tipo de cambio)
+- [ ] Prefill de transferencia desde Mis Activos (CTA "Transferir" en wallet detail)
+- [ ] Tests unitarios para WalletCashWizard (component tests)
+- [ ] Fix vitest 4.x compatibility for all existing test suites
+
+---
+
+### 2026-02-07 — Antigravity — Auditoría Movimientos (Egreso/Transfer)
+
+**Objetivo:** Auditar el sistema actual de Movimientos para entender registro, impacto en Mis Activos, y planificar Egreso (Validation) y Transferencia.
+
+**Archivos tocados:** `docs/audits/2026-02-07_audit-movimientos-egreso-transfer.md` (NUEVO).
+
+**Hallazgos:**
+- Sistema robusto con tipos `TRANSFER_IN` y `TRANSFER_OUT` soportados por motor `cash-ledger.ts`.
+- Egreso (`WITHDRAW`) existe pero la UI (`MovementWizard`) no valida saldo disponible.
+- Transferencia UI inexistente; se debe implementar creando 2 movimientos atómicos linkeados.
+
+**Validación:**
+- `npm run build` ✅ (25.15s)
+- `npm run lint` (Iniciado, asumido OK como baseline)
+
+---
 
 ### 2026-02-05 — Claude Opus 4.6 — Feat: KPI Dashboard Premium (4 Cards) para Mis Activos V2
 
@@ -1054,3 +1347,57 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 **Pendientes:**
 - `src/features/assets` no se elimina en este ticket porque sigue siendo dependencia activa de `src/features/portfolioV2/usePortfolioV2.ts` (`useAssetsRows`).
+
+---
+
+## 2026-02-07 — Feat: FCI Sell Validation + Bidirectional Inputs + Cash Deposit (FciBuySellWizard)
+
+**Objetivo:** Modificar el flujo "Nuevo Movimiento → FCI" para diferenciar Compra (Suscripción) de Venta (Rescate). El rescate valida holdings reales, muestra inputs bidireccionales qty/total, y genera atómicamente SELL + DEPOSIT.
+
+**Archivos creados:**
+- `src/pages/movements/components/fci/FciBuySellWizard.tsx` — Sub-wizard completo para FCI (Suscripción/Rescate)
+- `src/pages/movements/components/fci/index.ts` — Barrel export
+
+**Archivos modificados:**
+- `src/pages/movements/components/MovementWizard.tsx` — Import + delegación a FciBuySellWizard cuando `assetClass === 'fci'` en step >= 2, header subtitle, step dots hide
+- `docs/AI_HANDOFF.md` — Este checkpoint
+
+**Funcionalidad implementada:**
+
+1. **Modo Suscripción (Compra):**
+   - Selección de cualquier cuenta + cualquier FCI del mercado
+   - Inputs bidireccionales: qty (cuotapartes) ↔ total (moneda base)
+   - Precio VCP auto desde `useFciPrices()` con override manual
+   - Comisión configurable (% o fijo)
+   - Resumen con equivalencias ARS/USD vía FX Oficial
+   - Persiste un movimiento BUY con meta.fci snapshot
+
+2. **Modo Rescate (Venta):**
+   - **Filtrado por holdings:** Solo muestra cuentas con FCI qty > 0, solo fondos con tenencia en la cuenta seleccionada
+   - **Auto-selección:** Si 1 sola cuenta → autoselect, si 1 solo FCI en cuenta → autoselect
+   - **Empty state:** "Sin posiciones FCI" cuando no hay nada para rescatar
+   - **Badge disponible:** Muestra qty disponible + valor aprox. en Step 1
+   - **Inputs bidireccionales:** qty ↔ total, recálculo cruzado al editar, clamped a qty disponible
+   - **Quick fill:** Botones 25% / 50% / MAX
+   - **Precio VCP:** Auto desde mercado con badge AUTO/MANUAL, warning si no hay cotización
+   - **Persistencia atómica:** `db.transaction('rw', db.movements, ...)` crea SELL (fci) + DEPOSIT (wallet) con `groupId` compartido
+   - **Acreditación:** DEPOSIT en moneda base del fondo (ARS o USD) en la misma cuenta
+   - **Invalidación:** Manual de queries `['movements']` y `['portfolio']` post-transacción
+
+3. **Moneda/FX:**
+   - Moneda bloqueada a la del fondo (ARS o USD)
+   - Equivalencias ARS/USD con FX Oficial (venta) en resumen y confirmación
+   - `fx` snapshot con `kind: 'OFICIAL'` en ambos movimientos
+
+**Patrón seguido:** `CryptoBuySellWizard` — misma estructura de 3 steps, ModeTabs, Stepper, footer con Volver/Siguiente, delegation desde MovementWizard.
+
+**Checklist de aceptación:**
+- [x] `npx tsc --noEmit` → 0 errors
+- [x] `npm run build` → OK (production build exitoso)
+- [x] `npm run lint` → 0 errors (117 warnings pre-existentes)
+- [ ] QA Manual: Compra FCI ARS → movimiento BUY registrado, posición sube
+- [ ] QA Manual: Venta FCI → solo cuentas/fondos con tenencia, inputs bidireccionales, qty clamped
+- [ ] QA Manual: Venta parcial y total → posición baja, liquidez sube en misma cuenta
+- [ ] QA Manual: FCI USD → precio y total en USD, DEPOSIT en CASH_USD
+- [ ] QA Manual: Sin posiciones → empty state, no avanza
+- [ ] QA Manual: Sin precio mercado → warning, input manual habilitado

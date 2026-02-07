@@ -2,11 +2,21 @@
 import { Account, Movement } from '@/domain/types'
 
 /**
- * Calculate TEA from TNA
+ * Calculate TEA from TNA (daily compounding)
  * TEA = (1 + TNA/365)^365 - 1
  */
 export function computeTEA(tna: number): number {
     return Math.pow(1 + (tna / 100) / 365, 365) - 1
+}
+
+/**
+ * Calculate TEA for a specific term (PF / fixed deposit)
+ * TEA = (1 + TNA/100 * days/365)^(365/days) - 1
+ */
+export function computeTermTEA(tna: number, termDays: number): number {
+    if (termDays <= 0 || !Number.isFinite(tna) || tna <= 0) return 0
+    const ratePeriod = (tna / 100) * (termDays / 365)
+    return Math.pow(1 + ratePeriod, 365 / termDays) - 1
 }
 
 export interface YieldMetrics {

@@ -173,6 +173,12 @@ export interface Movement {
          * If undefined, will use tradeCurrency amount converted via FX.
          */
         settlementArs?: number
+        /** Transfer group ID linking TRANSFER_OUT and TRANSFER_IN movements */
+        transferGroupId?: string
+        /** The counterparty account for a transfer (destination for OUT, origin for IN) */
+        counterpartyAccountId?: string
+        /** Direction of the transfer movement */
+        direction?: 'in' | 'out'
     }
 }
 

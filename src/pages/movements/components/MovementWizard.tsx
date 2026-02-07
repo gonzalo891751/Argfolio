@@ -22,49 +22,85 @@ import { listCedears } from '@/domain/cedears/master'
 import { CryptoTypeahead, type CryptoOption } from './CryptoTypeahead'
 import { FciTypeahead, generateFciSlug } from './FciTypeahead'
 import { db } from '@/db'
-import { computeTEA } from '@/domain/yield/accrual'
+import { computeTEA, computeTermTEA } from '@/domain/yield/accrual'
 
 const formatQty = (n: number) => n.toLocaleString('es-AR', { maximumFractionDigits: 8 })
 import { AssetTypeahead, type AssetOption, MOCK_ASSETS } from './AssetTypeahead'
 import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
 import { sortAccountsForAssetClass, calculateUnitPrice, calculateTotal, sanitizeFloat } from './wizard-helpers'
+import { WalletCashWizard } from './wallet/WalletCashWizard'
+import { CryptoBuySellWizard } from './crypto'
+import { FciBuySellWizard } from './fci'
+import { CedearBuySellWizard } from './cedear'
+
+// Max days after maturity to allow redemption
+const PF_REDEEM_MARGIN_DAYS = 3
+
+// Helper: get active (non-redeemed) PF BUY movements
+function getActivePFs(movements: Movement[], accountId?: string): Movement[] {
+    // Collect redeemed pfGroupIds
+    const redeemedGroupIds = new Set<string>()
+    const redeemedPfIds = new Set<string>()
+    movements.forEach(m => {
+        if (m.assetClass === 'pf' && m.type === 'SELL') {
+            if (m.meta?.pfGroupId) redeemedGroupIds.add(m.meta.pfGroupId)
+            if (m.pf?.pfId) redeemedPfIds.add(m.pf.pfId)
+        }
+    })
+
+    return movements.filter(m => {
+        if (m.assetClass !== 'pf' || m.type !== 'BUY') return false
+        if (accountId && m.accountId !== accountId) return false
+        // Exclude if explicitly redeemed
+        if (m.meta?.fixedDeposit?.redeemedAt) return false
+        // Exclude if a matching SELL exists
+        const gid = m.meta?.pfGroupId || m.meta?.fixedDeposit?.pfGroupId
+        if (gid && redeemedGroupIds.has(gid)) return false
+        if (redeemedPfIds.has(m.id)) return false
+        return true
+    }).sort((a, b) => new Date(b.datetimeISO).getTime() - new Date(a.datetimeISO).getTime())
+}
 
 // Helper Component for PF Selection
 function ExistingPFSelector({
     accountId,
     movements,
+    selectedId,
     onSelect
 }: {
     accountId: string,
     movements: Movement[],
+    selectedId?: string,
     onSelect: (m: Movement) => void
 }) {
-    // Filter active PFs (Constitutions) for this account
-    const activePFs = useMemo(() => {
-        return movements
-            .filter(m => m.assetClass === 'pf' && m.type === 'BUY' && m.accountId === accountId)
-            .sort((a, b) => new Date(b.datetimeISO).getTime() - new Date(a.datetimeISO).getTime())
-    }, [movements, accountId])
+    const activePFs = useMemo(() => getActivePFs(movements, accountId), [movements, accountId])
+
+    // Auto-select if only 1 PF
+    useEffect(() => {
+        if (activePFs.length === 1 && !selectedId) {
+            onSelect(activePFs[0])
+        }
+    }, [activePFs, selectedId])
 
     if (activePFs.length === 0) {
-        return <div className="text-sm text-slate-500 italic p-3 border border-white/10 rounded-lg">No hay Plazos Fijos registrados en esta cuenta.</div>
+        return <div className="text-sm text-slate-500 italic p-3 border border-white/10 rounded-lg">No hay Plazos Fijos vigentes en esta cuenta.</div>
     }
 
     return (
         <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">Seleccionar PF Vigente</label>
             <select
+                value={selectedId || ''}
                 onChange={(e) => {
                     const m = activePFs.find(p => p.id === e.target.value)
                     if (m) onSelect(m)
                 }}
                 className="input-base w-full rounded-lg px-4 py-3 text-white appearance-none bg-slate-800"
-                defaultValue=""
             >
                 <option value="" disabled>Seleccioná un PF...</option>
                 {activePFs.map(pf => (
                     <option key={pf.id} value={pf.id}>
-                        {pf.meta?.pfCode || pf.alias || 'Sin Código'} — {formatMoneyARS(pf.meta?.fixedDeposit?.totalARS ?? pf.pf?.totalToCollectARS ?? 0)} ({new Date(pf.meta?.fixedDeposit?.maturityDate ?? pf.pf?.maturityISO ?? '').toLocaleDateString()})
+                        {pf.meta?.pfCode || pf.alias || 'Sin Código'} — {formatMoneyARS(pf.meta?.fixedDeposit?.totalARS ?? pf.pf?.totalToCollectARS ?? 0)} (Vto: {new Date(pf.meta?.fixedDeposit?.maturityDate ?? pf.pf?.maturityISO ?? '').toLocaleDateString()})
                     </option>
                 ))}
             </select>
@@ -96,12 +132,21 @@ interface WizardState {
     feeValue?: number // can be %
     feeCurrency: Currency
     // PF State & Cash Yield
-    // PF State & Cash Yield
     bank?: string
-    // Removed duplicates
     alias?: string
-    pfCode?: string // New mandatory code
-    selectedPfMovementId?: string // For manual redemption
+    pfCode?: string
+    selectedPfMovementId?: string
+    selectedPfData?: {
+        pfCode: string
+        bank: string
+        capitalARS: number
+        tna: number
+        termDays: number
+        startDate: string
+        maturityDate: string
+        interestARS: number
+        totalARS: number
+    }
     tna?: number
     termDays?: number
     yieldEnabled?: boolean
@@ -135,7 +180,7 @@ const ASSET_CLASS_CONFIG: Record<
     { label: string; description: string; icon: typeof Building2; color: string }
 > = {
     cedear: {
-        label: 'CEDEAR / Acción',
+        label: 'CEDEAR',
         description: 'Apple, SPY, GGAL...',
         icon: Building2,
         color: 'bg-indigo-500/20 text-indigo-400',
@@ -494,12 +539,12 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 }
 
                 if (state.opType === 'redeem') {
-                    if (!state.qty || state.qty <= 0) {
-                        toast({ title: 'Error de validación', description: 'El monto cobrado debe ser mayor a 0.', variant: 'error' })
+                    if (!state.selectedPfMovementId || !state.selectedPfData) {
+                        toast({ title: 'Error de validación', description: 'Seleccioná un Plazo Fijo para rescatar.', variant: 'error' })
                         return
                     }
-                    if (state.qty > availableQty) {
-                        toast({ title: 'Error de validación', description: `No puedes rescatar más de lo disponible (${formatQty(availableQty)}).`, variant: 'error' })
+                    if (!state.selectedPfData.totalARS || state.selectedPfData.totalARS <= 0) {
+                        toast({ title: 'Error de validación', description: 'El PF seleccionado no tiene monto válido.', variant: 'error' })
                         return
                     }
                 } else {
@@ -692,27 +737,38 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     }
                 }
 
-                pfPrincipal = state.qty || 0
-                const rate = (state.tna || 0) / 100
-                pfDays = state.termDays || 30
-                pfInterest = pfPrincipal * rate * (pfDays / 365)
-                pfTotal = pfPrincipal + pfInterest
+                if (state.opType === 'redeem' && state.selectedPfData) {
+                    // Use original PF data for redeem — not editable state
+                    pfPrincipal = state.selectedPfData.capitalARS
+                    pfDays = state.selectedPfData.termDays
+                    pfInterest = state.selectedPfData.interestARS
+                    pfTotal = state.selectedPfData.totalARS
+                    pfMaturityDate = new Date(state.selectedPfData.maturityDate)
+                } else {
+                    pfPrincipal = state.qty || 0
+                    const rate = (state.tna || 0) / 100
+                    pfDays = state.termDays || 30
+                    pfInterest = pfPrincipal * rate * (pfDays / 365)
+                    pfTotal = pfPrincipal + pfInterest
 
-                const matDate = new Date(state.datetime)
-                matDate.setDate(matDate.getDate() + pfDays)
-                pfMaturityDate = matDate
+                    const matDate = new Date(state.datetime)
+                    matDate.setDate(matDate.getDate() + pfDays)
+                    pfMaturityDate = matDate
+                }
 
                 pfFixedDepositMeta = {
                     pfGroupId,
                     pfCode,
-                    bank: accountsList.find(a => a.id === state.accountId)?.name || 'Desconocido',
+                    providerName: accountsList.find(a => a.id === state.accountId)?.name || 'Desconocido',
                     principalARS: pfPrincipal,
                     interestARS: pfInterest,
                     totalARS: pfTotal,
                     tna: state.tna || 0,
                     termDays: pfDays,
-                    startDate: new Date(state.datetime).toISOString(),
-                    maturityDate: matDate.toISOString(),
+                    startDate: state.opType === 'redeem' && state.selectedPfData
+                        ? state.selectedPfData.startDate
+                        : new Date(state.datetime).toISOString(),
+                    maturityDate: pfMaturityDate ? pfMaturityDate.toISOString() : '',
                     expectedInterestARS: pfInterest,
                     expectedTotalARS: pfTotal,
                     settlementMode: 'manual',
@@ -754,7 +810,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 // PF Specific Payload
                 bank: accountsList.find(a => a.id === state.accountId)?.name || state.bank, // Prefer account name
                 alias: state.alias,
-                principalARS: state.assetClass === 'pf' ? state.qty : undefined,
+                principalARS: state.assetClass === 'pf' ? pfPrincipal : undefined,
                 termDays: state.termDays,
                 tna: state.tna,
 
@@ -878,12 +934,12 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         ticker: 'ARS', // It's cash
                         assetName: 'Acreditación Plazo Fijo',
 
-                        quantity: movementPayload.totalARS || state.qty || 0, // ARS Amount
+                        quantity: pfTotal || movementPayload.totalARS || state.qty || 0, // ARS Amount (pfTotal from selectedPfData)
                         unitPrice: 1,
                         tradeCurrency: 'ARS',
 
-                        totalAmount: movementPayload.totalARS || state.qty || 0,
-                        netAmount: movementPayload.totalARS || state.qty || 0,
+                        totalAmount: pfTotal || movementPayload.totalARS || state.qty || 0,
+                        netAmount: pfTotal || movementPayload.totalARS || state.qty || 0,
 
                         meta: {
                             pfGroupId: movementPayload.meta.pfGroupId,
@@ -1060,21 +1116,35 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                 <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-[#0F172A] shrink-0">
                     <div>
                         <h2 className="font-display text-xl font-bold text-white">Nuevo Movimiento</h2>
-                        <div className="flex gap-2 mt-2">
-                            {[1, 2, 3, 4].map(s => (
-                                <div
-                                    key={s}
-                                    className={cn(
-                                        'h-1 w-8 rounded-full transition-all duration-300',
-                                        s < step
-                                            ? 'bg-emerald-500'
-                                            : s === step
-                                                ? 'bg-indigo-500'
-                                                : 'bg-white/10'
-                                    )}
-                                />
-                            ))}
-                        </div>
+                        {!(step >= 2 && (state.assetClass === 'wallet' || state.assetClass === 'crypto' || state.assetClass === 'fci' || state.assetClass === 'cedear')) && (
+                            <div className="flex gap-2 mt-2">
+                                {[1, 2, 3, 4].map(s => (
+                                    <div
+                                        key={s}
+                                        className={cn(
+                                            'h-1 w-8 rounded-full transition-all duration-300',
+                                            s < step
+                                                ? 'bg-emerald-500'
+                                                : s === step
+                                                    ? 'bg-indigo-500'
+                                                    : 'bg-white/10'
+                                        )}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                        {step >= 2 && state.assetClass === 'wallet' && (
+                            <p className="text-sm text-slate-400 mt-0.5">Ajustá manualmente tus saldos o registrá operaciones.</p>
+                        )}
+                        {step >= 2 && state.assetClass === 'crypto' && (
+                            <p className="text-sm text-slate-400 mt-0.5">Compra o venta de criptoactivos.</p>
+                        )}
+                        {step >= 2 && state.assetClass === 'fci' && (
+                            <p className="text-sm text-slate-400 mt-0.5">Suscripción o rescate de Fondos Comunes de Inversión.</p>
+                        )}
+                        {step >= 2 && state.assetClass === 'cedear' && (
+                            <p className="text-sm text-slate-400 mt-0.5">Compra o venta de CEDEARs.</p>
+                        )}
                     </div>
                     <button
                         onClick={() => onOpenChange(false)}
@@ -1084,6 +1154,37 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                     </button>
                 </div>
 
+                {/* Sub-wizards: take over body+footer when asset class is selected */}
+                {step >= 2 && state.assetClass === 'cedear' ? (
+                    <CedearBuySellWizard
+                        accounts={accountsList}
+                        movements={allMovements}
+                        instruments={instrumentsList}
+                        onClose={() => onOpenChange(false)}
+                    />
+                ) : step >= 2 && state.assetClass === 'crypto' ? (
+                    <CryptoBuySellWizard
+                        accounts={accountsList}
+                        movements={allMovements}
+                        instruments={instrumentsList}
+                        prefillMovement={prefillMovement}
+                        onClose={() => onOpenChange(false)}
+                    />
+                ) : step >= 2 && state.assetClass === 'wallet' ? (
+                    <WalletCashWizard
+                        accounts={accountsList}
+                        movements={allMovements}
+                        instruments={instrumentsList}
+                        onClose={() => onOpenChange(false)}
+                    />
+                ) : step >= 2 && state.assetClass === 'fci' ? (
+                    <FciBuySellWizard
+                        accounts={accountsList}
+                        movements={allMovements}
+                        instruments={instrumentsList}
+                        onClose={() => onOpenChange(false)}
+                    />
+                ) : (<>
                 {/* Body - Scrollable */}
                 <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#0F172A]">
                     {/* Step 1 */}
@@ -1212,7 +1313,13 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                     name="op_type"
                                                     value="constitute"
                                                     checked={state.opType === 'constitute'}
-                                                    onChange={() => setState(s => ({ ...s, opType: 'constitute' }))}
+                                                    onChange={() => setState(s => ({
+                                                        ...s, opType: 'constitute',
+                                                        qty: 0, qtyStr: '',
+                                                        selectedPfMovementId: undefined, selectedPfData: undefined,
+                                                        pfCode: `PF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+                                                        tna: 35, termDays: 30,
+                                                    }))}
                                                     className="sr-only"
                                                 />
                                                 Constituir
@@ -1221,7 +1328,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                 className={cn(
                                                     'flex-1 px-4 py-2 rounded-md cursor-pointer transition text-center text-sm font-medium whitespace-nowrap',
                                                     state.opType === 'redeem'
-                                                        ? 'bg-indigo-500 text-white'
+                                                        ? 'bg-amber-500 text-white'
                                                         : 'hover:bg-white/5 text-slate-400'
                                                 )}
                                             >
@@ -1230,7 +1337,12 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                     name="op_type"
                                                     value="redeem"
                                                     checked={state.opType === 'redeem'}
-                                                    onChange={() => setState(s => ({ ...s, opType: 'redeem' }))}
+                                                    onChange={() => setState(s => ({
+                                                        ...s, opType: 'redeem',
+                                                        qty: 0, qtyStr: '',
+                                                        selectedPfMovementId: undefined, selectedPfData: undefined,
+                                                        pfCode: undefined, tna: undefined, termDays: undefined,
+                                                    }))}
                                                     className="sr-only"
                                                 />
                                                 Rescatar
@@ -1290,11 +1402,20 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                 </label>
                                                 <AccountSelectCreatable
                                                     value={state.accountId}
-                                                    onChange={val => setState(s => ({ ...s, accountId: val }))}
-                                                    accounts={accountsList}
-                                                    placeholder="Ej: Naranja X, Banco Galicia..."
+                                                    onChange={val => setState(s => ({
+                                                        ...s, accountId: val,
+                                                        // Reset PF selection when changing bank
+                                                        ...(s.opType === 'redeem' ? { selectedPfMovementId: undefined, selectedPfData: undefined, qty: 0, qtyStr: '' } : {})
+                                                    }))}
+                                                    accounts={state.opType === 'redeem'
+                                                        ? accountsList.filter(acc => getActivePFs(allMovements, acc.id).length > 0)
+                                                        : accountsList}
+                                                    placeholder={state.opType === 'redeem' ? 'Bancos con PF vigentes...' : 'Ej: Naranja X, Banco Galicia...'}
                                                     className="w-full"
                                                 />
+                                                {state.opType === 'redeem' && accountsList.length > 0 && accountsList.filter(acc => getActivePFs(allMovements, acc.id).length > 0).length === 0 && (
+                                                    <p className="text-xs text-amber-400 mt-2">No hay bancos con Plazos Fijos vigentes. Primero constituí un PF.</p>
+                                                )}
                                             </div>
                                             <div>
                                                 {state.opType === 'constitute' ? (
@@ -1323,34 +1444,45 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                         </div>
                                                     </>
                                                 ) : (
-                                                    // REDEEM: Select existing PF
-                                                    // Note: We need to define PFSelector or inline it. 
-                                                    // Ideally we lift state up, but here we can just use a simple select for now or a custom component.
-                                                    // Since we can't easily access 'movements' here without fetching, I'll assume we fetched them.
-                                                    // Wait, I need to add the hook call in the component body first! 
-                                                    // This tool call is just replacing JSX. I have NOT added the hook call line yet.
-                                                    // I should fallback to a placeholder text if I haven't added the hook yet.
-                                                    // I will add the hook call in the NEXT step or PREVIOUS?
-                                                    // I imported the hook, but didn't call it. 
-                                                    // I'll rewrite this block to use a placeholder "Select" for now, 
-                                                    // but I really should have added the hook logic first.
-                                                    // I'll add the hook logic in this same step if possible with multi_replace?
-                                                    // No, I can't easily target the top of body. 
-                                                    // I will stick to adding the JSX assuming I will add the hook immediately after.
                                                     <ExistingPFSelector
                                                         accountId={state.accountId}
                                                         movements={allMovements}
+                                                        selectedId={state.selectedPfMovementId}
                                                         onSelect={(pf) => {
+                                                            const fd = pf.meta?.fixedDeposit
+                                                            const capital = fd?.principalARS ?? pf.pf?.capitalARS ?? pf.principalARS ?? pf.quantity ?? 0
+                                                            const tna = fd?.tna ?? pf.pf?.tna ?? pf.tna ?? 0
+                                                            const termDays = fd?.termDays ?? pf.pf?.termDays ?? pf.termDays ?? 30
+                                                            const interest = fd?.interestARS ?? pf.pf?.interestARS ?? (capital * (tna / 100) * (termDays / 365))
+                                                            const total = fd?.totalARS ?? pf.pf?.totalToCollectARS ?? (capital + interest)
+                                                            const startDate = fd?.startDate ?? pf.pf?.startAtISO ?? pf.datetimeISO
+                                                            const maturityDate = fd?.maturityDate ?? pf.pf?.maturityISO ?? ''
+                                                            const bank = fd?.providerName ?? pf.bank ?? accountsList.find(a => a.id === pf.accountId)?.name ?? ''
+
+                                                            // Default datetime to maturity date
+                                                            const matDateForInput = maturityDate ? new Date(maturityDate) : new Date()
+                                                            matDateForInput.setMinutes(matDateForInput.getMinutes() - matDateForInput.getTimezoneOffset())
+
                                                             setState(s => ({
                                                                 ...s,
                                                                 pfCode: pf.meta?.pfCode || pf.alias || 'PF-UNK',
                                                                 selectedPfMovementId: pf.id,
-                                                                // Prefill redemption details from Constitution
-                                                                qty: pf.meta?.fixedDeposit?.totalARS || pf.pf?.totalToCollectARS || 0,
-                                                                qtyStr: (pf.meta?.fixedDeposit?.totalARS || pf.pf?.totalToCollectARS || 0).toString(),
-                                                                tna: pf.meta?.fixedDeposit?.tna || pf.pf?.tna || 0,
-                                                                termDays: pf.meta?.fixedDeposit?.termDays || pf.pf?.termDays || 0,
-                                                                datetime: new Date().toISOString().slice(0, 16) // Default to now (Redemption date)
+                                                                selectedPfData: {
+                                                                    pfCode: pf.meta?.pfCode || pf.alias || 'PF',
+                                                                    bank,
+                                                                    capitalARS: capital,
+                                                                    tna,
+                                                                    termDays,
+                                                                    startDate,
+                                                                    maturityDate,
+                                                                    interestARS: interest,
+                                                                    totalARS: total,
+                                                                },
+                                                                qty: total,
+                                                                qtyStr: total.toString(),
+                                                                tna,
+                                                                termDays,
+                                                                datetime: matDateForInput.toISOString().slice(0, 16),
                                                             }))
                                                         }}
                                                     />
@@ -1559,9 +1691,9 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                                 {/* Left: Inputs */}
                                 <div className="lg:col-span-7 space-y-6">
-                                    {state.assetClass === 'pf' ? (
+                                    {state.assetClass === 'pf' && state.opType === 'constitute' ? (
                                         <div className="space-y-6">
-                                            {/* PF Inputs */}
+                                            {/* Constituir PF Inputs */}
                                             <div>
                                                 <label className="block text-sm font-medium text-slate-400 mb-2">
                                                     Capital a Invertir (ARS)
@@ -1578,15 +1710,6 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                         placeholder="0.00"
                                                         className="input-base w-full rounded-lg pl-8 pr-4 py-3 text-white font-mono text-lg"
                                                     />
-                                                    {(['sell', 'sell_usd', 'redeem'].includes(state.opType) && availableQty < Infinity) && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setState(s => ({ ...s, qtyStr: availableQty.toString().replace('.', ','), qty: availableQty }))}
-                                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-white/10 hover:bg-white/20 text-indigo-300 px-2 py-1 rounded transition-colors"
-                                                        >
-                                                            Max: {formatQty(availableQty)}
-                                                        </button>
-                                                    )}
                                                 </div>
                                             </div>
 
@@ -1621,6 +1744,103 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* TEA Chip */}
+                                            {(state.tna || 0) > 0 && (state.termDays || 0) > 0 && (
+                                                <div className="flex items-center gap-2 text-xs">
+                                                    <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-medium" title="Tasa Efectiva Anual para el plazo elegido">
+                                                        TEA: {formatPercent(computeTermTEA(state.tna || 0, state.termDays || 30))}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : state.assetClass === 'pf' && state.opType === 'redeem' ? (
+                                        <div className="space-y-6">
+                                            {/* Rescatar PF — readonly summary + date picker */}
+                                            {!state.selectedPfData ? (
+                                                <div className="p-6 border border-white/10 rounded-xl text-center text-slate-500 text-sm">
+                                                    Seleccioná un Plazo Fijo en el paso anterior para continuar.
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {/* PF Info Card (readonly) */}
+                                                    <div className="p-5 rounded-xl bg-slate-800/50 border border-white/10 space-y-3">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <span className="text-xs font-mono text-indigo-400 uppercase tracking-wider">{state.selectedPfData.pfCode}</span>
+                                                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">Rescate</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                                            <div>
+                                                                <span className="text-slate-500 text-xs">Capital</span>
+                                                                <div className="text-white font-mono">{formatMoneyARS(state.selectedPfData.capitalARS)}</div>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-slate-500 text-xs">Plazo</span>
+                                                                <div className="text-white font-mono">{state.selectedPfData.termDays} días</div>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-slate-500 text-xs">TNA</span>
+                                                                <div className="text-white font-mono">{state.selectedPfData.tna}%</div>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-slate-500 text-xs">TEA</span>
+                                                                <div className="text-emerald-400 font-mono">{formatPercent(computeTermTEA(state.selectedPfData.tna, state.selectedPfData.termDays))}</div>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-slate-500 text-xs">Interés</span>
+                                                                <div className="text-emerald-400 font-mono">+{formatMoneyARS(state.selectedPfData.interestARS)}</div>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-slate-500 text-xs">Total a Cobrar</span>
+                                                                <div className="text-white font-mono font-bold">{formatMoneyARS(state.selectedPfData.totalARS)}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-4 pt-2 border-t border-white/5 text-xs text-slate-500">
+                                                            <span>Inicio: {new Date(state.selectedPfData.startDate).toLocaleDateString()}</span>
+                                                            <span>Vto: {new Date(state.selectedPfData.maturityDate).toLocaleDateString()}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Redemption Date */}
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                            Fecha de Rescate
+                                                        </label>
+                                                        <input
+                                                            type="datetime-local"
+                                                            value={state.datetime}
+                                                            onChange={e => setState(s => ({ ...s, datetime: e.target.value }))}
+                                                            className="input-base w-full rounded-lg px-4 py-3 text-white"
+                                                        />
+                                                        {(() => {
+                                                            if (!state.selectedPfData?.maturityDate) return null
+                                                            const matDate = new Date(state.selectedPfData.maturityDate)
+                                                            const maxDate = new Date(matDate)
+                                                            maxDate.setDate(maxDate.getDate() + PF_REDEEM_MARGIN_DAYS)
+                                                            const redeemDate = new Date(state.datetime)
+                                                            if (redeemDate < matDate) {
+                                                                return <p className="text-xs text-rose-400 mt-1.5">La fecha de rescate no puede ser anterior al vencimiento ({matDate.toLocaleDateString()}).</p>
+                                                            }
+                                                            if (redeemDate > maxDate) {
+                                                                return <p className="text-xs text-rose-400 mt-1.5">La fecha excede el margen de {PF_REDEEM_MARGIN_DAYS} días post-vencimiento ({maxDate.toLocaleDateString()}).</p>
+                                                            }
+                                                            return <p className="text-xs text-slate-500 mt-1.5">Dentro del período válido de rescate.</p>
+                                                        })()}
+                                                    </div>
+
+                                                    {/* Notes */}
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-slate-400 mb-2">Notas (opcional)</label>
+                                                        <input
+                                                            type="text"
+                                                            value={state.notes}
+                                                            onChange={e => setState(s => ({ ...s, notes: e.target.value }))}
+                                                            placeholder="Ej: Rescate anticipado..."
+                                                            className="input-base w-full rounded-lg px-4 py-2.5 text-white text-sm"
+                                                        />
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     ) : state.assetClass === 'wallet' ? (
                                         <div className="space-y-6">
@@ -2034,16 +2254,67 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                         {state.assetClass === 'pf' ? (
                                             /* PF Summary */
                                             <div className="space-y-4">
-                                                {/* ... PF code ... */}
-                                                <div>
-                                                    <div className="text-sm text-slate-400 mb-1">Total al Vencimiento</div>
-                                                    <div className="text-3xl font-mono font-bold text-white tracking-tight">
-                                                        {formatMoneyARS(state.qty + (state.qty * (state.tna || 0) / 100 * (state.termDays || 30) / 365))}
-                                                    </div>
-                                                </div>
-
-                                                <div className="h-px bg-white/10 my-4" />
-                                                {/* ... Rest of PF ... */}
+                                                {state.opType === 'redeem' && state.selectedPfData ? (
+                                                    <>
+                                                        <div>
+                                                            <div className="text-sm text-slate-400 mb-1">Total a Cobrar</div>
+                                                            <div className="text-3xl font-mono font-bold text-white tracking-tight">
+                                                                {formatMoneyARS(state.selectedPfData.totalARS)}
+                                                            </div>
+                                                        </div>
+                                                        <div className="h-px bg-white/10 my-4" />
+                                                        <div className="space-y-3">
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs text-slate-400">Capital</span>
+                                                                <span className="text-sm font-mono text-white">{formatMoneyARS(state.selectedPfData.capitalARS)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs text-slate-400">Interés</span>
+                                                                <span className="text-sm font-mono text-emerald-400">+{formatMoneyARS(state.selectedPfData.interestARS)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs text-slate-400">TNA / TEA</span>
+                                                                <span className="text-sm font-mono text-indigo-400">
+                                                                    {state.selectedPfData.tna}% / {formatPercent(computeTermTEA(state.selectedPfData.tna, state.selectedPfData.termDays))}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div>
+                                                            <div className="text-sm text-slate-400 mb-1">Total al Vencimiento</div>
+                                                            <div className="text-3xl font-mono font-bold text-white tracking-tight">
+                                                                {formatMoneyARS(state.qty + (state.qty * (state.tna || 0) / 100 * (state.termDays || 30) / 365))}
+                                                            </div>
+                                                        </div>
+                                                        <div className="h-px bg-white/10 my-4" />
+                                                        <div className="space-y-3">
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs text-slate-400">Capital</span>
+                                                                <span className="text-sm font-mono text-white">{formatMoneyARS(state.qty)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs text-slate-400">Interés Estimado</span>
+                                                                <span className="text-sm font-mono text-emerald-400">
+                                                                    +{formatMoneyARS(state.qty * (state.tna || 0) / 100 * (state.termDays || 30) / 365)}
+                                                                </span>
+                                                            </div>
+                                                            {(state.tna || 0) > 0 && (state.termDays || 0) > 0 && (
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-slate-400">TNA / TEA</span>
+                                                                    <span className="text-sm font-mono text-indigo-400">
+                                                                        {state.tna}% / {formatPercent(computeTermTEA(state.tna || 0, state.termDays || 30))}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs text-slate-400">Plazo</span>
+                                                                <span className="text-sm font-mono text-white">{state.termDays || 30} días</span>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
                                         ) : state.assetClass === 'currency' ? (
                                             /* Currency Summary */
@@ -2262,35 +2533,74 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                                     <>
                                         <div className="flex justify-between border-b border-white/5 pb-2">
                                             <span className="text-slate-500 text-sm">Operación</span>
-                                            <span className="text-white font-medium">Plazo Fijo</span>
+                                            <span className="text-white font-medium">
+                                                {state.opType === 'redeem' ? 'Rescate Plazo Fijo' : 'Constitución Plazo Fijo'}
+                                            </span>
                                         </div>
                                         <div className="flex justify-between border-b border-white/5 pb-2">
                                             <span className="text-slate-500 text-sm">Banco / Entidad</span>
-                                            <span className="text-white font-medium">{state.bank || '—'}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-white/5 pb-2">
-                                            <span className="text-slate-500 text-sm">Capital Invertido</span>
-                                            <span className="text-white font-mono font-medium">{formatMoneyARS(state.qty)}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-white/5 pb-2">
-                                            <span className="text-slate-500 text-sm">Plazo / TNA</span>
-                                            <span className="text-white font-mono flex gap-2">
-                                                <span>{state.termDays} días</span>
-                                                <span className="text-slate-500">@ {state.tna}%</span>
+                                            <span className="text-white font-medium">
+                                                {accountsList.find(a => a.id === state.accountId)?.name || state.bank || '—'}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between border-b border-white/5 pb-2">
-                                            <span className="text-slate-500 text-sm">Interés Estimado</span>
-                                            <span className="text-emerald-400 font-mono font-medium">
-                                                +{formatMoneyARS(state.qty * (state.tna || 0) / 100 * (state.termDays || 30) / 365)}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between pt-1">
-                                            <span className="text-slate-200 text-sm font-bold">Total a Cobrar</span>
-                                            <span className="text-indigo-400 font-mono font-bold text-lg">
-                                                {formatMoneyARS(state.qty + (state.qty * (state.tna || 0) / 100 * (state.termDays || 30) / 365))}
-                                            </span>
-                                        </div>
+                                        {state.opType === 'redeem' && state.selectedPfData ? (
+                                            <>
+                                                <div className="flex justify-between border-b border-white/5 pb-2">
+                                                    <span className="text-slate-500 text-sm">Código PF</span>
+                                                    <span className="text-indigo-400 font-mono text-sm">{state.selectedPfData.pfCode}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-white/5 pb-2">
+                                                    <span className="text-slate-500 text-sm">Capital Invertido</span>
+                                                    <span className="text-white font-mono font-medium">{formatMoneyARS(state.selectedPfData.capitalARS)}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-white/5 pb-2">
+                                                    <span className="text-slate-500 text-sm">Plazo / TNA / TEA</span>
+                                                    <span className="text-white font-mono text-sm">
+                                                        {state.selectedPfData.termDays}d @ {state.selectedPfData.tna}% / {formatPercent(computeTermTEA(state.selectedPfData.tna, state.selectedPfData.termDays))}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-white/5 pb-2">
+                                                    <span className="text-slate-500 text-sm">Interés</span>
+                                                    <span className="text-emerald-400 font-mono font-medium">+{formatMoneyARS(state.selectedPfData.interestARS)}</span>
+                                                </div>
+                                                <div className="flex justify-between pt-1">
+                                                    <span className="text-slate-200 text-sm font-bold">Total a Cobrar</span>
+                                                    <span className="text-indigo-400 font-mono font-bold text-lg">{formatMoneyARS(state.selectedPfData.totalARS)}</span>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="flex justify-between border-b border-white/5 pb-2">
+                                                    <span className="text-slate-500 text-sm">Capital Invertido</span>
+                                                    <span className="text-white font-mono font-medium">{formatMoneyARS(state.qty)}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-white/5 pb-2">
+                                                    <span className="text-slate-500 text-sm">Plazo / TNA</span>
+                                                    <span className="text-white font-mono flex gap-2">
+                                                        <span>{state.termDays} días</span>
+                                                        <span className="text-slate-500">@ {state.tna}%</span>
+                                                    </span>
+                                                </div>
+                                                {(state.tna || 0) > 0 && (state.termDays || 0) > 0 && (
+                                                    <div className="flex justify-between border-b border-white/5 pb-2">
+                                                        <span className="text-slate-500 text-sm">TEA</span>
+                                                        <span className="text-emerald-400 font-mono font-medium">{formatPercent(computeTermTEA(state.tna || 0, state.termDays || 30))}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between border-b border-white/5 pb-2">
+                                                    <span className="text-slate-500 text-sm">Interés Estimado</span>
+                                                    <span className="text-emerald-400 font-mono font-medium">
+                                                        +{formatMoneyARS(state.qty * (state.tna || 0) / 100 * (state.termDays || 30) / 365)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between pt-1">
+                                                    <span className="text-slate-200 text-sm font-bold">Total a Cobrar</span>
+                                                    <span className="text-indigo-400 font-mono font-bold text-lg">
+                                                        {formatMoneyARS(state.qty + (state.qty * (state.tna || 0) / 100 * (state.termDays || 30) / 365))}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
                                     </>
                                 ) : (
                                     <>
@@ -2369,7 +2679,19 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         {step < 4 ? (
                             <button
                                 onClick={() => setStep(s => s + 1)}
-                                className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg rounded-lg text-sm font-medium transition flex items-center gap-2"
+                                disabled={
+                                    state.assetClass === 'pf' && state.opType === 'redeem' && step === 3
+                                        ? (!state.selectedPfData || !state.selectedPfMovementId || (() => {
+                                            if (!state.selectedPfData?.maturityDate) return false
+                                            const matDate = new Date(state.selectedPfData.maturityDate)
+                                            const maxDate = new Date(matDate)
+                                            maxDate.setDate(maxDate.getDate() + PF_REDEEM_MARGIN_DAYS)
+                                            const redeemDate = new Date(state.datetime)
+                                            return redeemDate < matDate || redeemDate > maxDate
+                                        })())
+                                        : false
+                                }
+                                className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg rounded-lg text-sm font-medium transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Siguiente <ArrowRight className="w-4 h-4" />
                             </button>
@@ -2385,6 +2707,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         )}
                     </div>
                 </div>
+                </>)}
             </div>
         </div >,
         document.body

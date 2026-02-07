@@ -10,7 +10,11 @@
       "Bash(npm test:*)",
       "Bash(npx eslint:*)",
       "Bash(npx vitest run:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(dir:*)",
+      "Bash(npx vitest:*)",
+      "Bash(node -e:*)",
+      "Bash(git log:*)"
     ]
   }
 }
