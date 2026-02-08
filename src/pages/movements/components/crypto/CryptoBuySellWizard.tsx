@@ -13,7 +13,6 @@ import { buildFifoLots } from '@/domain/portfolio/fifo'
 import { allocateSale, COSTING_METHODS, type CostingMethod, type ManualAllocation } from '@/domain/portfolio/lot-allocation'
 import type { LotDetail } from '@/features/portfolioV2/types'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
-import { WizardStepper } from '../ui/WizardStepper'
 import { WizardFooter } from '../ui/WizardFooter'
 
 // ---------------------------------------------------------------------------
@@ -52,6 +51,7 @@ interface CryptoBuySellWizardProps {
     prefillMovement?: Movement | null
     onClose: () => void
     onBackToAssetType?: () => void
+    onStepChange?: (step: number) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +75,7 @@ export function CryptoBuySellWizard({
     prefillMovement: _prefillMovement,
     onClose,
     onBackToAssetType,
+    onStepChange,
 }: CryptoBuySellWizardProps) {
     void _prefillMovement // reserved for future edit-mode
     const createMovement = useCreateMovement()
@@ -311,6 +312,9 @@ export function CryptoBuySellWizard({
     const prevStep = () => {
         if (state.step > 1) setState(s => ({ ...s, step: (s.step - 1) as Step }))
     }
+
+    // Sync step to parent for unified stepper
+    useEffect(() => { onStepChange?.(state.step) }, [state.step])
 
     const setMode = (mode: Mode) => {
         setState(s => ({
@@ -1072,7 +1076,6 @@ export function CryptoBuySellWizard({
             {/* Body */}
             <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#0F172A]">
                 <ModeTabs />
-                <WizardStepper currentStep={1 + state.step} totalSteps={1 + 3} className="mb-6" />
                 {state.step === 1 && renderStep1()}
                 {state.step === 2 && (isBuy ? renderBuyStep2() : renderSellStep2())}
                 {state.step === 3 && renderStep3()}

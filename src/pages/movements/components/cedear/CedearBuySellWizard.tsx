@@ -15,7 +15,6 @@ import type { LotDetail } from '@/features/portfolioV2/types'
 import { listCedears } from '@/domain/cedears/master'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
 import { formatMoneyARS } from '@/lib/format'
-import { WizardStepper } from '../ui/WizardStepper'
 import { WizardFooter } from '../ui/WizardFooter'
 
 // ---------------------------------------------------------------------------
@@ -53,6 +52,7 @@ interface CedearBuySellWizardProps {
     instruments: Instrument[]
     onClose: () => void
     onBackToAssetType?: () => void
+    onStepChange?: (step: number) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -82,6 +82,7 @@ export function CedearBuySellWizard({
     instruments,
     onClose,
     onBackToAssetType,
+    onStepChange,
 }: CedearBuySellWizardProps) {
     const createMovement = useCreateMovement()
     const createInstrument = useCreateInstrument()
@@ -356,6 +357,9 @@ export function CedearBuySellWizard({
         else onClose()
     }
 
+    // Sync step to parent for unified stepper
+    useEffect(() => { onStepChange?.(state.step) }, [state.step])
+
     const setMode = (mode: Mode) => {
         setState(s => ({
             ...s,
@@ -498,13 +502,8 @@ export function CedearBuySellWizard({
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
             {/* LEFT: Wizard Form */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Stepper (offset +1 so internal step 1 shows as visual step 2) */}
-                <div className="px-8 pt-4 pb-2 shrink-0">
-                    <WizardStepper currentStep={1 + state.step} totalSteps={1 + 3} />
-                </div>
-
                 {/* Form Content */}
-                <div className="flex-1 overflow-y-auto px-8 pb-8">
+                <div className="flex-1 overflow-y-auto px-8 py-6">
                     {/* ============================================================ */}
                     {/* STEP 1: Selección de Activo                                  */}
                     {/* ============================================================ */}
@@ -654,10 +653,18 @@ export function CedearBuySellWizard({
                                     </div>
                                 </div>
 
-                                {/* Tipo de Cambio (ARS/USD) */}
+                                {/* Tipo de Cambio (MEP) — editable */}
                                 <div>
-                                    <label className="block text-xs font-mono text-slate-400 mb-2 uppercase">
-                                        TC (ARS/USD)
+                                    <label className="flex items-center gap-2 text-xs font-mono text-slate-400 mb-2 uppercase">
+                                        Tipo de cambio (MEP)
+                                        <span className={cn(
+                                            'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide',
+                                            isBuy
+                                                ? 'bg-amber-500/20 text-amber-400'
+                                                : 'bg-emerald-500/20 text-emerald-400'
+                                        )}>
+                                            {isBuy ? 'Vendedor' : 'Comprador'}
+                                        </span>
                                     </label>
                                     <div className="relative">
                                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">
@@ -687,7 +694,8 @@ export function CedearBuySellWizard({
                                         </button>
                                     </div>
                                     <p className="text-[10px] text-slate-500 mt-1">
-                                        MEP: <span className="font-mono text-slate-300">Vta $ {fmt2(mepSellRate)}</span>
+                                        Editable para cargar operaciones históricas.
+                                        {' '}MEP: <span className="font-mono text-slate-300">Vta $ {fmt2(mepSellRate)}</span>
                                         {' / '}
                                         <span className="font-mono text-slate-300">Cpa $ {fmt2(mepBuyRate)}</span>
                                     </p>

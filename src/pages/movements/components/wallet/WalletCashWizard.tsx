@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { ArrowLeftRight, ArrowDown, ChevronDown, Zap, Calendar, MessageSquare, Check } from 'lucide-react'
-import { WizardStepper } from '../ui/WizardStepper'
 import { WizardFooter } from '../ui/WizardFooter'
 import { cn } from '@/lib/utils'
 import type { Movement, Currency, Account, Instrument } from '@/domain/types'
@@ -40,6 +39,7 @@ interface WalletCashWizardProps {
     instruments: Instrument[]
     onClose: () => void
     onBackToAssetType?: () => void
+    onStepChange?: (step: number) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ function hasPositiveBalance(accountId: string, balancesMap: Map<string, Map<Curr
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export function WalletCashWizard({ accounts, movements, instruments, onClose, onBackToAssetType }: WalletCashWizardProps) {
+export function WalletCashWizard({ accounts, movements, instruments, onClose, onBackToAssetType, onStepChange }: WalletCashWizardProps) {
     const createMovement = useCreateMovement()
     const createInstrument = useCreateInstrument()
     const { toast } = useToast()
@@ -228,6 +228,9 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
     const prevStep = () => {
         if (state.step > 1) setState(s => ({ ...s, step: (s.step - 1) as 1 | 2 | 3 }))
     }
+
+    // Sync step to parent for unified stepper
+    useEffect(() => { onStepChange?.(state.step) }, [state.step])
 
     const setAmountPercentage = (pct: number) => {
         const val = (availableBalance * pct).toFixed(2)
@@ -477,8 +480,6 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
                     </button>
                 </div>
 
-                {/* Stepper (offset +1: internal step 1 shows as visual step 2) */}
-                <WizardStepper currentStep={1 + state.step} totalSteps={1 + 3} className="mb-2" />
             </div>
 
             {/* Body */}

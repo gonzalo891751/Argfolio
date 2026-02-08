@@ -26,7 +26,6 @@ import { db } from '@/db'
 import { useQueryClient } from '@tanstack/react-query'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
 import { formatMoneyARS, formatMoneyUSD } from '@/lib/format'
-import { WizardStepper } from '../ui/WizardStepper'
 import { WizardFooter } from '../ui/WizardFooter'
 
 // ---------------------------------------------------------------------------
@@ -63,6 +62,7 @@ interface FciBuySellWizardProps {
     instruments: Instrument[]
     onClose: () => void
     onBackToAssetType?: () => void
+    onStepChange?: (step: number) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +92,7 @@ export function FciBuySellWizard({
     instruments,
     onClose,
     onBackToAssetType,
+    onStepChange,
 }: FciBuySellWizardProps) {
     const { priceMap, getPrice } = useFciPrices()
     const { data: fxRates } = useFxRates()
@@ -313,6 +314,9 @@ export function FciBuySellWizard({
     const prevStep = () => {
         if (state.step > 1) setState(s => ({ ...s, step: (s.step - 1) as Step }))
     }
+
+    // Sync step to parent for unified stepper
+    useEffect(() => { onStepChange?.(state.step) }, [state.step])
 
     const setMode = (mode: Mode) => {
         setState(s => ({
@@ -1076,7 +1080,6 @@ export function FciBuySellWizard({
             {/* Body */}
             <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#0F172A]">
                 <ModeTabs />
-                <WizardStepper currentStep={1 + state.step} totalSteps={1 + 3} className="mb-6" />
                 {state.step === 1 && renderStep1()}
                 {state.step === 2 && renderStep2()}
                 {state.step === 3 && renderStep3()}

@@ -227,6 +227,7 @@ const FX_RATES_FALLBACK: Record<FxType, number> = {
 
 export function MovementWizard({ open, onOpenChange, prefillMovement }: MovementWizardProps) {
     const [step, setStep] = useState(1)
+    const [childStep, setChildStep] = useState(1) // Internal step of active sub-wizard (1-3)
     const [autoBalanceUsdt, setAutoBalanceUsdt] = useState(true) // Auto-balance default ON
     const { data: fxRates } = useFxRates()
     const { data: instrumentsList = [] } = useInstruments()
@@ -422,6 +423,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
     useEffect(() => {
         if (!open) {
             setStep(1)
+            setChildStep(1)
             setState(getInitialState())
         }
     }, [open])
@@ -1115,11 +1117,8 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
             <div className="absolute inset-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 w-full md:max-w-4xl h-full md:h-[85vh] bg-[#0F172A] md:rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                 {/* Header */}
                 <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-[#0F172A] shrink-0">
-                    <div>
+                    <div className="flex-1 min-w-0">
                         <h2 className="font-display text-xl font-bold text-white">Nuevo Movimiento</h2>
-                        {!(step >= 2 && (state.assetClass === 'wallet' || state.assetClass === 'crypto' || state.assetClass === 'fci' || state.assetClass === 'cedear')) && (
-                            <WizardStepper currentStep={step} totalSteps={4} className="mt-2" />
-                        )}
                         {step >= 2 && state.assetClass === 'wallet' && (
                             <p className="text-sm text-slate-400 mt-0.5">Ajustá manualmente tus saldos o registrá operaciones.</p>
                         )}
@@ -1132,6 +1131,11 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         {step >= 2 && state.assetClass === 'cedear' && (
                             <p className="text-sm text-slate-400 mt-0.5">Compra o venta de CEDEARs.</p>
                         )}
+                        <WizardStepper
+                            currentStep={step >= 2 && ['cedear', 'crypto', 'fci', 'wallet'].includes(state.assetClass) ? 1 + childStep : step}
+                            totalSteps={4}
+                            className="mt-2"
+                        />
                     </div>
                     <button
                         onClick={() => onOpenChange(false)}
@@ -1148,7 +1152,8 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         movements={allMovements}
                         instruments={instrumentsList}
                         onClose={() => onOpenChange(false)}
-                        onBackToAssetType={() => setStep(1)}
+                        onBackToAssetType={() => { setStep(1); setChildStep(1) }}
+                        onStepChange={setChildStep}
                     />
                 ) : step >= 2 && state.assetClass === 'crypto' ? (
                     <CryptoBuySellWizard
@@ -1157,7 +1162,8 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         instruments={instrumentsList}
                         prefillMovement={prefillMovement}
                         onClose={() => onOpenChange(false)}
-                        onBackToAssetType={() => setStep(1)}
+                        onBackToAssetType={() => { setStep(1); setChildStep(1) }}
+                        onStepChange={setChildStep}
                     />
                 ) : step >= 2 && state.assetClass === 'wallet' ? (
                     <WalletCashWizard
@@ -1165,7 +1171,8 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         movements={allMovements}
                         instruments={instrumentsList}
                         onClose={() => onOpenChange(false)}
-                        onBackToAssetType={() => setStep(1)}
+                        onBackToAssetType={() => { setStep(1); setChildStep(1) }}
+                        onStepChange={setChildStep}
                     />
                 ) : step >= 2 && state.assetClass === 'fci' ? (
                     <FciBuySellWizard
@@ -1173,7 +1180,8 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         movements={allMovements}
                         instruments={instrumentsList}
                         onClose={() => onOpenChange(false)}
-                        onBackToAssetType={() => setStep(1)}
+                        onBackToAssetType={() => { setStep(1); setChildStep(1) }}
+                        onStepChange={setChildStep}
                     />
                 ) : (<>
                 {/* Body - Scrollable */}

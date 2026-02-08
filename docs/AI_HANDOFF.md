@@ -1472,3 +1472,56 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 - [ ] QA Manual: FCI USD → precio y total en USD, DEPOSIT en CASH_USD
 - [ ] QA Manual: Sin posiciones → empty state, no avanza
 - [ ] QA Manual: Sin precio mercado → warning, input manual habilitado
+
+---
+
+## CHECKPOINT — Wizard UX Homogéneo + TC CEDEAR (2026-02-07)
+
+### Qué se cambió
+
+**A) Stepper unificado en el header (MovementWizard.tsx)**
+- El `WizardStepper` ahora se renderiza SIEMPRE en el header del modal, debajo del título "Nuevo Movimiento".
+- Se eliminó la condición que lo ocultaba cuando se montaba un sub-wizard (cedear/crypto/fci/wallet).
+- Se agregó estado `childStep` en el padre para sincronizar el paso interno del sub-wizard.
+- El stepper computa `currentStep = 1 + childStep` cuando un sub-wizard está activo.
+- Se pasa `onStepChange={setChildStep}` a cada sub-wizard.
+- Al volver a la grilla (step 1), se resetea `childStep = 1`.
+
+**B) Sub-wizards: stepper interno removido + Back corregido**
+- Archivos: `CedearBuySellWizard.tsx`, `CryptoBuySellWizard.tsx`, `FciBuySellWizard.tsx`, `WalletCashWizard.tsx`
+- Se removió el `<WizardStepper>` interno de cada sub-wizard (ya no hay stepper duplicado).
+- Se removió el import de `WizardStepper` en cada sub-wizard.
+- Se agregó prop `onStepChange?: (step: number) => void` en cada sub-wizard.
+- Se agregó `useEffect` para notificar al padre cada vez que cambia el step interno.
+- El botón "Atrás" en step 1 del sub-wizard ya llama `onBackToAssetType()` (vuelve a la grilla, NO cierra el modal). Esto ya estaba implementado via `WizardFooter onBack={state.step > 1 ? prevStep : (onBackToAssetType ?? onClose)}`.
+
+**C) CEDEAR — TC editable con badge Vendedor/Comprador**
+- El campo "TC (ARS/USD)" se renombró a "Tipo de cambio (MEP)".
+- Se agregó badge visual: "Vendedor" (amber) en compra, "Comprador" (emerald) en venta.
+- Helper text actualizado: "Editable para cargar operaciones históricas."
+- La lógica funcional ya existía: auto-set MEP sell (compra) / MEP buy (venta), editable por el usuario, guardado en `fxAtTrade` y `fx.side`.
+
+### Archivos tocados
+1. `src/pages/movements/components/MovementWizard.tsx` — stepper siempre visible, childStep state
+2. `src/pages/movements/components/cedear/CedearBuySellWizard.tsx` — sin stepper interno, onStepChange, TC UI
+3. `src/pages/movements/components/crypto/CryptoBuySellWizard.tsx` — sin stepper interno, onStepChange
+4. `src/pages/movements/components/fci/FciBuySellWizard.tsx` — sin stepper interno, onStepChange
+5. `src/pages/movements/components/wallet/WalletCashWizard.tsx` — sin stepper interno, onStepChange
+
+### Verificado
+- [x] `npx tsc --noEmit` → 0 errors
+- [x] `npm run build` → OK (production build exitoso)
+
+### QA Manual pendiente
+- [ ] Abrir "Nuevo Movimiento": stepper de 4 segmentos visible bajo el título en step 1
+- [ ] CEDEAR: stepper se mantiene en header, avanza con cada paso, no hay stepper duplicado
+- [ ] Cripto: stepper se mantiene en header, avanza con cada paso
+- [ ] FCI: stepper se mantiene en header, avanza con cada paso
+- [ ] Billetera: stepper se mantiene en header, avanza con cada paso
+- [ ] Moneda/Dólares: sin regresión (stepper funciona como antes)
+- [ ] En todos los sub-wizards: "Atrás" en paso 1 vuelve a la grilla, NO cierra el modal
+- [ ] En todos los sub-wizards: "Cancelar" y X cierran el modal
+- [ ] CEDEAR Compra: TC label "Tipo de cambio (MEP)", badge "Vendedor", default MEP sell
+- [ ] CEDEAR Venta: TC badge "Comprador", default MEP buy
+- [ ] CEDEAR: cambiar TC actualiza equivalentes del resumen
+- [ ] CEDEAR: movimiento guardado con fxAtTrade correcto
