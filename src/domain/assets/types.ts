@@ -4,6 +4,7 @@
  */
 
 import type { FxKey } from '@/domain/fx/types'
+import type { PriceResult } from '@/domain/prices/price-result'
 
 /**
  * Asset class categories for valuation rules
@@ -74,6 +75,9 @@ export interface AssetMetrics {
     // Daily Change
     changePct1d?: number | null
     changeArs1d?: number | null
+
+    // Pricing status metadata
+    priceResult?: PriceResult
 }
 
 /**

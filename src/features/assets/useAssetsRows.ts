@@ -16,6 +16,8 @@ import { computeAssetMetrics, computePortfolioTotals } from '@/domain/assets/val
 import type { FxQuotes } from '@/domain/fx/types'
 import type { AssetRowMetrics, AssetInput, AssetPrices, PortfolioAssetTotals, AssetClass } from '@/domain/assets/types'
 import type { HoldingAggregated, Holding } from '@/domain/types'
+import { buildPriceCacheKey, resolvePriceWithCache } from '@/domain/prices/price-cache'
+import { missingPrice, okPrice, type PriceResult } from '@/domain/prices/price-result'
 
 // Master data imports for CEDEAR ratios
 import { getCedearMeta, type CedearMasterItem } from '@/domain/cedears/master'
@@ -90,6 +92,20 @@ function mapCategory(category: string): AssetClass {
 function getCedearRatioLocal(symbol: string): number {
     const entry: CedearMasterItem | null = getCedearMeta(symbol)
     return entry?.ratio ?? 1
+}
+
+function getPriceTtlMs(category: AssetClass): number {
+    switch (category) {
+        case 'CRYPTO':
+        case 'STABLE':
+            return 60 * 60 * 1000 // 1h
+        case 'CEDEAR':
+            return 12 * 60 * 60 * 1000 // 12h
+        case 'FCI':
+            return 36 * 60 * 60 * 1000 // 36h
+        default:
+            return 24 * 60 * 60 * 1000 // 24h
+    }
 }
 
 /**
@@ -167,6 +183,8 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                 aggregatedItem.byAccount.forEach((holding: Holding) => {
                     const accountId = holding.accountId
                     const accountName = holding.account.name
+                    const now = Date.now()
+                    const nowISO = new Date(now).toISOString()
 
                     // Build AssetInput from specific holding data
                     const assetInput: AssetInput = {
@@ -186,27 +204,36 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
 
                     // Build AssetPrices
                     const sym = holding.instrument.symbol.toUpperCase()
-                    let currentPrice: number | null = null
+                    let livePriceResult: PriceResult = missingPrice('missing')
                     let underlyingUsd: number | null = null
                     let changePct1d: number | null = null
 
                     // Price logic
                     if (manualPrices.has(holding.instrumentId)) {
-                        currentPrice = manualPrices.get(holding.instrumentId) ?? null
+                        livePriceResult = okPrice(manualPrices.get(holding.instrumentId) ?? 0, 'manual', nowISO, 'high')
                     } else if (category === 'CEDEAR' && cedearPrices[sym]) {
-                        currentPrice = cedearPrices[sym].lastPriceArs ?? null
+                        livePriceResult = okPrice(cedearPrices[sym].lastPriceArs ?? 0, 'PPI', cedearPrices[sym].updatedAt, 'high')
                         underlyingUsd = cedearPrices[sym].underlyingPrice ?? null
                         changePct1d = cedearPrices[sym].changePct != null
                             ? cedearPrices[sym].changePct! / 100
                             : null
                     } else if ((category === 'CRYPTO' || category === 'STABLE') && cryptoPrices[sym] !== undefined) {
-                        currentPrice = cryptoPrices[sym]
+                        livePriceResult = okPrice(cryptoPrices[sym], 'coingecko', null, 'high')
+                    } else if (aggregatedItem.currentPrice != null && Number.isFinite(aggregatedItem.currentPrice) && aggregatedItem.currentPrice > 0) {
+                        const source = category === 'FCI' ? 'fci_latest' : 'portfolio'
+                        livePriceResult = okPrice(aggregatedItem.currentPrice, source, null, category === 'FCI' ? 'high' : 'medium')
                     } else {
-                        currentPrice = aggregatedItem.currentPrice ?? null
+                        livePriceResult = missingPrice(category === 'FCI' ? 'fci_latest' : 'missing')
                     }
 
+                    const resolvedPrice = resolvePriceWithCache(
+                        buildPriceCacheKey(category, holding.instrumentId),
+                        livePriceResult,
+                        { ttlMs: getPriceTtlMs(category), now }
+                    )
+
                     const assetPrices: AssetPrices = {
-                        currentPrice,
+                        currentPrice: resolvedPrice.price,
                         underlyingUsd,
                         changePct1d,
                     }
@@ -221,6 +248,7 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                         accountName,
                         openingBalanceInferred: holding.openingBalanceInferred,
                         openingBalance: holding.openingBalance,
+                        priceResult: resolvedPrice,
                     }
 
                     // Apply Filters (Category & Search)

@@ -1871,3 +1871,118 @@ Corregir Drivers del dashboard para separar proyeccion real vs PnL actual, mostr
   - coincidencia exacta de Expo USD entre /mis-activos-v2 y /dashboard,
   - comportamiento del modal en mobile (scroll interno + backdrop),
   - copy final de leyendas/proyeccion segun preferencia de producto.
+
+## CHECKPOINT - FASE 2 CEDEAR endpoint parity (2026-02-09)
+
+### Archivos tocados
+1. `functions/api/market/cedears.ts` (nuevo)
+2. `docs/AI_HANDOFF.md`
+
+### Que cambio
+- Se agrego la Pages Function `GET /api/market/cedears` para paridad dev/prod.
+- La nueva ruta reutiliza `fetchPpiCedears` desde `src/server/market/ppiCedearsProvider`, manteniendo el mismo response shape usado en dev (`source`, `updatedAt`, `currency`, `total`, `page`, `pageSize`, `data`).
+- Soporta query params `page`, `pageSize`, `sort`, `dir`, `mode`, `stats`.
+- Devuelve headers JSON + cache (`Cache-Control: public, max-age=60, s-maxage=300`) y CORS.
+
+### Como validar
+1. Local:
+   - `npm run build`
+   - `npm run lint`
+2. Dev/UI:
+   - Navegar a la pantalla de Mercado/CEDEAR y verificar en Network que `/api/market/cedears` responde sin 404.
+3. Prod:
+   - Probar: `https://argfolio.pages.dev/api/market/cedears`
+   - Esperado: HTTP 200 y JSON con `data[]` valido para frontend.
+
+---
+
+## CHECKPOINT - FASE 3 Infra de precios + eliminación de mocks (2026-02-09)
+
+### Objetivo
+Eliminar hardcoding de precios (`mockPrices`), evitar fallback silencioso `price ?? 1` en valuación y exponer estado de precio uniforme (`ok/missing/estimated/stale`) con cache de último precio válido.
+
+### Archivos tocados
+1. `src/domain/prices/price-result.ts` (nuevo)
+2. `src/domain/prices/price-cache.ts` (nuevo)
+3. `src/hooks/use-computed-portfolio.ts`
+4. `src/hooks/use-instrument-detail.ts`
+5. `src/features/assets/useAssetsRows.ts`
+6. `src/domain/assets/types.ts`
+7. `src/domain/assets/valuation.ts`
+8. `src/domain/portfolio/valuation.ts`
+9. `src/features/portfolioV2/types.ts`
+10. `src/features/portfolioV2/builder.ts`
+11. `src/pages/assets-v2.tsx`
+
+### Cambios concretos
+- Se eliminó `mockPrices` de `use-computed-portfolio.ts` y su hook `useMockPrices`.
+- Se agregó `PriceResult` uniforme (`price`, `status`, `source`, `asOf`, `confidence`).
+- Se agregó cache cliente de último precio (`localStorage`) con TTL por rubro y resolución automática a `estimated`/`stale`.
+- `useAssetsRows` ahora construye `PriceResult` por activo (manual/PPI/coingecko/fci_latest) y aplica cache last-known.
+- Se removió fallback silencioso de precio `?? 1` en ramas genéricas de valuación (`domain/assets/valuation.ts` y `domain/portfolio/valuation.ts`).
+- `portfolioV2` ahora propaga `priceResult` a items, manteniendo `priceMeta` legacy para compatibilidad.
+- UI de `/mis-activos-v2` muestra badges explícitos:
+  - `Sin precio` (missing)
+  - `Estimado` (estimated)
+  - `Desactualizado` (stale)
+- Se mantiene cálculo sin inflar totales artificialmente cuando falta precio (valuación nula -> no suma valor ficticio).
+
+### Pendientes
+- QA manual dirigido en `/mis-activos-v2` con casos reales de precio faltante/stale por activo.
+- Persistir `asOf` más preciso para coingecko en todos los escenarios (hoy puede venir `null` según fuente).
+
+### Validación
+- [x] `npm run build` OK
+- [x] `npm test` OK (13 files, 91 tests)
+- [x] `rg -n "mockPrices|\?\? 1" src functions` -> sin `mockPrices`; quedan `?? 1` en defaults de FX/u otros módulos no de fallback de precio crítico.
+
+---
+
+## CHECKPOINT - FASE 4 MVP persistencia/sync multi-dispositivo (2026-02-09)
+
+### Objetivo
+Agregar puente local Export/Import y sync remoto mínimo con Cloudflare Pages Functions + D1 para `accounts` y `movements`, manteniendo Dexie como cache local/offline.
+
+### Archivos tocados
+1. `src/domain/sync/local-backup.ts` (nuevo)
+2. `src/sync/remote-sync.ts` (nuevo)
+3. `src/hooks/use-remote-sync.ts` (nuevo)
+4. `src/components/GlobalDataHandler.tsx`
+5. `src/pages/settings.tsx`
+6. `src/db/repositories/movements.ts`
+7. `src/db/repositories/accounts.ts`
+8. `functions/api/_lib/sync.ts` (nuevo)
+9. `functions/api/sync/bootstrap.ts` (nuevo)
+10. `functions/api/movements.ts` (nuevo)
+11. `functions/api/accounts.ts` (nuevo)
+12. `migrations/0001_sync_core.sql` (nuevo)
+13. `wrangler.toml` (nuevo)
+14. `docs/audits/IMPLEMENTATION_SYNC_D1.md` (nuevo)
+
+### Cambios concretos
+- Export/Import local:
+  - Nuevo backup JSON de Dexie (`accounts`, `instruments`, `movements`, `manualPrices`) + preferencias clave de `localStorage`.
+  - Import en modo merge/upsert por `id` (sin duplicados).
+  - UI añadida en `Settings` con botones `Exportar JSON` / `Importar JSON`.
+- Sync remoto cliente:
+  - Flag build-time: `VITE_ARGFOLIO_REMOTE_SYNC=1`.
+  - Bootstrap desde `/api/sync/bootstrap` y bulk upsert a Dexie.
+  - Aviso por evento/toast en fallback offline: “usando datos locales”.
+- Escrituras remotas (con fallback local):
+  - `movementsRepo` y `accountsRepo` intentan POST/PUT/DELETE remoto y luego mantienen cache Dexie.
+  - Si falla red o write gate, no rompe flujo local.
+- Backend D1 mínimo:
+  - Endpoints: `GET /api/sync/bootstrap`, `GET|POST|PUT|DELETE /api/movements`, `GET|POST|PUT|DELETE /api/accounts`.
+  - Esquema D1 + migración inicial (`accounts`, `movements`, `instruments` auxiliar).
+  - Seguridad mínima: escritura bloqueada por default salvo `ARGFOLIO_SYNC_WRITE_ENABLED=1`.
+
+### Pendientes
+- QA manual cross-device real con dos navegadores/dispositivos y D1 remoto.
+- Endpoints de instrumentos no incluidos en este MVP (si se crean instrumentos custom en A, su replicación en B depende de backup/import o extensión futura).
+- Endurecer auth de escritura con Cloudflare Access antes de habilitar `ARGFOLIO_SYNC_WRITE_ENABLED=1`.
+
+### Validación
+- [x] `npm install` OK
+- [x] `npm run build` OK
+- [x] `npm test` OK
+- [x] Functions + migración + wrangler listos en repo para deploy.

@@ -1,11 +1,11 @@
-/**
- * Assets V2 Page — Mis Activos V2
+﻿/**
+ * Assets V2 Page â€” Mis Activos V2
  * 
  * Complete reimplementation of the Mis Activos page with:
  * - KPI Dashboard
  * - Rubro/Provider/Item hierarchy
  * - Full-page detail overlays
- * - "Cómo se calcula" side panel
+ * - "CÃ³mo se calcula" side panel
  * - Provider commission settings
  * - No flickering (accrual moved to global scheduler)
  */
@@ -203,7 +203,7 @@ export function AssetsPageV2() {
             clearOverride(accountId, kind)
             toast({
                 title: 'TC no disponible',
-                description: `No hay cotización para ${fxOverrideFamily} ${fxOverrideSide}. Se usará Auto.`,
+                description: `No hay cotizaciÃ³n para ${fxOverrideFamily} ${fxOverrideSide}. Se usarÃ¡ Auto.`,
                 variant: 'info',
             })
             setFxOverrideTarget(null)
@@ -430,7 +430,7 @@ export function AssetsPageV2() {
                     <button
                         onClick={() => setShowPreferences(true)}
                         className="flex items-center gap-2 px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
-                        title="Preferencias de automatización"
+                        title="Preferencias de automatizaciÃ³n"
                     >
                         <Settings className="h-4 w-4" />
                         <span className="hidden sm:inline">Preferencias</span>
@@ -440,7 +440,7 @@ export function AssetsPageV2() {
                         className="flex items-center gap-2 px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
                     >
                         <Info className="h-4 w-4" />
-                        <span className="hidden sm:inline">Cómo se calcula</span>
+                        <span className="hidden sm:inline">CÃ³mo se calcula</span>
                     </button>
                 </div>
             </div>
@@ -571,10 +571,10 @@ export function AssetsPageV2() {
                 showCashDisabledEmptyState ? (
                     <div className="text-center py-12 bg-muted/30 rounded-lg">
                         <p className="text-foreground font-medium">
-                            Tenés movimientos de caja, pero la caja está desactivada en Preferencias.
+                            TenÃ©s movimientos de caja, pero la caja estÃ¡ desactivada en Preferencias.
                         </p>
                         <p className="text-sm text-muted-foreground mt-2">
-                            Activá caja para que esos movimientos impacten en Mis Activos.
+                            ActivÃ¡ caja para que esos movimientos impacten en Mis Activos.
                         </p>
                         <Button
                             type="button"
@@ -701,7 +701,7 @@ export function AssetsPageV2() {
                                                 ? (fxOverrideTarget.autoMeta?.side ?? 'V')
                                                 : fxOverrideSide
                                         )
-                                        return Number.isFinite(rate) && rate > 0 ? `$${rate.toFixed(2)}` : '—'
+                                        return Number.isFinite(rate) && rate > 0 ? `$${rate.toFixed(2)}` : 'â€”'
                                     })()}
                                 </span>
                             </div>
@@ -791,7 +791,7 @@ function RubroCard({
                     <div className="text-right">
                         <p className="font-mono font-semibold">{formatMoneyARS(rubro.totals.ars)}</p>
                         <p className="text-xs text-emerald-400 font-mono">
-                            ≈ {formatMoneyUSD(rubro.totals.usd)}
+                            â‰ˆ {formatMoneyUSD(rubro.totals.usd)}
                         </p>
                     </div>
                     {isExpanded ? (
@@ -925,7 +925,7 @@ function ProviderSection({
                         <div className="text-right">
                             <p className="font-mono text-sm font-semibold">{primary}</p>
                             <div className="flex items-center justify-end gap-1.5">
-                                <p className="text-xs text-emerald-400 font-mono">≈ {secondary}</p>
+                                <p className="text-xs text-emerald-400 font-mono">â‰ˆ {secondary}</p>
                                 {provider.fxMeta && provider.fxMeta.rate > 0 && (
                                     <span
                                         className="text-[9px] font-mono text-muted-foreground bg-muted/50 px-1 py-0.5 rounded whitespace-nowrap"
@@ -961,7 +961,7 @@ function ProviderSection({
                     <div className="text-right">
                         <p className="font-mono text-sm font-semibold">{primary}</p>
                         <div className="flex items-center justify-end gap-1.5">
-                            <p className="text-xs text-emerald-400 font-mono">≈ {secondary}</p>
+                            <p className="text-xs text-emerald-400 font-mono">â‰ˆ {secondary}</p>
                             {provider.fxMeta && provider.fxMeta.rate > 0 && (
                                 <button
                                     type="button"
@@ -1028,7 +1028,7 @@ function ProviderSection({
                                         Liquidez (Stable)
                                     </span>
                                     <span className="text-[10px] text-muted-foreground hidden md:inline-block">
-                                        USDT se considera dólar cripto
+                                        USDT se considera dÃ³lar cripto
                                     </span>
                                 </div>
                                 <div className="divide-y divide-border/50">
@@ -1087,6 +1087,28 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName }: ItemRowProps
     const isUsdNative = item.kind === 'crypto' || item.kind === 'stable'
     const hasTna = item.yieldMeta?.tna && item.yieldMeta.tna > 0
     const fciPriceSource = item.kind === 'fci' ? item.priceMeta?.source : undefined
+    const legacyStatus = (() => {
+        if (fciPriceSource === 'missing') return 'missing'
+        if (fciPriceSource && fciPriceSource !== 'quote') return 'estimated'
+        return 'ok'
+    })()
+    const priceStatus = item.priceResult?.status ?? legacyStatus
+    const priceSource = item.priceResult?.source ?? fciPriceSource ?? 'missing'
+    const priceAsOf = item.priceResult?.asOf ?? item.priceMeta?.asOfISO ?? null
+    const showPriceBadge = !isWalletOrCash && priceStatus !== 'ok'
+    const priceBadgeLabel = priceStatus === 'missing'
+        ? 'Sin precio'
+        : priceStatus === 'stale'
+            ? 'Desactualizado'
+            : 'Estimado'
+    const priceBadgeClass = priceStatus === 'missing'
+        ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+        : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+    const priceBadgeTitle = priceStatus === 'missing'
+        ? 'Sin precio disponible en este momento'
+        : priceStatus === 'stale'
+            ? `Precio desactualizado (${priceSource}${priceAsOf ? `, ${new Date(priceAsOf).toLocaleString('es-AR')}` : ''})`
+            : `Precio estimado (${priceSource}${priceAsOf ? `, ${new Date(priceAsOf).toLocaleString('es-AR')}` : ''})`
     // For USD-native assets, secondary is ARS (check valArs). For others, secondary is USD (check valUsd).
     const hasSecondary = isUsdNative || isUsdCash
         ? Math.abs(item.valArs) >= 1
@@ -1120,24 +1142,16 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName }: ItemRowProps
                 <div>
                     <div className="flex items-center gap-2">
                         <p className="font-medium text-sm group-hover:text-primary transition-colors">{item.label}</p>
-                        {/* FCI Pricing Guard: show when using estimated pricing */}
-                        {fciPriceSource && fciPriceSource !== 'quote' && (
+                        {/* Pricing guard: explicit state when quote is missing/estimated/stale */}
+                        {showPriceBadge && (
                             <span
                                 className={cn(
                                     'text-[10px] font-bold px-1.5 py-0.5 rounded border',
-                                    fciPriceSource === 'missing'
-                                        ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
-                                        : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                                    priceBadgeClass
                                 )}
-                                title={
-                                    fciPriceSource === 'last_trade'
-                                        ? 'Precio estimado: última compra registrada'
-                                        : fciPriceSource === 'avg_cost'
-                                            ? 'Precio estimado: costo promedio'
-                                            : 'Sin precio disponible (revisar cotización del fondo)'
-                                }
+                                title={priceBadgeTitle}
                             >
-                                {fciPriceSource === 'missing' ? 'Sin precio' : 'Estimado'}
+                                {priceBadgeLabel}
                             </span>
                         )}
                         {/* TNA + TEA Chips */}
@@ -1165,13 +1179,13 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName }: ItemRowProps
                 <p className="font-mono text-base font-semibold">
                     {primaryValue}
                 </p>
-                {/* Secondary value (dual-currency) — unified for ALL item types */}
+                {/* Secondary value (dual-currency) â€” unified for ALL item types */}
                 {hasSecondary ? (
                     <div className="flex items-center justify-end gap-1.5">
                         <p className="text-xs text-emerald-400 font-mono">
-                            ≈ {secondaryValue}
+                            â‰ˆ {secondaryValue}
                         </p>
-                        {/* TC Chip — clickable for FX override */}
+                        {/* TC Chip â€” clickable for FX override */}
                         {item.fxMeta && item.fxMeta.rate > 0 && (
                             <span
                                 role="button"
@@ -1292,7 +1306,7 @@ function DetailOverlay({
                             <p className="text-xs uppercase text-muted-foreground mb-1">Capital</p>
                             <p className="text-2xl font-bold font-mono">{formatMoneyARS(capitalArs)}</p>
                             <p className="text-sm text-green-400 font-mono">
-                                ≈ {formatMoneyUSD(capitalUsdOficial)} ({item.fxMeta ? `TC ${item.fxMeta.family} ${item.fxMeta.side === 'V' ? 'Venta' : 'Compra'}` : 'Oficial Venta'})
+                                â‰ˆ {formatMoneyUSD(capitalUsdOficial)} ({item.fxMeta ? `TC ${item.fxMeta.family} ${item.fxMeta.side === 'V' ? 'Venta' : 'Compra'}` : 'Oficial Venta'})
                             </p>
                         </div>
 
@@ -1308,36 +1322,36 @@ function DetailOverlay({
                             <div className="bg-muted/50 border border-border rounded-xl p-4">
                                 <p className="text-xs uppercase text-muted-foreground mb-1">TEA</p>
                                 <p className="text-xl font-bold font-mono text-emerald-400">{tea.toFixed(2)}%</p>
-                                <p className="text-xs text-muted-foreground">Capitalización diaria</p>
+                                <p className="text-xs text-muted-foreground">CapitalizaciÃ³n diaria</p>
                             </div>
                         </div>
 
-                        {/* Interés Mañana */}
+                        {/* InterÃ©s MaÃ±ana */}
                         <div className="bg-muted/50 border border-border rounded-xl p-4 mb-4">
-                            <p className="text-xs uppercase text-muted-foreground mb-2">Interés Mañana</p>
+                            <p className="text-xs uppercase text-muted-foreground mb-2">InterÃ©s MaÃ±ana</p>
                             <div className="flex justify-between items-baseline">
                                 <p className="text-lg font-mono font-semibold text-emerald-400">
                                     +{formatMoneyARS(dailyInterestArs)}
                                 </p>
                                 <p className="text-sm text-muted-foreground font-mono">
-                                    ≈ {formatMoneyUSD(dailyInterestUsd)}
+                                    â‰ˆ {formatMoneyUSD(dailyInterestUsd)}
                                 </p>
                             </div>
                         </div>
 
                         {/* Proyecciones */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                            {/* 30 días */}
+                            {/* 30 dÃ­as */}
                             <div className="bg-muted/50 border border-border rounded-xl p-4">
-                                <p className="text-xs uppercase text-muted-foreground mb-3">Proyección 30 Días</p>
+                                <p className="text-xs uppercase text-muted-foreground mb-3">ProyecciÃ³n 30 DÃ­as</p>
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Interés</span>
+                                        <span className="text-muted-foreground">InterÃ©s</span>
                                         <span className="font-mono text-emerald-400">+{formatMoneyARS(interest30dArs)}</span>
                                     </div>
                                     <div className="flex justify-between text-xs text-muted-foreground">
                                         <span></span>
-                                        <span className="font-mono">≈ {formatMoneyUSD(interest30dUsd)}</span>
+                                        <span className="font-mono">â‰ˆ {formatMoneyUSD(interest30dUsd)}</span>
                                     </div>
                                     <hr className="border-border" />
                                     <div className="flex justify-between font-semibold">
@@ -1346,22 +1360,22 @@ function DetailOverlay({
                                     </div>
                                     <div className="flex justify-between text-xs text-muted-foreground">
                                         <span></span>
-                                        <span className="font-mono">≈ {formatMoneyUSD(total30dUsd)}</span>
+                                        <span className="font-mono">â‰ˆ {formatMoneyUSD(total30dUsd)}</span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* 1 año */}
+                            {/* 1 aÃ±o */}
                             <div className="bg-muted/50 border border-border rounded-xl p-4">
-                                <p className="text-xs uppercase text-muted-foreground mb-3">Proyección 1 Año</p>
+                                <p className="text-xs uppercase text-muted-foreground mb-3">ProyecciÃ³n 1 AÃ±o</p>
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Interés</span>
+                                        <span className="text-muted-foreground">InterÃ©s</span>
                                         <span className="font-mono text-emerald-400">+{formatMoneyARS(interest1yArs)}</span>
                                     </div>
                                     <div className="flex justify-between text-xs text-muted-foreground">
                                         <span></span>
-                                        <span className="font-mono">≈ {formatMoneyUSD(interest1yUsd)}</span>
+                                        <span className="font-mono">â‰ˆ {formatMoneyUSD(interest1yUsd)}</span>
                                     </div>
                                     <hr className="border-border" />
                                     <div className="flex justify-between font-semibold">
@@ -1370,7 +1384,7 @@ function DetailOverlay({
                                     </div>
                                     <div className="flex justify-between text-xs text-muted-foreground">
                                         <span></span>
-                                        <span className="font-mono">≈ {formatMoneyUSD(total1yUsd)}</span>
+                                        <span className="font-mono">â‰ˆ {formatMoneyUSD(total1yUsd)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -1378,9 +1392,9 @@ function DetailOverlay({
 
                         {/* VNR */}
                         <div className="bg-muted/30 border border-border rounded-xl p-4 mb-6">
-                            <p className="text-xs uppercase text-muted-foreground mb-1">VNR (Neto Comisión)</p>
+                            <p className="text-xs uppercase text-muted-foreground mb-1">VNR (Neto ComisiÃ³n)</p>
                             <p className="text-lg font-mono">{formatMoneyARS(vnrArs)}</p>
-                            <p className="text-sm text-muted-foreground font-mono">≈ {formatMoneyUSD(vnrUsd)}</p>
+                            <p className="text-sm text-muted-foreground font-mono">â‰ˆ {formatMoneyUSD(vnrUsd)}</p>
                         </div>
 
                         {/* Mini FX Info */}
@@ -1400,7 +1414,7 @@ function DetailOverlay({
                             <p className="text-xs uppercase text-muted-foreground mb-1">Capital Inicial</p>
                             <p className="text-2xl font-bold font-mono">{formatMoneyARS(item.pfMeta.capitalArs)}</p>
                             <p className="text-sm text-green-400 font-mono">
-                                ≈ {formatMoneyUSD(item.pfMeta.capitalArs / oficialSell)} (Oficial Venta)
+                                â‰ˆ {formatMoneyUSD(item.pfMeta.capitalArs / oficialSell)} (Oficial Venta)
                             </p>
                         </div>
 
@@ -1423,8 +1437,8 @@ function DetailOverlay({
                                 </p>
                             </div>
                             <div className="bg-muted/50 border border-border rounded-xl p-3">
-                                <p className="text-xs uppercase text-muted-foreground mb-1">Días Restantes</p>
-                                <p className="font-mono text-sm font-semibold">{item.pfMeta.daysRemaining} días</p>
+                                <p className="text-xs uppercase text-muted-foreground mb-1">DÃ­as Restantes</p>
+                                <p className="font-mono text-sm font-semibold">{item.pfMeta.daysRemaining} dÃ­as</p>
                             </div>
                             <div className="bg-muted/50 border border-border rounded-xl p-3">
                                 <p className="text-xs uppercase text-muted-foreground mb-1">Plazo Total</p>
@@ -1432,24 +1446,24 @@ function DetailOverlay({
                                     {/* Calculate total days if both dates exist */}
                                     {(item.pfMeta.startDateISO && item.pfMeta.maturityDateISO)
                                         ? Math.ceil((new Date(item.pfMeta.maturityDateISO).getTime() - new Date(item.pfMeta.startDateISO).getTime()) / 86400000)
-                                        : '-'} días
+                                        : '-'} dÃ­as
                                 </p>
                             </div>
                         </div>
 
-                        {/* Interés Pactado */}
+                        {/* InterÃ©s Pactado */}
                         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mb-4">
-                            <p className="text-xs uppercase text-muted-foreground mb-2">Interés Pactado</p>
+                            <p className="text-xs uppercase text-muted-foreground mb-2">InterÃ©s Pactado</p>
                             <div className="flex justify-between items-baseline">
                                 <p className="text-xl font-bold font-mono text-emerald-400">
                                     +{formatMoneyARS(item.pfMeta.expectedInterestArs)}
                                 </p>
                                 <p className="text-sm text-muted-foreground font-mono">
-                                    ≈ {formatMoneyUSD(item.pfMeta.expectedInterestArs / oficialSell)}
+                                    â‰ˆ {formatMoneyUSD(item.pfMeta.expectedInterestArs / oficialSell)}
                                 </p>
                             </div>
                             <p className="text-xs text-muted-foreground mt-2">
-                                El interés es fijo según el contrato. La valuación en USD varía con el TC.
+                                El interÃ©s es fijo segÃºn el contrato. La valuaciÃ³n en USD varÃ­a con el TC.
                             </p>
                         </div>
 
@@ -1458,15 +1472,15 @@ function DetailOverlay({
                             <p className="text-xs uppercase text-muted-foreground mb-1">Total a Cobrar</p>
                             <p className="text-2xl font-bold font-mono">{formatMoneyARS(item.pfMeta.expectedTotalArs ?? item.valArs)}</p>
                             <p className="text-sm text-green-400 font-mono">
-                                ≈ {formatMoneyUSD((item.pfMeta.expectedTotalArs ?? item.valArs) / oficialSell)}
+                                â‰ˆ {formatMoneyUSD((item.pfMeta.expectedTotalArs ?? item.valArs) / oficialSell)}
                             </p>
                         </div>
 
                         {/* VNR */}
                         <div className="bg-muted/30 border border-border rounded-xl p-4 mb-6">
-                            <p className="text-xs uppercase text-muted-foreground mb-1">VNR (Neto Comisión)</p>
+                            <p className="text-xs uppercase text-muted-foreground mb-1">VNR (Neto ComisiÃ³n)</p>
                             <p className="text-lg font-mono">{formatMoneyARS(vnrArs)}</p>
-                            <p className="text-sm text-muted-foreground font-mono">≈ {formatMoneyUSD(vnrUsd)}</p>
+                            <p className="text-sm text-muted-foreground font-mono">â‰ˆ {formatMoneyUSD(vnrUsd)}</p>
                         </div>
 
                         {/* Mini FX Info */}
@@ -1487,14 +1501,14 @@ function DetailOverlay({
                                 <p className="text-xs uppercase text-muted-foreground mb-1">Valor de Mercado</p>
                                 <p className="text-2xl font-bold font-mono">{formatMoneyARS(item.valArs)}</p>
                                 <p className="text-sm text-muted-foreground font-mono">
-                                    ≈ {formatMoneyUSD(item.valUsd)}
+                                    â‰ˆ {formatMoneyUSD(item.valUsd)}
                                 </p>
                             </div>
                             <div className="bg-muted/50 border border-border rounded-xl p-4">
-                                <p className="text-xs uppercase text-muted-foreground mb-1">VNR (Neto Comisión)</p>
+                                <p className="text-xs uppercase text-muted-foreground mb-1">VNR (Neto ComisiÃ³n)</p>
                                 <p className="text-2xl font-bold font-mono">{formatMoneyARS(vnrArs)}</p>
                                 <p className="text-sm text-muted-foreground font-mono">
-                                    ≈ {formatMoneyUSD(vnrUsd)}
+                                    â‰ˆ {formatMoneyUSD(vnrUsd)}
                                 </p>
                             </div>
                         </div>
@@ -1565,7 +1579,7 @@ function CalcPanel({ fx, onClose }: CalcPanelProps) {
             <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-card border-l border-border shadow-xl overflow-auto">
                 <div className="p-6">
                     <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-bold">Cómo se calcula</h3>
+                        <h3 className="text-lg font-bold">CÃ³mo se calcula</h3>
                         <button
                             onClick={onClose}
                             className="p-2 hover:bg-muted rounded-lg transition-colors"
@@ -1605,7 +1619,7 @@ function CalcPanel({ fx, onClose }: CalcPanelProps) {
 
                     {/* Rules */}
                     <div>
-                        <h4 className="text-sm font-semibold mb-3">Reglas de Valuación</h4>
+                        <h4 className="text-sm font-semibold mb-3">Reglas de ValuaciÃ³n</h4>
                         <div className="space-y-3 text-sm">
                             <div className="p-3 bg-muted/50 rounded-lg">
                                 <p className="font-medium">Billeteras / Plazos Fijos</p>
@@ -1613,7 +1627,7 @@ function CalcPanel({ fx, onClose }: CalcPanelProps) {
                             </div>
                             <div className="p-3 bg-muted/50 rounded-lg">
                                 <p className="font-medium">CEDEARs</p>
-                                <p className="text-muted-foreground">TC MEP (dólar bolsa)</p>
+                                <p className="text-muted-foreground">TC MEP (dÃ³lar bolsa)</p>
                             </div>
                             <div className="p-3 bg-muted/50 rounded-lg">
                                 <p className="font-medium">Cripto</p>
@@ -1672,7 +1686,7 @@ function SettingsModal({ providerId, providerName, onClose }: SettingsModalProps
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium mb-1">
-                                    Comisión Compra (%)
+                                    ComisiÃ³n Compra (%)
                                 </label>
                                 <input
                                     type="number"
@@ -1685,7 +1699,7 @@ function SettingsModal({ providerId, providerName, onClose }: SettingsModalProps
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1">
-                                    Comisión Venta (%)
+                                    ComisiÃ³n Venta (%)
                                 </label>
                                 <input
                                     type="number"
@@ -1698,7 +1712,7 @@ function SettingsModal({ providerId, providerName, onClose }: SettingsModalProps
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1">
-                                    Comisión Fija (ARS)
+                                    ComisiÃ³n Fija (ARS)
                                 </label>
                                 <input
                                     type="number"
@@ -1734,3 +1748,4 @@ function SettingsModal({ providerId, providerName, onClose }: SettingsModalProps
 }
 
 export default AssetsPageV2
+

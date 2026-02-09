@@ -1,0 +1,223 @@
+import { db } from '@/db/schema'
+import type { Account, Instrument, Movement } from '@/domain/types'
+
+const REMOTE_SYNC_FLAG = 'VITE_ARGFOLIO_REMOTE_SYNC'
+const REMOTE_SYNC_STATUS_EVENT = 'argfolio:remote-sync-status'
+
+interface RemoteSyncStatusDetail {
+    title: string
+    description?: string
+    variant?: 'default' | 'success' | 'error' | 'info'
+}
+
+interface BootstrapResponse {
+    asOfISO: string
+    accounts: Account[]
+    movements: Movement[]
+    instruments?: Instrument[]
+}
+
+class HttpError extends Error {
+    status: number
+    body: string
+
+    constructor(status: number, body: string) {
+        super(`HTTP ${status}`)
+        this.status = status
+        this.body = body
+    }
+}
+
+let lastStatusKey = ''
+let lastStatusAt = 0
+let bootstrapInFlight: Promise<{ ok: boolean; offline: boolean }> | null = null
+
+function emitSyncStatus(detail: RemoteSyncStatusDetail): void {
+    if (typeof window === 'undefined') return
+
+    const now = Date.now()
+    const key = `${detail.title}|${detail.description ?? ''}`
+    if (key === lastStatusKey && (now - lastStatusAt) < 15000) return
+
+    lastStatusKey = key
+    lastStatusAt = now
+
+    window.dispatchEvent(
+        new CustomEvent<RemoteSyncStatusDetail>(REMOTE_SYNC_STATUS_EVENT, { detail })
+    )
+}
+
+function toJsonBody(value: unknown): BodyInit {
+    return JSON.stringify(value)
+}
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+    const response = await fetch(url, {
+        ...init,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(init?.headers ?? {}),
+        },
+    })
+
+    if (!response.ok) {
+        const body = await response.text()
+        throw new HttpError(response.status, body)
+    }
+
+    if (response.status === 204) {
+        return undefined as T
+    }
+
+    return response.json() as Promise<T>
+}
+
+export function isRemoteSyncEnabled(): boolean {
+    const raw = import.meta.env[REMOTE_SYNC_FLAG]
+    return raw === '1' || raw === 'true'
+}
+
+export function subscribeRemoteSyncStatus(
+    listener: (detail: RemoteSyncStatusDetail) => void
+): () => void {
+    if (typeof window === 'undefined') return () => undefined
+
+    const handler = (event: Event) => {
+        const custom = event as CustomEvent<RemoteSyncStatusDetail>
+        listener(custom.detail)
+    }
+    window.addEventListener(REMOTE_SYNC_STATUS_EVENT, handler)
+    return () => window.removeEventListener(REMOTE_SYNC_STATUS_EVENT, handler)
+}
+
+function handleRemoteSyncError(error: unknown): void {
+    if (error instanceof HttpError && error.status === 403) {
+        emitSyncStatus({
+            title: 'Sync remoto en solo lectura',
+            description: 'Activá escritura en Cloudflare cuando tengas Access habilitado.',
+            variant: 'info',
+        })
+        return
+    }
+
+    emitSyncStatus({
+        title: 'Sin conexión',
+        description: 'Usando datos locales (Dexie).',
+        variant: 'info',
+    })
+}
+
+export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean; offline: boolean }> {
+    if (!isRemoteSyncEnabled()) {
+        return { ok: false, offline: false }
+    }
+
+    if (!force && bootstrapInFlight) {
+        return bootstrapInFlight
+    }
+
+    const task = (async () => {
+        try {
+            const payload = await requestJson<BootstrapResponse>('/api/sync/bootstrap')
+            const accounts = Array.isArray(payload.accounts) ? payload.accounts : []
+            const movements = Array.isArray(payload.movements) ? payload.movements : []
+            const instruments = Array.isArray(payload.instruments) ? payload.instruments : []
+
+            await db.transaction('rw', [db.accounts, db.movements, db.instruments], async () => {
+                if (accounts.length > 0) await db.accounts.bulkPut(accounts)
+                if (movements.length > 0) await db.movements.bulkPut(movements)
+                if (instruments.length > 0) await db.instruments.bulkPut(instruments)
+            })
+
+            return { ok: true, offline: false }
+        } catch (error) {
+            handleRemoteSyncError(error)
+            return { ok: false, offline: true }
+        } finally {
+            if (!force) bootstrapInFlight = null
+        }
+    })()
+
+    if (!force) {
+        bootstrapInFlight = task
+    }
+
+    return task
+}
+
+export async function syncRemoteMovementCreate(movement: Movement): Promise<void> {
+    if (!isRemoteSyncEnabled()) return
+    try {
+        await requestJson('/api/movements', {
+            method: 'POST',
+            body: toJsonBody(movement),
+        })
+    } catch (error) {
+        handleRemoteSyncError(error)
+        throw error
+    }
+}
+
+export async function syncRemoteMovementUpdate(movement: Movement): Promise<void> {
+    if (!isRemoteSyncEnabled()) return
+    try {
+        await requestJson('/api/movements', {
+            method: 'PUT',
+            body: toJsonBody(movement),
+        })
+    } catch (error) {
+        handleRemoteSyncError(error)
+        throw error
+    }
+}
+
+export async function syncRemoteMovementDelete(id: string): Promise<void> {
+    if (!isRemoteSyncEnabled()) return
+    try {
+        await requestJson(`/api/movements?id=${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+        })
+    } catch (error) {
+        handleRemoteSyncError(error)
+        throw error
+    }
+}
+
+export async function syncRemoteAccountCreate(account: Account): Promise<void> {
+    if (!isRemoteSyncEnabled()) return
+    try {
+        await requestJson('/api/accounts', {
+            method: 'POST',
+            body: toJsonBody(account),
+        })
+    } catch (error) {
+        handleRemoteSyncError(error)
+        throw error
+    }
+}
+
+export async function syncRemoteAccountUpdate(account: Account): Promise<void> {
+    if (!isRemoteSyncEnabled()) return
+    try {
+        await requestJson('/api/accounts', {
+            method: 'PUT',
+            body: toJsonBody(account),
+        })
+    } catch (error) {
+        handleRemoteSyncError(error)
+        throw error
+    }
+}
+
+export async function syncRemoteAccountDelete(id: string): Promise<void> {
+    if (!isRemoteSyncEnabled()) return
+    try {
+        await requestJson(`/api/accounts?id=${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+        })
+    } catch (error) {
+        handleRemoteSyncError(error)
+        throw error
+    }
+}
+

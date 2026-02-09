@@ -223,9 +223,13 @@ export function computeAssetMetrics(
         default: {
             // Generic handling based on native currency
             if (asset.nativeCurrency === 'USD') {
-                const priceUsd = prices.currentPrice ?? 1
-                valUsdEq = asset.quantity * priceUsd
-                valArs = toArsFromUsd(valUsdEq, fx)
+                const priceUsd = (prices.currentPrice != null && Number.isFinite(prices.currentPrice) && prices.currentPrice > 0)
+                    ? prices.currentPrice
+                    : null
+                if (priceUsd != null) {
+                    valUsdEq = asset.quantity * priceUsd
+                    valArs = toArsFromUsd(valUsdEq, fx)
+                }
 
                 if (asset.costBasisUsdEq != null && asset.costBasisUsdEq !== 0) {
                     costUsdEq = asset.costBasisUsdEq
@@ -233,9 +237,13 @@ export function computeAssetMetrics(
                     costUsdEq = toUsdFromArs(costArs, fx)
                 }
             } else {
-                const priceArs = prices.currentPrice ?? 1
-                valArs = asset.quantity * priceArs
-                valUsdEq = toUsdFromArs(valArs, fx)
+                const priceArs = (prices.currentPrice != null && Number.isFinite(prices.currentPrice) && prices.currentPrice > 0)
+                    ? prices.currentPrice
+                    : null
+                if (priceArs != null) {
+                    valArs = asset.quantity * priceArs
+                    valUsdEq = toUsdFromArs(valArs, fx)
+                }
                 costUsdEq = toUsdFromArs(costArs, fx)
             }
         }

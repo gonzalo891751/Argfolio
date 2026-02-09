@@ -13,21 +13,8 @@ import {
     computeTotals,
 } from '@/domain/portfolio'
 import type { PortfolioTotals, FxType } from '@/domain/types'
-
-// Mock prices for Phase 2 (will be replaced with real API in Phase 3)
-const mockPrices: Record<string, number> = {
-    btc: 97500,
-    eth: 3450,
-    usdt: 1,
-    usdc: 1,
-    aapl: 178.50,
-    googl: 141.80,
-    meli: 1685,
-    tsla: 248.50,
-    msft: 378.90,
-    ars: 1,
-    usd: 1,
-}
+import { buildPriceCacheKey, resolvePriceWithCache } from '@/domain/prices/price-cache'
+import { missingPrice, okPrice } from '@/domain/prices/price-result'
 
 function normalizeFciNameKey(input: string): string {
     return input
@@ -37,6 +24,20 @@ function normalizeFciNameKey(input: string): string {
         .replace(/[^a-z0-9]+/g, ' ')
         .trim()
         .replace(/\s+/g, ' ')
+}
+
+function getPriceTtlMs(category: string): number {
+    switch (category) {
+        case 'CRYPTO':
+        case 'STABLE':
+            return 60 * 60 * 1000 // 1h
+        case 'CEDEAR':
+            return 12 * 60 * 60 * 1000 // 12h
+        case 'FCI':
+            return 36 * 60 * 60 * 1000 // 36h
+        default:
+            return 24 * 60 * 60 * 1000 // 24h
+    }
 }
 
 function getUserPreferences(): { baseFx: FxType; stableFx: FxType; cedearAuto: boolean; trackCash: boolean } {
@@ -88,48 +89,33 @@ export function useComputedPortfolio() {
             const instruments = new Map(instrumentsList.map((i) => [i.id, i]))
             const accounts = new Map(accountsList.map((a) => [a.id, a]))
 
-            // Merge mock prices (stocks) with real crypto prices
-            // Priority: Manual > Auto CEDEAR > Real Crypto > Mock
             const pricesMap = new Map<string, number>()
+            const now = Date.now()
+            const nowISO = new Date(now).toISOString()
 
-            // Add mocks first
-            Object.entries(mockPrices).forEach(([k, v]) => pricesMap.set(k.toUpperCase(), v)) // Ensure mock keys are upper to match symbols
-
-            // Add real crypto prices (using symbol as key, e.g. "BTC")
-            // We need to map instrument ID to price? 
-            // computeTotals expects currentPrices key to be instrumentId or symbol?
-            // Checking computeTotals -> it uses aggregatedMap.get(h.instrumentId) -> const price = currentPrices.get(h.instrumentId)
-            // Wait, computeHoldings uses instrumentId. 
-            // So currentPrices map keys must be INSTRUMENT IDs.
-
-            // Iterate instruments, find price for its symbol, set in map.
+            // Priority: Manual > live providers > last known cached.
             instrumentsList.forEach(instr => {
                 const sym = instr.symbol.toUpperCase()
+                let live = missingPrice('missing')
 
-                // MOCKS (Direct symbol match in mockPrices keys)
-                if (mockPrices[instr.symbol.toLowerCase()]) {  // mock keys are lower case in file
-                    pricesMap.set(instr.id, mockPrices[instr.symbol.toLowerCase()])
-                }
-
-                // REAL CRYPTO
-                const realPrice = cryptoPrices[sym]
-                if (realPrice !== undefined && (instr.category === 'CRYPTO' || instr.category === 'STABLE')) {
-                    pricesMap.set(instr.id, realPrice)
-                }
-
-                // AUTO CEDEAR (PPI)
-                // Only if enabled and category is CEDEAR
-                if (cedearAuto && instr.category === 'CEDEAR') {
-                    const cedearPrice = cedearPrices[sym] // keys are tickers in CEDEAR map
-                    if (cedearPrice) {
-                        pricesMap.set(instr.id, cedearPrice.lastPriceArs)
+                if (manualPrices.has(instr.id)) {
+                    live = okPrice(manualPrices.get(instr.id)!, 'manual', nowISO, 'high')
+                } else if ((instr.category === 'CRYPTO' || instr.category === 'STABLE') && typeof cryptoPrices[sym] === 'number') {
+                    live = okPrice(cryptoPrices[sym], 'coingecko', null, 'high')
+                } else if (cedearAuto && instr.category === 'CEDEAR') {
+                    const quote = cedearPrices[sym]
+                    if (quote && Number.isFinite(quote.lastPriceArs) && quote.lastPriceArs > 0) {
+                        live = okPrice(quote.lastPriceArs, 'PPI', quote.updatedAt, 'high')
                     }
                 }
 
-                // MANUAL PRICES (CEDEARs, Stocks)
-                // Overrides everything if present
-                if (manualPrices.has(instr.id)) {
-                    pricesMap.set(instr.id, manualPrices.get(instr.id)!)
+                const resolved = resolvePriceWithCache(
+                    buildPriceCacheKey(instr.category, instr.id),
+                    live,
+                    { ttlMs: getPriceTtlMs(instr.category), now }
+                )
+                if (resolved.price != null) {
+                    pricesMap.set(instr.id, resolved.price)
                 }
             })
 
@@ -172,8 +158,17 @@ export function useComputedPortfolio() {
                         }
                     }
 
-                    if (vcp && vcp > 0) {
-                        pricesMap.set(instr.id, vcp)
+                    const live = vcp && vcp > 0
+                        ? okPrice(vcp, 'fci_latest', null, 'high')
+                        : missingPrice('fci_latest')
+                    const resolved = resolvePriceWithCache(
+                        buildPriceCacheKey(instr.category, instr.id),
+                        live,
+                        { ttlMs: getPriceTtlMs(instr.category), now }
+                    )
+
+                    if (resolved.price != null) {
+                        pricesMap.set(instr.id, resolved.price)
                     }
                 }
             }
@@ -268,13 +263,5 @@ export function useComputedPortfolio() {
         // Prevent UI flicker (and scroll reset) when queryKey changes due to FX/price refresh.
         // We keep the previous computed snapshot until the new one is ready.
         placeholderData: (prev) => prev,
-    })
-}
-
-export function useMockPrices() {
-    return useQuery({
-        queryKey: ['prices', 'mock'],
-        queryFn: () => new Map(Object.entries(mockPrices)),
-        staleTime: Infinity,
     })
 }

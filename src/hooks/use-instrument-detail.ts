@@ -4,21 +4,23 @@ import { useInstruments, useAccounts } from './use-instruments'
 import { useFxRates } from './use-fx-rates'
 import { useCryptoPrices } from './use-crypto-prices'
 import { useManualPrices } from './use-manual-prices'
-import { useMockPrices } from './use-computed-portfolio'
 import { calculateValuation } from '@/domain/portfolio/valuation'
 import type { Movement, Instrument } from '@/domain/types'
+import { buildPriceCacheKey, resolvePriceWithCache } from '@/domain/prices/price-cache'
+import { missingPrice, okPrice } from '@/domain/prices/price-result'
 
-// Mock prices lookup by instrument ID
-const priceKeyMap: Record<string, string> = {
-    btc: 'btc',
-    eth: 'eth',
-    usdt: 'usdt',
-    usdc: 'usdc',
-    aapl: 'aapl',
-    googl: 'googl',
-    meli: 'meli',
-    tsla: 'tsla',
-    msft: 'msft',
+function getPriceTtlMs(category: string): number {
+    switch (category) {
+        case 'CRYPTO':
+        case 'STABLE':
+            return 60 * 60 * 1000
+        case 'CEDEAR':
+            return 12 * 60 * 60 * 1000
+        case 'FCI':
+            return 36 * 60 * 60 * 1000
+        default:
+            return 24 * 60 * 60 * 1000
+    }
 }
 
 export interface BuyLot {
@@ -75,7 +77,6 @@ export function useInstrumentDetail(instrumentId: string): InstrumentDetail | nu
     const { data: accountsList = [], isLoading: accountsLoading } = useAccounts()
     const { data: fxRates } = useFxRates()
     const { priceMap: manualPrices } = useManualPrices()
-    const { data: mockPricesMap } = useMockPrices()
 
     // Determine target instrument and symbol for crypto hooks
     const targetInstrument = instrumentsList.find(i => i.id === instrumentId)
@@ -107,24 +108,23 @@ export function useInstrumentDetail(instrumentId: string): InstrumentDetail | nu
         const buyMovements = sortedMovements.filter((m) => m.type === 'BUY' || m.type === 'TRANSFER_IN')
         const sellMovements = sortedMovements.filter((m) => m.type === 'SELL')
 
-        // Resolve Price
-        let currentPrice = 0
-        // 1. Manual
+        // Resolve Price: manual/real feed, then last known cache (estimated/stale).
+        let livePrice = missingPrice('missing')
+        const now = Date.now()
+        const nowISO = new Date(now).toISOString()
+
         if (manualPrices.has(instrumentId)) {
-            currentPrice = manualPrices.get(instrumentId)!
+            livePrice = okPrice(manualPrices.get(instrumentId)!, 'manual', nowISO, 'high')
+        } else if ((instrument.category === 'CRYPTO' || instrument.category === 'STABLE') && cryptoSymbol && typeof realCryptoPrices[cryptoSymbol] === 'number') {
+            livePrice = okPrice(realCryptoPrices[cryptoSymbol], 'coingecko', null, 'high')
         }
-        // 2. Real Crypto
-        else if ((instrument.category === 'CRYPTO' || instrument.category === 'STABLE') && cryptoSymbol && realCryptoPrices[cryptoSymbol] !== undefined) {
-            currentPrice = realCryptoPrices[cryptoSymbol]
-        }
-        // 3. Mock (Fallback)
-        else {
-            const priceKey = priceKeyMap[instrumentId] || instrumentId
-            if (mockPricesMap) {
-                // Try key, then lowercase symbol
-                currentPrice = mockPricesMap.get(priceKey) ?? mockPricesMap.get(instrument.symbol.toLowerCase()) ?? 0
-            }
-        }
+
+        const resolvedPrice = resolvePriceWithCache(
+            buildPriceCacheKey(instrument.category, instrumentId),
+            livePrice,
+            { ttlMs: getPriceTtlMs(instrument.category), now }
+        )
+        const currentPrice = resolvedPrice.price ?? 0
 
         const isCrypto = instrument.category === 'CRYPTO' || instrument.category === 'STABLE'
 
@@ -318,7 +318,7 @@ export function useInstrumentDetail(instrumentId: string): InstrumentDetail | nu
             accountBreakdown,
             isLoading: false,
         }
-    }, [instrumentId, movements, instrumentsList, accountsList, manualPrices, mockPricesMap, realCryptoPrices, fxRates, isLoading])
+    }, [instrumentId, movements, instrumentsList, accountsList, manualPrices, realCryptoPrices, fxRates, isLoading])
 }
 
 /**

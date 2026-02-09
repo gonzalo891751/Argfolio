@@ -199,10 +199,13 @@ export function calculateValuation(
     }
 
     // -------------------------------------------------------------------------
-    // Fallback for other things (e.g. FCI, WALLET, OTHER) or Explicit Currency
+    // Fallback for other things (e.g. WALLET, OTHER) or explicit currency
+    // Never assume `price=1` silently when market price is missing.
     // -------------------------------------------------------------------------
-    const effPrice = (price !== undefined && Number.isFinite(price)) ? price : 1
-    const valueNative = quantity * effPrice
+    if (price === undefined || price === null || !Number.isFinite(price) || price <= 0) {
+        return nullResult
+    }
+    const valueNative = quantity * price
 
     if (currency === 'USD') {
         const valueUsd = valueNative

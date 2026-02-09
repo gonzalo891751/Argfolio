@@ -1,5 +1,11 @@
 import { db } from '../schema'
 import type { Movement } from '@/domain/types'
+import {
+    isRemoteSyncEnabled,
+    syncRemoteMovementCreate,
+    syncRemoteMovementDelete,
+    syncRemoteMovementUpdate,
+} from '@/sync/remote-sync'
 
 export const movementsRepo = {
     async list(): Promise<Movement[]> {
@@ -35,26 +41,54 @@ export const movementsRepo = {
     },
 
     async create(movement: Movement): Promise<string> {
-        return db.movements.add(movement)
+        if (isRemoteSyncEnabled()) {
+            try {
+                await syncRemoteMovementCreate(movement)
+            } catch {
+                // Fallback local-only when offline/read-only.
+            }
+        }
+        return db.movements.put(movement)
     },
 
     async update(id: string, updates: Partial<Movement>): Promise<void> {
+        const existing = await db.movements.get(id)
+        if (isRemoteSyncEnabled() && existing) {
+            try {
+                await syncRemoteMovementUpdate({ ...existing, ...updates, id })
+            } catch {
+                // Fallback local-only when offline/read-only.
+            }
+        }
         await db.movements.update(id, updates)
     },
 
     async delete(id: string): Promise<void> {
         // Cascade Delete for Plazos Fijos
         const m = await db.movements.get(id)
+        const idsToDelete: string[] = [id]
         if (m && m.pf?.kind === 'constitute') {
             // Find orphans
             const related = await db.movements.filter(x => x.pf?.kind === 'redeem' && x.pf?.pfId === id).toArray()
-            const idsToDelete = related.map(r => r.id)
-            if (idsToDelete.length > 0) {
-                await db.movements.bulkDelete(idsToDelete)
+            const relatedIds = related.map(r => r.id)
+            if (relatedIds.length > 0) {
+                idsToDelete.push(...relatedIds)
             }
         }
 
-        await db.movements.delete(id)
+        if (isRemoteSyncEnabled()) {
+            await Promise.allSettled(
+                idsToDelete.map(async (movementId) => {
+                    try {
+                        await syncRemoteMovementDelete(movementId)
+                    } catch {
+                        // Fallback local-only when offline/read-only.
+                    }
+                })
+            )
+        }
+
+        await db.movements.bulkDelete(idsToDelete)
     },
 
     async deleteAll(): Promise<void> {

@@ -6,6 +6,8 @@
  * consumed by the V2 UI components.
  */
 
+import type { PriceResult } from '@/domain/prices/price-result'
+
 // =============================================================================
 // Core Value Objects
 // =============================================================================
@@ -179,6 +181,9 @@ export interface ItemV2 {
         asOfISO?: string
     }
 
+    /** Uniform pricing status for UI (all asset types) */
+    priceResult?: PriceResult
+
     /** Reference to source data */
     accountId: string
     instrumentId?: string
@@ -350,6 +355,8 @@ export interface FciDetail {
         unitPrice?: number
         asOfISO?: string
     }
+    /** Uniform pricing status for UI (all asset types) */
+    priceResult?: PriceResult
 }
 
 // =============================================================================

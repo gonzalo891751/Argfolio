@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Sun, Moon, Monitor, RefreshCw, DollarSign, AlertTriangle, RotateCcw } from 'lucide-react'
+import { useRef, useState, type ChangeEvent } from 'react'
+import { Sun, Moon, Monitor, RefreshCw, DollarSign, AlertTriangle, RotateCcw, Download, Upload, Cloud } from 'lucide-react'
 import { useTheme } from '@/lib/theme'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { resetDatabase } from '@/db'
@@ -9,6 +9,8 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTrackCash } from '@/hooks/use-preferences'
+import { exportLocalBackup, importLocalBackup, parseBackupJson } from '@/domain/sync/local-backup'
+import { isRemoteSyncEnabled } from '@/sync/remote-sync'
 
 type FxPreference = 'MEP' | 'CCL'
 
@@ -21,6 +23,9 @@ export function SettingsPage() {
         return (localStorage.getItem('argfolio-fx-preference') as FxPreference) || 'MEP'
     })
     const [isResetting, setIsResetting] = useState(false)
+    const [isExporting, setIsExporting] = useState(false)
+    const [isImporting, setIsImporting] = useState(false)
+    const importInputRef = useRef<HTMLInputElement | null>(null)
 
     const handleFxChange = (pref: FxPreference) => {
         setFxPreference(pref)
@@ -45,6 +50,54 @@ export function SettingsPage() {
             alert('Error al reiniciar los datos')
         } finally {
             setIsResetting(false)
+        }
+    }
+
+    const handleExportBackup = async () => {
+        setIsExporting(true)
+        try {
+            const payload = await exportLocalBackup()
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const date = new Date().toISOString().slice(0, 10)
+            const anchor = document.createElement('a')
+            anchor.href = url
+            anchor.download = `argfolio-backup-${date}.json`
+            document.body.appendChild(anchor)
+            anchor.click()
+            anchor.remove()
+            URL.revokeObjectURL(url)
+            alert('Backup exportado correctamente')
+        } catch (error) {
+            console.error('Error exporting backup:', error)
+            alert('No se pudo exportar el backup')
+        } finally {
+            setIsExporting(false)
+        }
+    }
+
+    const handleImportBackup = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        setIsImporting(true)
+        try {
+            const text = await file.text()
+            const payload = parseBackupJson(text)
+            const result = await importLocalBackup(payload)
+
+            queryClient.invalidateQueries({ queryKey: ['accounts'] })
+            queryClient.invalidateQueries({ queryKey: ['instruments'] })
+            queryClient.invalidateQueries({ queryKey: ['movements'] })
+            queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+
+            alert(`Importación completada. Cuentas: ${result.accounts}, Instrumentos: ${result.instruments}, Movimientos: ${result.movements}.`)
+        } catch (error: any) {
+            console.error('Error importing backup:', error)
+            alert(error?.message || 'No se pudo importar el backup')
+        } finally {
+            event.target.value = ''
+            setIsImporting(false)
         }
     }
 
@@ -164,6 +217,58 @@ export function SettingsPage() {
                         </div>
                         <TrackCashToggle />
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Backup + Sync */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <Cloud className="h-4 w-4" />
+                        Backup y sincronización
+                    </CardTitle>
+                    <CardDescription>
+                        Exportá/Importá tus datos locales y controlá el estado del sync remoto.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                        <p className="text-sm font-medium">
+                            Sync remoto: {isRemoteSyncEnabled() ? 'Activado' : 'Desactivado'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Flag: `VITE_ARGFOLIO_REMOTE_SYNC=1` para bootstrap desde API + escritura remota con fallback local.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                        <Button
+                            variant="outline"
+                            onClick={handleExportBackup}
+                            disabled={isExporting}
+                        >
+                            <Download className={cn('h-4 w-4 mr-2', isExporting && 'animate-pulse')} />
+                            {isExporting ? 'Exportando...' : 'Exportar JSON'}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => importInputRef.current?.click()}
+                            disabled={isImporting}
+                        >
+                            <Upload className={cn('h-4 w-4 mr-2', isImporting && 'animate-pulse')} />
+                            {isImporting ? 'Importando...' : 'Importar JSON'}
+                        </Button>
+                    </div>
+                    <input
+                        ref={importInputRef}
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={handleImportBackup}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        Importación en modo merge seguro: upsert por `id` (sin duplicar).
+                    </p>
                 </CardContent>
             </Card>
 

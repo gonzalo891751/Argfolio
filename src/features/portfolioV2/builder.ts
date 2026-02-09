@@ -32,6 +32,7 @@ import type { PFPosition } from '@/domain/pf/types'
 import type { AccountSettings, RubroOverride } from '@/db/schema'
 import type { FxOverride, FxOverridesMap } from './fxOverrides'
 import { buildFifoLots } from '@/domain/portfolio/fifo'
+import type { PriceResult } from '@/domain/prices/price-result'
 
 // =============================================================================
 // Rubro Configuration
@@ -169,9 +170,9 @@ const ZERO_BALANCE_THRESHOLD = 1
 
 /** Check if item has significant value (not near zero) */
 function hasSignificantValue(valArs: number, qty?: number, category?: string): boolean {
-    // For FCI, never hide positions just because the price feed is missing.
-    // We prefer rendering the row and letting the UI show a pricing warning badge.
-    if (category === 'FCI') {
+    // For tradeable assets, keep rows with qty > 0 even if market price is missing.
+    // UI will render explicit pricing status (Sin precio / Estimado / Desactualizado).
+    if (category === 'FCI' || category === 'CEDEAR' || category === 'CRYPTO' || category === 'STABLE') {
         const q = qty ?? 0
         if (q > 0) return true
     }
@@ -369,6 +370,7 @@ function buildItemFromMetrics(
     let valArs = metrics.valArs ?? 0
     let valUsd = metrics.valUsdEq ?? 0
     let priceMeta: ItemV2['priceMeta'] | undefined
+    let priceResult: PriceResult | undefined = metrics.priceResult
 
     if (fxSnapshot) {
         const isCashItem = kind === 'cash_ars' || kind === 'cash_usd' || kind === 'wallet_yield'
@@ -470,6 +472,21 @@ function buildItemFromMetrics(
                     asOfISO: source === 'last_trade' ? last?.asOfISO : undefined,
                 }
 
+                const status: PriceResult['status'] =
+                    source === 'quote'
+                        ? 'ok'
+                        : source === 'missing'
+                            ? 'missing'
+                            : 'estimated'
+
+                priceResult = {
+                    price: unit > 0 ? unit : null,
+                    status,
+                    source: source === 'quote' ? 'fci_latest' : source,
+                    asOf: source === 'last_trade' ? (last?.asOfISO ?? null) : null,
+                    confidence: source === 'quote' ? 'high' : source === 'missing' ? 'low' : 'medium',
+                }
+
                 if (fxMeta && fxMeta.rate > 0 && qty > 0 && unit > 0) {
                     const isFciUsd = metrics.nativeCurrency === 'USD'
                     if (isFciUsd) {
@@ -506,6 +523,7 @@ function buildItemFromMetrics(
         instrumentId: metrics.instrumentId,
         fxMeta,
         priceMeta,
+        priceResult,
     }
 }
 
@@ -1534,6 +1552,7 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
                     lots,
                     fxUsed: 'Oficial',
                     priceMeta: item.priceMeta,
+                    priceResult: item.priceResult,
                 })
             }
         }
