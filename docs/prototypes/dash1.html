@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Dashboard v2.2</title>
+    
+    <!-- Fonts: Inter, JetBrains Mono, Space Grotesk -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0B1121', // Deep Navy (App Background)
+                            800: '#151E32', // Surface 1
+                            700: '#1E293B', // Surface 2
+                            primary: '#6366f1', // Indigo
+                            accent: '#0ea5e9', // Sky
+                        },
+                        semantic: {
+                            up: '#10b981', // Emerald
+                            down: '#f43f5e', // Rose
+                            warn: '#f59e0b', // Amber
+                            info: '#3b82f6', // Blue
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-sm': '0 0 10px -2px rgba(99, 102, 241, 0.2)',
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Utilities & Scrollbar */
+        :root {
+            --bg-app: #0B1121;
+            --text-primary: #F8FAFC;
+        }
+        
+        body {
+            background-color: var(--bg-app);
+            color: var(--text-primary);
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.2s ease;
+        }
+
+        .glass-panel-hover:hover {
+            background: rgba(30, 41, 59, 0.6);
+            border-color: rgba(255,255,255,0.15);
+            transform: translateY(-1px);
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Loader Animation */
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 4px;
+            color: transparent !important;
+            pointer-events: none;
+        }
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Custom Tooltip implementation */
+        #custom-tooltip {
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* Chart Styles */
+        .chart-line-projected {
+            stroke-dasharray: 6 4;
+            opacity: 0.8;
+            stroke: #a5b4fc; /* Lighter indigo */
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden selection:bg-brand-primary selection:text-white">
+
+    <!-- GLOBAL TOOLTIP CONTAINER -->
+    <div id="custom-tooltip" class="fixed hidden px-3 py-2 bg-slate-800 border border-white/10 rounded-lg shadow-xl text-xs text-white max-w-xs transition-opacity opacity-0 transform scale-95 pointer-events-none z-[60]">
+        <span id="tooltip-content">Tooltip text</span>
+    </div>
+
+    <!-- SIDEBAR (Navigation) - UNTOUCHED -->
+    <aside class="w-20 lg:w-64 bg-brand-900 border-r border-white/5 flex flex-col flex-shrink-0 z-30 transition-all">
+        <!-- Logo -->
+        <div class="h-16 flex items-center justify-center lg:justify-start lg:px-6 border-b border-white/5">
+            <svg class="w-8 h-8 text-brand-primary flex-shrink-0" viewBox="0 0 40 40" fill="none">
+                <path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/>
+                <circle cx="20" cy="14" r="3" class="text-white" fill="currentColor"/>
+            </svg>
+            <span class="font-display font-bold text-xl ml-3 hidden lg:block tracking-tight">Argfolio</span>
+        </div>
+
+        <!-- Nav Items -->
+        <nav class="flex-1 py-6 space-y-1 px-3">
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-brand-primary/10 text-brand-primary border border-brand-primary/20 group transition-all">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                <span class="hidden lg:block font-medium text-sm">Dashboard</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all group">
+                <svg class="w-5 h-5 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span class="hidden lg:block font-medium text-sm">Mis Activos</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all group">
+                <svg class="w-5 h-5 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+                <span class="hidden lg:block font-medium text-sm">Mercado</span>
+            </a>
+        </nav>
+
+        <!-- User Profile (Bottom) -->
+        <div class="p-4 border-t border-white/5">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-primary to-brand-accent flex items-center justify-center font-bold text-xs text-white">
+                    JD
+                </div>
+                <div class="hidden lg:block">
+                    <p class="text-sm font-medium text-white" data-user="full_name">Juan Developer</p>
+                    <p class="text-xs text-slate-500">Pro Plan</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        
+        <!-- HEADER (Existing) -->
+        <header class="h-16 border-b border-white/5 bg-brand-900/80 backdrop-blur-md flex items-center justify-between px-6 sticky top-0 z-20">
+            <div class="flex items-center gap-4">
+                <h1 class="text-sm font-mono text-slate-400">Argfolio <span class="text-slate-600">/</span> Dashboard</h1>
+            </div>
+            <!-- Settings / Notifications mock -->
+            <div class="flex items-center gap-4">
+                <button class="text-slate-400 hover:text-white transition"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg></button>
+            </div>
+        </header>
+
+        <!-- CONTENT SCROLL AREA -->
+        <div id="content-area" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth pb-24">
+            
+            <!-- 1. HERO SECTION & QUICK ACTIONS -->
+            <section class="flex flex-col xl:flex-row gap-6 xl:items-end justify-between animate-fade-in">
+                <div>
+                    <h2 class="font-display text-3xl font-bold text-white mb-1">
+                        Hola, <span data-user="first_name">Usuario</span>
+                    </h2>
+                    <p class="text-slate-400 text-sm">Este es tu portafolio.</p>
+                </div>
+                
+                <!-- Quick Access Cards -->
+                <div class="flex flex-wrap md:flex-nowrap gap-3 w-full xl:w-auto items-stretch">
+                    <!-- Ir a Activos -->
+                    <button class="glass-panel glass-panel-hover px-4 py-3 rounded-xl flex items-center gap-3 flex-1 xl:flex-none xl:w-40 transition-all group">
+                        <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                        </div>
+                        <div class="text-left">
+                            <div class="text-[10px] text-slate-400 uppercase tracking-wide">Ir a</div>
+                            <div class="font-medium text-sm text-white">Activos</div>
+                        </div>
+                    </button>
+
+                    <!-- Ver Movimientos -->
+                    <button class="glass-panel glass-panel-hover px-4 py-3 rounded-xl flex items-center gap-3 flex-1 xl:flex-none xl:w-40 transition-all group">
+                        <div class="w-8 h-8 rounded-lg bg-brand-primary/10 text-brand-primary flex items-center justify-center group-hover:bg-brand-primary group-hover:text-white transition-colors">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                        </div>
+                        <div class="text-left">
+                            <div class="text-[10px] text-slate-400 uppercase tracking-wide">Ver</div>
+                            <div class="font-medium text-sm text-white">Movimientos</div>
+                        </div>
+                    </button>
+
+                     <!-- Ir a Mercado -->
+                     <button class="glass-panel glass-panel-hover px-4 py-3 rounded-xl flex items-center gap-3 flex-1 xl:flex-none xl:w-40 transition-all group">
+                        <div class="w-8 h-8 rounded-lg bg-brand-accent/10 text-brand-accent flex items-center justify-center group-hover:bg-brand-accent group-hover:text-white transition-colors">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+                        </div>
+                        <div class="text-left">
+                            <div class="text-[10px] text-slate-400 uppercase tracking-wide">Ir a</div>
+                            <div class="font-medium text-sm text-white">Mercado</div>
+                        </div>
+                    </button>
+                    
+                    <!-- Agregar Movimiento -->
+                    <button onclick="openModal('modal-movement')" class="px-5 py-3 rounded-xl bg-brand-primary text-white shadow-glow hover:bg-brand-primary/90 flex items-center justify-center gap-2 transition-all flex-1 xl:flex-none xl:w-auto min-w-[180px] group border border-white/10">
+                        <svg class="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                        <span class="font-medium text-sm">Agregar movimiento</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- EMPTY STATE PLACEHOLDER -->
+            <div id="empty-state" class="hidden flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
+                <div class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 mb-6">
+                    <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <h3 class="font-display text-xl text-white mb-2">Tu tablero está vacío</h3>
+                <p class="text-slate-400 max-w-md text-center mb-8">Conectá tu primera cuenta o cargá activos manualmente.</p>
+                <button class="px-6 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-primary/90 transition shadow-glow-sm font-medium">Ir a Mis Activos</button>
+            </div>
+
+            <!-- DATA CONTENT -->
+            <div id="dashboard-content" class="space-y-6">
+                
+                <!-- 2. KPI GRID (12 Cols Layout) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4">
+                    
+                    <!-- A. Total Patrimony (Col Span 6) -->
+                    <div class="glass-panel p-6 rounded-xl xl:col-span-6 relative overflow-hidden group flex flex-col justify-center">
+                        <div class="flex items-center gap-2 mb-2">
+                            <h3 class="text-slate-400 text-xs font-mono uppercase tracking-wider">Patrimonio Total Estimado</h3>
+                            <div class="group/info relative">
+                                <svg class="w-3 h-3 text-slate-500 hover:text-white cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" onmouseenter="showTooltip(event, 'Consolidado (valuación por activo): Suma de posiciones ARS + USD valuados según su tipo de cambio correspondiente.')" onmouseleave="hideTooltip()">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-sm text-slate-500 font-mono">ARS</span>
+                                <span class="text-3xl lg:text-4xl font-mono font-bold text-white tracking-tight kpi-value" data-kpi="patrimonio_total_ars">$ 45.230.500</span>
+                            </div>
+                            <span class="hidden sm:inline text-slate-600">|</span>
+                            <span class="text-lg font-mono text-slate-400 kpi-value" data-kpi="patrimonio_total_usd">≈ USD 38.500,00</span>
+                        </div>
+                    </div>
+
+                    <!-- B. P&L Day -->
+                    <div class="glass-panel p-5 rounded-xl xl:col-span-2">
+                        <h3 class="text-slate-400 text-[10px] font-mono uppercase tracking-wider mb-2 truncate">Variación Hoy (24h)</h3>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xl font-mono font-bold text-semantic-up kpi-value" data-kpi="cambio_dia_pct">+ 2.4%</span>
+                            <svg class="w-4 h-4 text-semantic-up" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                        </div>
+                        <div class="text-[10px] text-slate-400 font-mono flex flex-col gap-0.5">
+                            <span class="kpi-value" data-kpi="cambio_dia_ars">+ $ 1.085k</span>
+                            <span class="kpi-value opacity-60" data-kpi="cambio_dia_usd">+ USD 924</span>
+                        </div>
+                    </div>
+
+                    <!-- C. P&L Month -->
+                    <div class="glass-panel p-5 rounded-xl xl:col-span-2">
+                        <h3 class="text-slate-400 text-[10px] font-mono uppercase tracking-wider mb-2 truncate">Cambio del mes (MTD)</h3>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xl font-mono font-bold text-semantic-down kpi-value" data-kpi="cambio_mtd_pct">- 0.8%</span>
+                            <svg class="w-4 h-4 text-semantic-down" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg>
+                        </div>
+                        <div class="text-[10px] text-slate-400 font-mono flex flex-col gap-0.5">
+                            <span class="kpi-value" data-kpi="cambio_mtd_ars">- $ 361k</span>
+                            <span class="kpi-value opacity-60" data-kpi="cambio_mtd_usd">- USD 308</span>
+                        </div>
+                    </div>
+
+                    <!-- D. P&L Year -->
+                    <div class="glass-panel p-5 rounded-xl xl:col-span-2">
+                        <h3 class="text-slate-400 text-[10px] font-mono uppercase tracking-wider mb-2 truncate">Año (YTD)</h3>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xl font-mono font-bold text-semantic-up kpi-value" data-kpi="cambio_ytd_pct">+ 12.5%</span>
+                            <svg class="w-4 h-4 text-semantic-up" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                        </div>
+                        <div class="text-[10px] text-slate-400 font-mono flex flex-col gap-0.5">
+                            <span class="kpi-value" data-kpi="cambio_ytd_ars">+ $ 4.5M</span>
+                            <span class="kpi-value opacity-60" data-kpi="cambio_ytd_usd">+ USD 3.2k</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2b. SECONDARY KPI ROW -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- Liquidity Breakdown -->
+                    <div class="glass-panel p-5 rounded-xl flex flex-col justify-center">
+                        <div class="flex justify-between items-end mb-3">
+                            <h3 class="text-slate-400 text-xs font-mono uppercase tracking-wider">Liquidez</h3>
+                            <span class="text-xs text-white font-medium">85% Invertido</span>
+                        </div>
+                        <div class="h-3 w-full bg-slate-800 rounded-full overflow-hidden flex cursor-help" onmouseenter="showTooltip(event, 'Desglose de liquidez disponible y plazos de acreditación.')" onmouseleave="hideTooltip()">
+                            <div class="h-full bg-brand-primary" style="width: 15%" data-kpi="liquidez_inmediata"></div>
+                            <div class="h-full bg-brand-accent" style="width: 25%" data-kpi="liquidez_24_48"></div>
+                            <div class="h-full bg-slate-700" style="width: 60%" data-kpi="liquidez_inmovilizada"></div>
+                        </div>
+                        <div class="flex justify-between mt-2 text-[10px] font-mono text-slate-500">
+                            <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-brand-primary"></div>Cash</div>
+                            <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-brand-accent"></div>T+1 / T+2</div>
+                            <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-slate-700"></div>Invertido</div>
+                        </div>
+                    </div>
+
+                    <!-- Net Result Breakdown -->
+                    <div class="glass-panel p-5 rounded-xl">
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-slate-400 text-xs font-mono uppercase tracking-wider">Resultado neto (30D)</h3>
+                                <svg class="w-3 h-3 text-slate-500 hover:text-white cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" onmouseenter="showTooltip(event, 'Resultado neto = Intereses + Variación de precio − Egresos/fees.')" onmouseleave="hideTooltip()"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <span class="text-lg font-mono font-bold text-semantic-up kpi-value" data-kpi="ingresos_neto">+$ 450.000</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="px-3 py-1 rounded-full border border-semantic-up/20 bg-semantic-up/10 text-semantic-up text-xs font-medium kpi-value" data-kpi="ingresos_intereses">
+                                + Int. $ 50k
+                            </span>
+                            <span class="px-3 py-1 rounded-full border border-semantic-up/20 bg-semantic-up/10 text-semantic-up text-xs font-medium kpi-value" data-kpi="ingresos_variacion_precio">
+                                + Var. $ 420k
+                            </span>
+                             <span class="px-3 py-1 rounded-full border border-semantic-down/20 bg-semantic-down/10 text-semantic-down text-xs font-medium kpi-value" data-kpi="ingresos_egresos">
+                                - Fees $ 20k
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. MAIN CHART SECTION -->
+                <section class="glass-panel p-1 rounded-xl">
+                    <!-- Toolbar -->
+                    <div class="p-5 flex flex-col lg:flex-row justify-between items-center gap-4 border-b border-white/5">
+                        <div class="flex items-center gap-4 w-full lg:w-auto">
+                            <h3 class="font-display text-lg text-white">Evolución Patrimonio</h3>
+                            
+                            <!-- Mode Toggle -->
+                            <div class="group relative">
+                                <div class="flex bg-slate-900 p-0.5 rounded-lg border border-white/10">
+                                    <button onclick="setChartMode('HIST')" id="btn-mode-hist" class="px-3 py-1 text-[10px] font-bold uppercase rounded-md bg-white/10 text-white shadow transition-all">Histórico</button>
+                                    <button onclick="setChartMode('PROJ')" id="btn-mode-proj" class="px-3 py-1 text-[10px] font-medium uppercase rounded-md text-slate-400 hover:text-white transition-all">Proyectado</button>
+                                </div>
+                                <!-- Tooltip on hover of toggle container -->
+                                <div class="absolute top-full mt-2 left-0 w-48 bg-slate-800 text-[10px] text-slate-300 p-2 rounded border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                    Estimación basada en tendencia reciente + devengamientos. (Mock)
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end overflow-x-auto">
+                            <!-- Currency -->
+                            <div class="bg-slate-900 p-0.5 rounded-lg border border-white/10 flex">
+                                <button onclick="setCurrency('ARS')" id="btn-ars" class="px-2 py-1 rounded text-xs font-bold bg-white/10 text-white shadow transition-all">ARS</button>
+                                <button onclick="setCurrency('USD')" id="btn-usd" class="px-2 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition-all">USD</button>
+                            </div>
+
+                            <!-- Range Selector -->
+                            <div class="flex bg-slate-900/50 p-0.5 rounded-lg border border-white/5">
+                                <button onclick="setRange('1D')" class="range-btn px-2 py-1 text-xs font-medium text-slate-400 hover:text-white rounded transition" data-range="1D">1D</button>
+                                <button onclick="setRange('7D')" class="range-btn px-2 py-1 text-xs font-medium text-slate-400 hover:text-white rounded transition" data-range="7D">7D</button>
+                                <button onclick="setRange('30D')" class="range-btn px-2 py-1 text-xs font-medium bg-white/10 text-white rounded transition shadow-sm" data-range="30D">30D</button>
+                                <button onclick="setRange('90D')" class="range-btn px-2 py-1 text-xs font-medium text-slate-400 hover:text-white rounded transition" data-range="90D">90D</button>
+                                <button onclick="setRange('1Y')" class="range-btn px-2 py-1 text-xs font-medium text-slate-400 hover:text-white rounded transition" data-range="1Y">1Y</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chart Container -->
+                    <div class="h-[350px] w-full p-4 relative" data-chart="equity_curve" id="main-chart-container">
+                        <!-- SVG Chart Rendered via JS -->
+                    </div>
+                </section>
+
+                <!-- 4. DRIVERS & ALLOCATION GRID -->
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                    
+                    <!-- Drivers Table (Improved with Segmented Control) -->
+                    <div class="glass-panel rounded-xl col-span-1 xl:col-span-2 overflow-hidden flex flex-col">
+                        <div class="p-4 border-b border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white/[0.01]">
+                            <h3 class="font-display text-lg">Drivers del Período</h3>
+                            
+                            <!-- Range Selector for Drivers -->
+                            <div class="flex bg-slate-900/50 p-0.5 rounded-lg border border-white/5 overflow-x-auto">
+                                <button onclick="setDriversRange('TOTAL')" class="driver-range-btn px-3 py-1 text-[10px] font-bold bg-white/10 text-white rounded transition" data-range="TOTAL">TOTAL</button>
+                                <button onclick="setDriversRange('1D')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="1D">1D</button>
+                                <button onclick="setDriversRange('7D')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="7D">7D</button>
+                                <button onclick="setDriversRange('30D')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="30D">30D</button>
+                                <button onclick="setDriversRange('90D')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="90D">90D</button>
+                                <button onclick="setDriversRange('1Y')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="1Y">1Y</button>
+                            </div>
+                        </div>
+                        
+                        <div class="overflow-x-auto flex-1">
+                            <table class="w-full text-left border-collapse" id="drivers-table">
+                                <thead>
+                                    <tr class="text-xs font-mono text-slate-500 border-b border-white/5 bg-slate-900/40">
+                                        <th class="p-4 font-medium uppercase w-1/3">Categoría</th>
+                                        <th class="p-4 font-medium uppercase text-right">Tenencia</th>
+                                        <th class="p-4 font-medium uppercase text-right">Variación</th>
+                                        <th class="p-4 font-medium uppercase text-right hidden sm:table-cell w-24">Trend</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-sm font-sans divide-y divide-white/5" id="drivers-table-body">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Allocation & Risk Container -->
+                    <div class="flex flex-col xl:flex-row xl:col-span-1 xl:flex-wrap gap-4 items-stretch">
+                        
+                        <!-- Allocation Donut -->
+                        <div class="glass-panel p-5 rounded-xl flex-1 min-w-[200px] flex flex-col items-center justify-center relative">
+                            <h3 class="font-display text-sm text-slate-300 absolute top-4 left-4">Distribución</h3>
+                            <div class="mt-4 relative w-32 h-32 flex-shrink-0 cursor-crosshair">
+                                <svg viewBox="0 0 100 100" class="w-full h-full transform -rotate-90">
+                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#1E293B" stroke-width="12" />
+                                    <!-- Segments -->
+                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#6366f1" stroke-width="12" stroke-dasharray="125 251" stroke-dashoffset="0" 
+                                            class="hover:opacity-80 transition-opacity" onmousemove="showTooltip(event, 'CEDEARs: 50%')" onmouseleave="hideTooltip()" />
+                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#0ea5e9" stroke-width="12" stroke-dasharray="62 251" stroke-dashoffset="-125" 
+                                            class="hover:opacity-80 transition-opacity" onmousemove="showTooltip(event, 'Bonos: 25%')" onmouseleave="hideTooltip()" />
+                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#10b981" stroke-width="12" stroke-dasharray="62 251" stroke-dashoffset="-187" 
+                                            class="hover:opacity-80 transition-opacity" onmousemove="showTooltip(event, 'Crypto: 25%')" onmouseleave="hideTooltip()" />
+                                </svg>
+                                <div class="absolute inset-0 flex items-center justify-center font-mono text-xs font-bold text-white pointer-events-none">
+                                    100%
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Risk & Metrics -->
+                        <div class="glass-panel p-5 rounded-xl flex-1 min-w-[200px]">
+                            <h3 class="font-display text-sm text-slate-300 mb-4">Riesgo & Métricas</h3>
+                            <div class="grid grid-cols-1 gap-2">
+                                <div class="flex justify-between items-center p-2 rounded bg-white/5">
+                                    <span class="text-[10px] text-slate-500 font-mono uppercase">Volatilidad (30D)</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-semantic-warn"></div>
+                                        <span class="text-xs font-mono text-white">MEDIO</span>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center p-2 rounded bg-white/5">
+                                    <span class="text-[10px] text-slate-500 font-mono uppercase">Max DD (90D)</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-semantic-up"></div>
+                                        <span class="text-xs font-mono text-white">-4.2%</span>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center p-2 rounded bg-white/5">
+                                    <span class="text-[10px] text-slate-500 font-mono uppercase">Sharpe (1Y)</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-semantic-up"></div>
+                                        <span class="text-xs font-mono text-white">1.8</span>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center p-2 rounded bg-white/5">
+                                    <span class="text-[10px] text-slate-500 font-mono uppercase">Expo. USD</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-slate-400"></div>
+                                        <span class="text-xs font-mono text-white">85%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- 5. SNAPSHOTS / HISTORY -->
+                <section class="p-4 border border-white/5 rounded-xl bg-brand-800/30 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-medium text-white">Snapshots automáticos</h4>
+                            <p class="text-[10px] text-slate-500">Historial diario activo. TODO: Conectar con backend.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-4">
+                        <button class="text-xs text-red-400 hover:text-red-300 transition opacity-50 cursor-not-allowed disabled" title="Próximamente">Limpiar histórico</button>
+                        <!-- Toggle switch -->
+                        <div class="w-9 h-5 bg-brand-primary rounded-full relative cursor-pointer shadow-inner" onclick="this.classList.toggle('bg-slate-700'); this.classList.toggle('bg-brand-primary'); this.firstElementChild.classList.toggle('translate-x-4')" data-setting="snapshots_enabled">
+                            <div class="w-4 h-4 bg-white rounded-full absolute top-0.5 left-0.5 shadow transition-transform"></div>
+                        </div>
+                    </div>
+                </section>
+                
+            </div> <!-- End Dashboard Content -->
+        </div>
+    </main>
+
+    <!-- MODAL 1: AGREGAR MOVIMIENTO -->
+    <div id="modal-movement" class="fixed inset-0 z-50 hidden transition-opacity duration-300 opacity-0 pointer-events-none">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick="closeModal('modal-movement')"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-[#151E32] border border-white/10 rounded-2xl shadow-2xl p-6 transform transition-all scale-95">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-display text-xl text-white">Registrar Movimiento</h3>
+                <button onclick="closeModal('modal-movement')" class="text-slate-400 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <!-- Mock Content -->
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <button class="p-3 rounded-xl border border-white/10 bg-slate-800 hover:bg-slate-700 hover:border-brand-primary/50 transition flex flex-col items-center gap-2 group">
+                    <div class="w-8 h-8 rounded-full bg-semantic-up/10 text-semantic-up flex items-center justify-center group-hover:bg-semantic-up group-hover:text-white transition">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                    </div>
+                    <span class="text-xs font-medium text-slate-300">Ingreso</span>
+                </button>
+                <button class="p-3 rounded-xl border border-white/10 bg-slate-800 hover:bg-slate-700 hover:border-brand-primary/50 transition flex flex-col items-center gap-2 group">
+                    <div class="w-8 h-8 rounded-full bg-semantic-down/10 text-semantic-down flex items-center justify-center group-hover:bg-semantic-down group-hover:text-white transition">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                    </div>
+                    <span class="text-xs font-medium text-slate-300">Retiro</span>
+                </button>
+                <button class="p-3 rounded-xl border border-white/10 bg-slate-800 hover:bg-slate-700 hover:border-brand-primary/50 transition flex flex-col items-center gap-2 group">
+                    <div class="w-8 h-8 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center group-hover:bg-brand-primary group-hover:text-white transition">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                    </div>
+                    <span class="text-xs font-medium text-slate-300">Transfer</span>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div class="space-y-1">
+                    <label class="text-xs font-mono text-slate-400 uppercase">Monto</label>
+                    <input type="text" placeholder="$ 0,00" class="w-full bg-slate-950 border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-brand-primary transition font-mono">
+                </div>
+                <button class="w-full py-3 bg-brand-primary text-white rounded-lg font-medium shadow-glow hover:bg-indigo-500 transition">Continuar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: DRIVER DETAILS (IMPROVED) -->
+    <div id="modal-drivers" class="fixed inset-0 z-50 hidden transition-opacity duration-300 opacity-0 pointer-events-none">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick="closeModal('modal-drivers')"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-[#151E32] border border-white/10 rounded-2xl shadow-2xl p-6 transform transition-all scale-95 flex flex-col max-h-[90vh]">
+            
+            <!-- Modal Header -->
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 border-b border-white/5 pb-4 flex-shrink-0">
+                <div>
+                    <h3 class="font-display text-xl text-white">Detalle de Drivers: <span id="driver-modal-title" class="text-brand-primary">Categoría</span></h3>
+                    <p class="text-xs text-slate-400" id="driver-modal-subtitle">Rango seleccionado: TOTAL</p>
+                </div>
+                
+                <!-- Range Selector inside Modal -->
+                <div class="flex bg-slate-900/50 p-0.5 rounded-lg border border-white/5 overflow-x-auto">
+                    <button onclick="setDriversRange('TOTAL')" class="driver-range-btn px-3 py-1 text-[10px] font-bold bg-white/10 text-white rounded transition" data-range="TOTAL">TOTAL</button>
+                    <button onclick="setDriversRange('1D')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="1D">1D</button>
+                    <button onclick="setDriversRange('7D')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="7D">7D</button>
+                    <button onclick="setDriversRange('30D')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="30D">30D</button>
+                    <button onclick="setDriversRange('90D')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="90D">90D</button>
+                    <button onclick="setDriversRange('1Y')" class="driver-range-btn px-3 py-1 text-[10px] font-medium text-slate-400 hover:text-white rounded transition" data-range="1Y">1Y</button>
+                </div>
+
+                <button onclick="closeModal('modal-drivers')" class="absolute top-4 right-4 sm:static text-slate-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            
+            <!-- Table inside Modal -->
+            <div class="overflow-y-auto flex-1 rounded-lg border border-white/5 bg-slate-900/50 mb-4">
+                <table class="w-full text-sm text-left border-collapse">
+                    <thead class="text-xs text-slate-500 uppercase bg-white/5 sticky top-0 z-10 backdrop-blur-md">
+                        <tr>
+                            <th class="px-4 py-3">Activo</th>
+                            <th class="px-4 py-3 text-right">Tenencia</th>
+                            <th class="px-4 py-3 text-right" id="modal-th-res-ars">Nominal (ARS)</th>
+                            <th class="px-4 py-3 text-right" id="modal-th-res-usd">Real (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5 font-mono text-slate-300" id="driver-modal-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="flex justify-between items-center flex-shrink-0 pt-2 border-t border-white/5">
+                <span class="text-[10px] text-slate-500">TODO: Navegar a detalle del activo (Mis Activos v2).</span>
+                <button onclick="closeModal('modal-drivers')" class="px-4 py-2 text-sm text-slate-300 hover:text-white transition">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIC SCRIPT -->
+    <script>
+        // --- User State ---
+        window.ArgfolioUser = {
+            firstName: "Juan",
+            fullName: "Juan Developer",
+            plan: "Pro"
+        };
+
+        // --- App State ---
+        const state = {
+            currency: 'ARS',
+            range: '30D', // Chart range
+            driversRange: 'TOTAL', // Drivers specific range
+            chartMode: 'HIST', // 'HIST' or 'PROJ'
+            isLoading: false,
+            currentDriverCategory: null // Track modal category
+        };
+
+        // --- MOCK DATA FOR DRIVERS (Robust) ---
+        // Structure: Category -> Range -> Summary + Assets List
+        const driversData = {
+            "CEDEARs": {
+                "TOTAL": {
+                    summary: { tenencia: "$ 22.100.000", ars: "+$ 850.200", arsPct: "+3.2%", usd: "+US$ 210", usdPct: "+0.8%", isDivergent: false },
+                    assets: [
+                        { ticker: "AAPL", name: "Apple Inc.", tenencia: "$ 5.200.000", ars: "+$ 120.000 (+2.3%)", usd: "+US$ 50 (+0.9%)" },
+                        { ticker: "MELI", name: "MercadoLibre", tenencia: "$ 8.100.000", ars: "+$ 600.000 (+8.0%)", usd: "+US$ 450 (+5.8%)" },
+                        { ticker: "SPY", name: "S&P 500", tenencia: "$ 8.800.000", ars: "-$ 850 (-0.01%)", usd: "+US$ 78 (+0.8%)", divergence: true } // Divergence example
+                    ]
+                },
+                "1D": {
+                    summary: { tenencia: "$ 22.100.000", ars: "-$ 150.000", arsPct: "-0.7%", usd: "-US$ 120", usdPct: "-0.5%", isDivergent: false },
+                    assets: [ /* Simplified for mock */ { ticker: "AAPL", name: "Apple Inc.", tenencia: "$ 5.200.000", ars: "-$ 50.000 (-1.0%)", usd: "-US$ 40 (-0.8%)" } ]
+                }
+                // Add other ranges as needed (fallback logic used below)
+            },
+            "Bonos": {
+                "TOTAL": {
+                    summary: { tenencia: "$ 10.500.000", ars: "-$ 120.000", arsPct: "-1.1%", usd: "-US$ 300", usdPct: "-2.8%", isDivergent: false },
+                    assets: [
+                        { ticker: "AL30", name: "Bono Rep. Arg 2030", tenencia: "$ 10.500.000", ars: "-$ 120.000 (-1.1%)", usd: "-US$ 300 (-2.8%)" }
+                    ]
+                }
+            },
+            "Crypto": {
+                "TOTAL": {
+                    isCrypto: true,
+                    summary: { tenencia: "US$ 6.540", arsApprox: "≈ $ 8.200.000", usd: "+US$ 1.200", usdPct: "+22%", ars: "+$ 1.5M (+25%)", isDivergent: false },
+                    assets: [
+                        { ticker: "BTC", name: "Bitcoin", tenencia: "US$ 0.045", arsApprox: "≈ $ 4.5M", usd: "+US$ 900 (+25%)", ars: "+$ 1.1M" },
+                        { ticker: "ETH", name: "Ethereum", tenencia: "US$ 1.2", arsApprox: "≈ $ 3.7M", usd: "+US$ 300 (+18%)", ars: "+$ 400k" }
+                    ]
+                }
+            }
+        };
+
+        // --- Render Drivers Table (Main Dashboard) ---
+        function renderDriversTable() {
+            const tbody = document.getElementById('drivers-table-body');
+            tbody.innerHTML = '';
+            
+            // Iterate known categories (Mock)
+            const categories = ["CEDEARs", "Bonos", "Crypto"];
+            
+            categories.forEach(cat => {
+                // Get data for current range or fallback to TOTAL
+                const rangeData = driversData[cat][state.driversRange] || driversData[cat]["TOTAL"];
+                const sum = rangeData.summary;
+                const isCrypto = rangeData.isCrypto;
+
+                let colorClass = "bg-brand-primary";
+                if(cat === 'Bonos') colorClass = "bg-brand-accent";
+                if(cat === 'Crypto') colorClass = "bg-emerald-500";
+
+                // Divergence Badge Logic
+                let divergenceBadge = '';
+                if(sum.isDivergent) {
+                    divergenceBadge = `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-500 border border-amber-500/20 ml-1 cursor-help" title="Divergencia: Signos opuestos en ARS y USD">DIVERGENCIA</span>`;
+                }
+
+                // Variation Cell Content
+                let variationContent = '';
+                if(isCrypto) {
+                    variationContent = `
+                        <div class="flex flex-col items-end">
+                            <span class="text-semantic-up text-xs font-bold">${sum.usd} (${sum.usdPct})</span>
+                            <span class="text-slate-500 text-[10px]">≈ ${sum.ars} ARS</span>
+                        </div>
+                    `;
+                } else {
+                    // ARS Line
+                    const arsColor = sum.ars.startsWith('-') ? 'text-semantic-down' : 'text-semantic-up';
+                    const usdColor = sum.usd.startsWith('-') ? 'text-semantic-down' : 'text-semantic-up';
+                    
+                    variationContent = `
+                        <div class="flex flex-col items-end gap-0.5">
+                            <span class="${arsColor} text-xs">ARS: ${sum.ars} <span class="opacity-75">(${sum.arsPct})</span></span>
+                            <span class="${usdColor} text-[10px]">USD: ${sum.usd} <span class="opacity-75">(${sum.usdPct})</span></span>
+                            ${divergenceBadge}
+                        </div>
+                    `;
+                }
+
+                // Tenencia Cell Content
+                let tenenciaContent = `<span class="text-slate-300 font-mono">${sum.tenencia}</span>`;
+                if(isCrypto) {
+                    tenenciaContent = `
+                        <div class="flex flex-col items-end">
+                            <span class="text-white font-mono font-medium">${sum.tenencia}</span>
+                            <span class="text-slate-500 text-[10px]">${sum.arsApprox}</span>
+                        </div>
+                    `;
+                }
+
+                const row = `
+                    <tr onclick="openDriverModal('${cat}')" class="group hover:bg-white/[0.04] transition cursor-pointer">
+                        <td class="p-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-1 h-8 rounded-full ${colorClass} opacity-50 group-hover:opacity-100 transition"></div>
+                                <div>
+                                    <span class="text-white font-medium block">${cat}</span>
+                                    <span class="text-xs text-slate-500">${isCrypto ? 'Activos Digitales' : (cat === 'Bonos' ? 'Renta Fija' : 'Renta Variable')}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="p-4 text-right">${tenenciaContent}</td>
+                        <td class="p-4 text-right">${variationContent}</td>
+                        <td class="p-4 text-right hidden sm:block w-24 ml-auto pt-5 opacity-50">
+                            <!-- Placeholder Sparkline -->
+                            <svg class="w-full h-6 text-slate-500" viewBox="0 0 100 30" fill="none" stroke="currentColor" stroke-width="2"><path d="M0 15 L20 20 L40 10 L60 18 L80 5 L100 12" /></svg>
+                        </td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // --- Render Modal Table (Detailed) ---
+        function renderDriverModalContent(category) {
+            const tbody = document.getElementById('driver-modal-body');
+            tbody.innerHTML = '';
+            
+            // Update Title and Subtitle
+            document.getElementById('driver-modal-title').textContent = category;
+            document.getElementById('driver-modal-subtitle').textContent = `Rango seleccionado: ${state.driversRange}`;
+
+            const rangeData = driversData[category][state.driversRange] || driversData[category]["TOTAL"];
+            const isCrypto = rangeData.isCrypto;
+
+            // Update Headers for Crypto context
+            const thArs = document.getElementById('modal-th-res-ars');
+            const thUsd = document.getElementById('modal-th-res-usd');
+            if(isCrypto) {
+                thArs.innerHTML = 'Resultado (USD) <span class="text-[9px] text-slate-500 block">Real</span>';
+                thUsd.innerHTML = '≈ ARS <span class="text-[9px] text-slate-500 block">Estimado</span>';
+            } else {
+                thArs.innerHTML = 'Nominal (ARS)';
+                thUsd.innerHTML = 'Real (USD)';
+            }
+
+            // Populate rows
+            if(rangeData.assets) {
+                rangeData.assets.forEach(asset => {
+                    let tenenciaDisplay = `<span class="font-mono text-white">${asset.tenencia}</span>`;
+                    let col1, col2;
+
+                    if(isCrypto) {
+                        tenenciaDisplay = `
+                            <div class="flex flex-col items-end">
+                                <span class="font-mono text-white">${asset.tenencia}</span>
+                                <span class="text-[10px] text-slate-500">${asset.arsApprox}</span>
+                            </div>
+                        `;
+                        col1 = `<span class="text-semantic-up font-mono text-xs">${asset.usd}</span>`;
+                        col2 = `<span class="text-slate-400 font-mono text-xs">${asset.ars}</span>`;
+                    } else {
+                        // Check divergence per asset
+                        let divBadge = '';
+                        if(asset.divergence) {
+                            divBadge = `<div class="text-[9px] text-amber-500 font-bold uppercase mt-1">Divergencia</div>`;
+                        }
+
+                        // Parse string to guess color (simple logic)
+                        const arsClass = asset.ars.includes('-') ? 'text-semantic-down' : 'text-semantic-up';
+                        const usdClass = asset.usd.includes('-') ? 'text-semantic-down' : 'text-semantic-up';
+
+                        col1 = `<div class="flex flex-col items-end"><span class="${arsClass} font-mono text-xs">${asset.ars}</span>${divBadge}</div>`;
+                        col2 = `<span class="${usdClass} font-mono text-xs">${asset.usd}</span>`;
+                    }
+
+                    const row = `
+                        <tr class="hover:bg-white/[0.04] transition cursor-pointer" onclick="alert('TODO: go_to_asset_detail (${asset.ticker})')">
+                            <td class="px-4 py-3">
+                                <div class="font-medium text-white">${asset.ticker}</div>
+                                <div class="text-xs text-slate-500 truncate max-w-[120px]">${asset.name}</div>
+                            </td>
+                            <td class="px-4 py-3 text-right">${tenenciaDisplay}</td>
+                            <td class="px-4 py-3 text-right">${col1}</td>
+                            <td class="px-4 py-3 text-right">${col2}</td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } else {
+                tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-slate-500">Sin datos para este período.</td></tr>`;
+            }
+        }
+
+        // --- Chart Logic ---
+        function getMockChartData(points, min, max) {
+            return Array.from({length: points}, (_, i) => {
+                const randomWalk = Math.random() * (max - min) * 0.2;
+                return min + (i / points) * (max - min) + randomWalk;
+            });
+        }
+
+        function renderMainChart() {
+            const container = document.getElementById('main-chart-container');
+            if(!container) return;
+            
+            const width = container.clientWidth;
+            const height = 350;
+            const padding = 20;
+            
+            // 1. Determine Historical Points based on Chart Range
+            let histPoints = 30; 
+            if (state.range === '1D') histPoints = 24; // Hourly
+            if (state.range === '7D') histPoints = 7;
+            if (state.range === '90D') histPoints = 90;
+            if (state.range === '1Y') histPoints = 100; // Condensed
+
+            // 2. Mock Data Generation
+            let histData = [];
+            let minVal, maxVal;
+
+            if(state.currency === 'ARS') {
+                histData = getMockChartData(histPoints, 40000000, 45230500);
+            } else {
+                histData = getMockChartData(histPoints, 32000, 38500);
+            }
+
+            // 3. Projection Logic (Better calculation)
+            let projData = [];
+            if(state.chartMode === 'PROJ') {
+                // Determine Projection Length based on SELECTED RANGE
+                let projLength = histPoints; // Default logical length (e.g. project next 30 days if viewing 30 days)
+                if(state.range === '1D') projLength = 24;
+                if(state.range === '1Y') projLength = 50; // Dont project too far in condensed view
+
+                const lastVal = histData[histData.length - 1];
+                
+                // Drift Calculation (Mock: Avg of last 14 returns)
+                // We'll just fake a small positive drift + mock annual yield
+                const annualYield = 0.35; // 35% mock yield
+                const dailyYield = Math.pow(1 + annualYield, 1/365) - 1;
+                const dailyNoise = 0.002; // 0.2% daily volatility
+
+                let currentVal = lastVal;
+                projData.push(currentVal); // Connect
+                
+                for(let i=0; i < projLength; i++) {
+                    const drift = dailyYield + (Math.random() * dailyNoise - (dailyNoise/2));
+                    currentVal = currentVal * (1 + drift);
+                    projData.push(currentVal);
+                }
+            }
+
+            // Scaling
+            const allData = [...histData, ...(state.chartMode === 'PROJ' ? projData : [])];
+            minVal = Math.min(...allData) * 0.99;
+            maxVal = Math.max(...allData) * 1.01;
+
+            const getCoord = (val, index, totalPoints) => {
+                const x = (index / (totalPoints - 1)) * (width - padding * 2) + padding;
+                const y = height - padding - ((val - minVal) / (maxVal - minVal)) * (height - padding * 2);
+                return {x, y};
+            };
+
+            const totalPoints = histData.length + (state.chartMode === 'PROJ' ? projData.length - 1 : 0);
+            
+            // Paths
+            const histPathD = histData.map((val, i) => {
+                const {x, y} = getCoord(val, i, totalPoints);
+                return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+            }).join(' ');
+
+            let projPathD = '';
+            let projExtras = '';
+            
+            if(state.chartMode === 'PROJ') {
+                const offsetIndex = histData.length - 1; 
+                projPathD = projData.map((val, i) => {
+                    const {x, y} = getCoord(val, offsetIndex + i, totalPoints);
+                    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                }).join(' ');
+                
+                // Today Line Coords
+                const lastHist = getCoord(histData[histData.length-1], histData.length-1, totalPoints);
+                
+                projExtras = `
+                    <line x1="${lastHist.x}" y1="20" x2="${lastHist.x}" y2="${height-20}" stroke="white" stroke-opacity="0.3" stroke-dasharray="4 4" />
+                    <text x="${lastHist.x}" y="15" text-anchor="middle" fill="white" font-size="9" font-family="monospace" opacity="0.7">HOY</text>
+                    <rect x="${width - 90}" y="${padding}" width="70" height="20" rx="4" fill="#6366f1" fill-opacity="0.2" stroke="#6366f1" stroke-opacity="0.5" />
+                    <text x="${width - 55}" y="${padding + 13}" text-anchor="middle" fill="#a5b4fc" font-size="9" font-weight="bold">PROYECCIÓN</text>
+                `;
+            }
+
+            // Gradient Area (History)
+            const lastHist = getCoord(histData[histData.length-1], histData.length-1, totalPoints);
+            const firstHist = getCoord(histData[0], 0, totalPoints);
+            const areaD = `${histPathD} L ${lastHist.x} ${height} L ${firstHist.x} ${height} Z`;
+
+            const svgContent = `
+                <svg width="${width}" height="${height}" class="overflow-visible">
+                    <defs>
+                        <linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+                            <stop offset="0%" stop-color="#6366f1" stop-opacity="0.3"/>
+                            <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                    
+                    <!-- Grid -->
+                    <line x1="${padding}" y1="${height/4}" x2="${width-padding}" y2="${height/4}" stroke="rgba(255,255,255,0.05)" />
+                    <line x1="${padding}" y1="${height/2}" x2="${width-padding}" y2="${height/2}" stroke="rgba(255,255,255,0.05)" />
+                    <line x1="${padding}" y1="${height*0.75}" x2="${width-padding}" y2="${height*0.75}" stroke="rgba(255,255,255,0.05)" />
+
+                    <path d="${areaD}" fill="url(#chartGradient)" />
+                    <path d="${histPathD}" fill="none" stroke="#6366f1" stroke-width="2" class="drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+
+                    ${state.chartMode === 'PROJ' ? 
+                        `<path d="${projPathD}" fill="none" stroke-width="2" class="chart-line-projected" />
+                         ${projExtras}` 
+                        : ''}
+
+                    ${state.chartMode === 'HIST' ? 
+                        `<circle cx="${lastHist.x}" cy="${lastHist.y}" r="4" fill="#0B1121" stroke="#6366f1" stroke-width="2" />` 
+                        : ''}
+                </svg>
+            `;
+            container.innerHTML = svgContent;
+        }
+
+        // --- Interaction Handlers ---
+        function setCurrency(curr) {
+            state.currency = curr;
+            const btnArs = document.getElementById('btn-ars');
+            const btnUsd = document.getElementById('btn-usd');
+            if(curr === 'ARS') {
+                btnArs.className = "px-2 py-1 rounded text-xs font-bold bg-white/10 text-white shadow transition-all";
+                btnUsd.className = "px-2 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition-all";
+            } else {
+                btnArs.className = "px-2 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition-all";
+                btnUsd.className = "px-2 py-1 rounded text-xs font-bold bg-white/10 text-white shadow transition-all";
+            }
+            updateKPIs();
+            renderMainChart();
+        }
+
+        function setChartMode(mode) {
+            state.chartMode = mode;
+            const btnHist = document.getElementById('btn-mode-hist');
+            const btnProj = document.getElementById('btn-mode-proj');
+            if(mode === 'HIST') {
+                btnHist.className = "px-3 py-1 text-[10px] font-bold uppercase rounded-md bg-white/10 text-white shadow transition-all";
+                btnProj.className = "px-3 py-1 text-[10px] font-medium uppercase rounded-md text-slate-400 hover:text-white transition-all";
+            } else {
+                btnHist.className = "px-3 py-1 text-[10px] font-medium uppercase rounded-md text-slate-400 hover:text-white transition-all";
+                btnProj.className = "px-3 py-1 text-[10px] font-bold uppercase rounded-md bg-white/10 text-white shadow transition-all";
+            }
+            renderMainChart();
+        }
+
+        function setRange(range) {
+            state.range = range;
+            document.querySelectorAll('.range-btn').forEach(btn => {
+                btn.className = (btn.dataset.range === range) 
+                    ? "range-btn px-2 py-1 text-xs font-medium bg-white/10 text-white rounded transition shadow-sm"
+                    : "range-btn px-2 py-1 text-xs font-medium text-slate-400 hover:text-white rounded transition";
+            });
+            renderMainChart();
+        }
+
+        // --- Drivers Range Logic (Synced) ---
+        function setDriversRange(range) {
+            state.driversRange = range;
+            
+            // Update ALL segmented controls (Modal & Dashboard)
+            document.querySelectorAll('.driver-range-btn').forEach(btn => {
+                if(btn.dataset.range === range) {
+                    btn.classList.remove('text-slate-400', 'hover:text-white', 'font-medium');
+                    btn.classList.add('bg-white/10', 'text-white', 'font-bold');
+                } else {
+                    btn.classList.add('text-slate-400', 'hover:text-white', 'font-medium');
+                    btn.classList.remove('bg-white/10', 'text-white', 'font-bold');
+                }
+            });
+
+            renderDriversTable(); // Update dashboard table
+            
+            // If modal is open, update modal content
+            if(state.currentDriverCategory && !document.getElementById('modal-drivers').classList.contains('hidden')) {
+                renderDriverModalContent(state.currentDriverCategory);
+            }
+        }
+
+        function updateKPIs() {
+            if (state.isLoading) return;
+            const els = document.querySelectorAll('.kpi-value');
+            els.forEach(el => {
+                el.style.opacity = '0.5';
+                setTimeout(() => el.style.opacity = '1', 200);
+            });
+        }
+
+        // --- Modal Logic ---
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if(!modal) return;
+            modal.classList.remove('hidden', 'pointer-events-none');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('div[class*="transform"]').classList.remove('scale-95');
+                modal.querySelector('div[class*="transform"]').classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if(!modal) return;
+            modal.classList.add('opacity-0');
+            modal.querySelector('div[class*="transform"]').classList.remove('scale-100');
+            modal.querySelector('div[class*="transform"]').classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden', 'pointer-events-none');
+                if(modalId === 'modal-drivers') state.currentDriverCategory = null;
+            }, 300);
+        }
+
+        function openDriverModal(category) {
+            state.currentDriverCategory = category;
+            renderDriverModalContent(category);
+            openModal('modal-drivers');
+        }
+
+        // --- Tooltip Logic ---
+        const tooltip = document.getElementById('custom-tooltip');
+        const tooltipContent = document.getElementById('tooltip-content');
+
+        function showTooltip(e, text) {
+            tooltipContent.textContent = text;
+            tooltip.classList.remove('hidden');
+            tooltip.style.left = e.clientX + 10 + 'px';
+            tooltip.style.top = e.clientY + 10 + 'px';
+            setTimeout(() => tooltip.classList.remove('opacity-0', 'scale-95', 'translate-y-2'), 10);
+        }
+
+        function hideTooltip() {
+            tooltip.classList.add('opacity-0', 'scale-95', 'translate-y-2');
+            setTimeout(() => tooltip.classList.add('hidden'), 200);
+        }
+
+        // --- Initialization ---
+        window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            const nameEl = document.querySelector('[data-user="first_name"]');
+            if(nameEl) nameEl.textContent = window.ArgfolioUser.firstName;
+
+            if(params.has('empty')) {
+                document.getElementById('dashboard-content').classList.add('hidden');
+                document.getElementById('empty-state').classList.remove('hidden');
+                document.getElementById('empty-state').classList.add('flex');
+            }
+
+            if(params.has('loading')) {
+                state.isLoading = true;
+                document.querySelectorAll('.kpi-value').forEach(el => el.classList.add('skeleton', 'text-transparent'));
+                document.querySelector('table tbody').classList.add('skeleton', 'opacity-50');
+                document.getElementById('main-chart-container').innerHTML = '<div class="w-full h-full skeleton rounded-lg"></div>';
+            } else {
+                renderMainChart();
+                renderDriversTable(); // Initial Render
+            }
+
+            window.addEventListener('resize', () => {
+                if(!state.isLoading && !params.has('empty')) renderMainChart();
+            });
+        }
+    </script>
+</body>
+</html>

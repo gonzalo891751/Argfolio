@@ -1525,3 +1525,48 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 - [ ] CEDEAR Venta: TC badge "Comprador", default MEP buy
 - [ ] CEDEAR: cambiar TC actualiza equivalentes del resumen
 - [ ] CEDEAR: movimiento guardado con fxAtTrade correcto
+
+---
+
+## CHECKPOINT - CEDEAR Fecha Auto + Manual Persistida (2026-02-09)
+
+### Objetivo
+Agregar en el wizard CEDEAR (compra/venta) un modo de fecha `Auto` (hoy) y `Manual` (editable `DD/MM/AAAA`), manteniendo el `datetime-local` existente y asegurando persistencia contable en `movement.datetimeISO`.
+
+### Archivos tocados
+1. `src/pages/movements/components/cedear/CedearBuySellWizard.tsx`
+2. `docs/AI_HANDOFF.md`
+
+### Cambios concretos
+- Se agrego estado de fecha en CEDEAR:
+  - `tradeDateMode: 'auto' | 'manual'` (default `auto`)
+  - `tradeDate: Date`
+  - `tradeDateInput: string` (`DD/MM/AAAA`)
+- En Step 1:
+  - Se mantuvo el picker existente `type="datetime-local"`.
+  - Se agrego input manual `DD/MM/AAAA` + boton `Auto` (mismo patron visual que TC Auto).
+  - Si el usuario edita fecha u hora, el modo pasa a `manual`.
+  - Si la fecha manual queda invalida o vacia al salir del campo, fallback seguro a `auto` con `new Date()`.
+- Persistencia:
+  - El campo canonico de movimiento confirmado es `datetimeISO`.
+  - `handleConfirm` ahora usa siempre la fecha elegida (derivada del estado de fecha) para `movement.datetimeISO`.
+  - `fx.asOf` se alinea al mismo `tradeDatetimeISO` para consistencia temporal.
+- Confirmacion/Resumen:
+  - Se muestra la fecha seleccionada en `DD/MM/AAAA` y su modo (`auto`/`manual`) en la tarjeta de confirmacion.
+  - Se muestra tambien en el panel lateral de resumen.
+
+### Decision tecnica (timezone)
+- Estrategia elegida: conservar hora/minutos elegidos en `datetime-local` cuando se edita solo la fecha manual `DD/MM/AAAA`, para no resetear hora sin intencion del usuario.
+- La persistencia final sigue en ISO UTC (`datetimeISO`), manteniendo consistencia con el resto del sistema.
+
+### Validacion ejecutada
+- [x] `npm run build` -> OK
+- [x] `npm run lint` -> OK (0 errores, warnings preexistentes del repo)
+- [x] `npx tsc --noEmit` -> OK
+- [x] `npm test` -> OK (75/75)
+
+### Pendientes
+- QA manual funcional en UI:
+  - Compra historica con fecha manual (2 meses atras)
+  - Venta historica parcial con fecha manual (1 mes atras)
+  - Toggle manual -> Auto y verificacion de fecha hoy en movimientos/mis activos

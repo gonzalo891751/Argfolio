@@ -30,6 +30,9 @@ interface CedearWizardState {
     asset: AssetOption | null
     accountId: string
     datetime: string
+    tradeDateMode: 'auto' | 'manual'
+    tradeDate: Date
+    tradeDateInput: string
     // Step 2
     currency: 'ARS' | 'USD'
     price: number
@@ -68,6 +71,47 @@ const fmt2 = (n: number) =>
 
 const fmtArs = (n: number) => Number.isFinite(n) && n !== 0 ? formatMoneyARS(n) : '—'
 
+const isValidDate = (d: Date): boolean => Number.isFinite(d.getTime())
+
+const toDatetimeLocalValue = (date: Date): string => {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    return local.toISOString().slice(0, 16)
+}
+
+const formatDateDDMMYYYY = (date: Date): string => {
+    if (!isValidDate(date)) return ''
+    const dd = String(date.getDate()).padStart(2, '0')
+    const mm = String(date.getMonth() + 1).padStart(2, '0')
+    const yyyy = date.getFullYear()
+    return `${dd}/${mm}/${yyyy}`
+}
+
+const parseDatetimeLocal = (value: string): Date | null => {
+    if (!value) return null
+    const parsed = new Date(value)
+    return isValidDate(parsed) ? parsed : null
+}
+
+const parseDateInputDDMMYYYY = (value: string, referenceDate: Date): Date | null => {
+    const trimmed = value.trim()
+    const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed)
+    if (!match) return null
+
+    const day = Number(match[1])
+    const month = Number(match[2])
+    const year = Number(match[3])
+    if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) return null
+
+    // Preserve chosen hour/minute from datetime-local to avoid unexpected time resets.
+    const hours = referenceDate.getHours()
+    const minutes = referenceDate.getMinutes()
+    const parsed = new Date(year, month - 1, day, hours, minutes, 0, 0)
+
+    if (!isValidDate(parsed)) return null
+    if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null
+    return parsed
+}
+
 const FX_MEP_FALLBACK = 1180.5
 
 // Filter COSTING_METHODS to exclude CHEAPEST (not in spec)
@@ -93,15 +137,17 @@ export function CedearBuySellWizard({
     const mepSellRate = fxRates?.mep?.sell ?? FX_MEP_FALLBACK
     const mepBuyRate = fxRates?.mep?.buy ?? mepSellRate
 
-    const now = new Date()
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    const initialTradeDate = new Date()
 
     const [state, setState] = useState<CedearWizardState>({
         mode: 'buy',
         step: 1,
         asset: null,
         accountId: '',
-        datetime: now.toISOString().slice(0, 16),
+        datetime: toDatetimeLocalValue(initialTradeDate),
+        tradeDateMode: 'auto',
+        tradeDate: initialTradeDate,
+        tradeDateInput: formatDateDDMMYYYY(initialTradeDate),
         currency: 'ARS',
         price: 0,
         priceManual: false,
@@ -120,6 +166,28 @@ export function CedearBuySellWizard({
 
     // Effective FX: use user-edited value, or auto-set based on mode
     const effectiveFx = state.fxAtTrade
+
+    const hasInvalidTradeDateInput = useMemo(() => {
+        if (state.tradeDateMode !== 'manual') return false
+        return parseDateInputDDMMYYYY(state.tradeDateInput, state.tradeDate) === null
+    }, [state.tradeDateMode, state.tradeDateInput, state.tradeDate])
+
+    const hasInvalidDatetime = useMemo(
+        () => parseDatetimeLocal(state.datetime) === null,
+        [state.datetime],
+    )
+
+    const selectedTradeDate = useMemo(() => {
+        const parsedDatetime = parseDatetimeLocal(state.datetime)
+        if (parsedDatetime) return parsedDatetime
+        if (isValidDate(state.tradeDate)) return state.tradeDate
+        return new Date()
+    }, [state.datetime, state.tradeDate])
+
+    const selectedTradeDateLabel = useMemo(
+        () => formatDateDDMMYYYY(selectedTradeDate),
+        [selectedTradeDate],
+    )
 
     // Sorted accounts for cedear (brokers first)
     const sortedAccounts = useMemo(
@@ -324,6 +392,8 @@ export function CedearBuySellWizard({
             if (!state.asset) return false
             if (!state.accountId) return false
             if (!isBuy && availableQty <= 0) return false
+            if (hasInvalidTradeDateInput) return false
+            if (hasInvalidDatetime) return false
             return true
         }
         if (state.step === 2) {
@@ -340,7 +410,7 @@ export function CedearBuySellWizard({
             return true
         }
         return true // step 3
-    }, [state, isBuy, availableQty])
+    }, [state, isBuy, availableQty, hasInvalidTradeDateInput, hasInvalidDatetime])
 
     // ---------------------------------------------------------------------------
     // Navigation
@@ -386,6 +456,17 @@ export function CedearBuySellWizard({
         }
     }
 
+    const setTradeDateAutoNow = () => {
+        const now = new Date()
+        setState(s => ({
+            ...s,
+            tradeDateMode: 'auto',
+            tradeDate: now,
+            tradeDateInput: formatDateDDMMYYYY(now),
+            datetime: toDatetimeLocalValue(now),
+        }))
+    }
+
     // ---------------------------------------------------------------------------
     // Confirm / Persist
     // ---------------------------------------------------------------------------
@@ -416,6 +497,8 @@ export function CedearBuySellWizard({
             const feeAmount = computed.fee
             const netAmount = isBuy ? gross + feeAmount : gross - feeAmount
             const movementId = crypto.randomUUID()
+            const tradeDateForPersist = selectedTradeDate
+            const tradeDatetimeISO = tradeDateForPersist.toISOString()
 
             // Dual currency totals (using user-editable TC)
             let totalARS: number, totalUSD: number
@@ -442,7 +525,7 @@ export function CedearBuySellWizard({
 
             const movementPayload: Movement = {
                 id: movementId,
-                datetimeISO: new Date(state.datetime).toISOString(),
+                datetimeISO: tradeDatetimeISO,
                 type: movementType,
                 assetClass: 'cedear',
                 instrumentId: instrumentId!,
@@ -462,7 +545,7 @@ export function CedearBuySellWizard({
                     kind: 'MEP',
                     rate: effectiveFx,
                     side: isBuy ? 'sell' : 'buy',
-                    asOf: new Date().toISOString(),
+                    asOf: tradeDatetimeISO,
                 },
                 notes: state.notes || undefined,
                 meta: !isBuy && alloc ? {
@@ -600,12 +683,112 @@ export function CedearBuySellWizard({
                                     <label className="block text-xs font-mono text-slate-400 mb-2 uppercase">
                                         Fecha
                                     </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            placeholder="DD/MM/AAAA"
+                                            value={state.tradeDateInput}
+                                            onChange={e => {
+                                                const raw = e.target.value
+                                                setState(s => {
+                                                    const parsed = parseDateInputDDMMYYYY(raw, s.tradeDate)
+                                                    if (!parsed) {
+                                                        return {
+                                                            ...s,
+                                                            tradeDateMode: 'manual',
+                                                            tradeDateInput: raw,
+                                                        }
+                                                    }
+                                                    return {
+                                                        ...s,
+                                                        tradeDateMode: 'manual',
+                                                        tradeDate: parsed,
+                                                        tradeDateInput: raw,
+                                                        datetime: toDatetimeLocalValue(parsed),
+                                                    }
+                                                })
+                                            }}
+                                            onBlur={() => {
+                                                setState(s => {
+                                                    const parsed = parseDateInputDDMMYYYY(s.tradeDateInput, s.tradeDate)
+                                                    if (parsed) {
+                                                        return {
+                                                            ...s,
+                                                            tradeDateMode: 'manual',
+                                                            tradeDate: parsed,
+                                                            tradeDateInput: formatDateDDMMYYYY(parsed),
+                                                            datetime: toDatetimeLocalValue(parsed),
+                                                        }
+                                                    }
+                                                    const now = new Date()
+                                                    return {
+                                                        ...s,
+                                                        tradeDateMode: 'auto',
+                                                        tradeDate: now,
+                                                        tradeDateInput: formatDateDDMMYYYY(now),
+                                                        datetime: toDatetimeLocalValue(now),
+                                                    }
+                                                })
+                                            }}
+                                            className={cn(
+                                                'w-full bg-slate-900 border border-white/10 rounded-lg py-3 px-4 pr-16 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition',
+                                                hasInvalidTradeDateInput && 'border-rose-500/60 focus:border-rose-500 focus:ring-rose-500',
+                                            )}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={setTradeDateAutoNow}
+                                            className="absolute right-2 top-2 px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-[10px] font-bold rounded uppercase hover:bg-indigo-500/30 transition"
+                                        >
+                                            Auto
+                                        </button>
+                                    </div>
+                                    {hasInvalidTradeDateInput ? (
+                                        <p className="text-[10px] text-rose-400 mt-1">
+                                            Fecha invalida. Usa formato DD/MM/AAAA o toca Auto.
+                                        </p>
+                                    ) : (
+                                        <p className="text-[10px] text-slate-500 mt-1">
+                                            Formato DD/MM/AAAA. Si editas, pasa a manual.
+                                        </p>
+                                    )}
+                                    <label className="block text-[10px] font-mono text-slate-500 mt-2 mb-1 uppercase">
+                                        Hora (opcional)
+                                    </label>
                                     <input
                                         type="datetime-local"
                                         value={state.datetime}
-                                        onChange={e => setState(s => ({ ...s, datetime: e.target.value }))}
+                                        onChange={e => {
+                                            const raw = e.target.value
+                                            setState(s => {
+                                                const parsed = parseDatetimeLocal(raw)
+                                                if (!parsed) {
+                                                    return {
+                                                        ...s,
+                                                        tradeDateMode: 'manual',
+                                                        datetime: raw,
+                                                    }
+                                                }
+                                                return {
+                                                    ...s,
+                                                    tradeDateMode: 'manual',
+                                                    datetime: raw,
+                                                    tradeDate: parsed,
+                                                    tradeDateInput: formatDateDDMMYYYY(parsed),
+                                                }
+                                            })
+                                        }}
+                                        onBlur={() => {
+                                            if (!parseDatetimeLocal(state.datetime)) {
+                                                setTradeDateAutoNow()
+                                            }
+                                        }}
                                         className="w-full bg-slate-900 border border-white/10 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
                                     />
+                                    <p className="text-[10px] text-slate-500 mt-1">
+                                        Modo fecha: <span className="font-mono text-slate-300">{state.tradeDateMode === 'auto' ? 'auto' : 'manual'}</span>
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -962,6 +1145,12 @@ export function CedearBuySellWizard({
                                         $ {fmt2(effectiveFx)} {state.fxAtTradeManual && <span className="text-amber-400">(manual)</span>}
                                     </span>
                                 </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-400">Fecha</span>
+                                    <span className="font-mono text-slate-300 text-xs">
+                                        {selectedTradeDateLabel} <span className="text-slate-500">({state.tradeDateMode})</span>
+                                    </span>
+                                </div>
                                 {!isBuy && (
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-slate-400">Método costeo</span>
@@ -1059,6 +1248,9 @@ export function CedearBuySellWizard({
                         </div>
                         <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
                             TC: $ {fmt2(effectiveFx)} {state.fxAtTradeManual && <span className="text-amber-400">(manual)</span>}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                            Fecha: {selectedTradeDateLabel} ({state.tradeDateMode})
                         </div>
                     </div>
 
