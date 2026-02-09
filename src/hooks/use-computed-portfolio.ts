@@ -48,7 +48,7 @@ function getUserPreferences(): { baseFx: FxType; stableFx: FxType; cedearAuto: b
         baseFx: (storedFx as FxType) || 'MEP',
         stableFx: 'CRIPTO',
         cedearAuto: storedCedear !== 'false', // Default ON
-        trackCash: storedTrackCash === 'true', // Default OFF
+        trackCash: storedTrackCash !== 'false', // Default ON
     }
 }
 

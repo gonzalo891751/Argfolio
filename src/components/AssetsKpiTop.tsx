@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { formatNumberAR, formatMoneyARS, formatMoneyUSD, formatDeltaMoneyARS, formatDeltaMoneyUSD } from '@/lib/format'
 import type { PortfolioKPIs, RubroV2, RubroId, FxRatesSnapshot } from '@/features/portfolioV2'
+import { computeCurrencyExposureSummary } from '@/features/dashboardV2/currency-exposure'
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -36,43 +37,7 @@ interface AssetsKpiTopProps {
 
 export function AssetsKpiTop({ kpis, fx, rubros }: AssetsKpiTopProps) {
     // Exposure calculation (Card 2)
-    const exposure = useMemo(() => {
-        let softArs = 0
-        let hardUsd = 0
-
-        for (const rubro of rubros) {
-            switch (rubro.id) {
-                case 'wallets':
-                case 'frascos':
-                    for (const prov of rubro.providers) {
-                        for (const item of prov.items) {
-                            if (item.kind === 'cash_usd') {
-                                hardUsd += item.valUsd
-                            } else {
-                                softArs += item.valArs
-                            }
-                        }
-                    }
-                    break
-                case 'plazos':
-                case 'fci':
-                    softArs += rubro.totals.ars
-                    break
-                case 'cedears':
-                case 'crypto':
-                    hardUsd += rubro.totals.usd
-                    break
-            }
-        }
-
-        const tcRef = fx.mepSell || fx.officialSell || 1
-        const softUsdEq = tcRef > 0 ? softArs / tcRef : 0
-        const totalEq = softUsdEq + hardUsd
-        const pctSoft = totalEq > 0 ? (softUsdEq / totalEq) * 100 : 0
-        const pctHard = totalEq > 0 ? (hardUsd / totalEq) * 100 : 0
-
-        return { softArs, hardUsd, tcRef, pctSoft, pctHard }
-    }, [rubros, fx])
+    const exposure = useMemo(() => computeCurrencyExposureSummary(rubros, fx), [rubros, fx])
 
     // Donut data (Card 4)
     const donutSlices = useMemo(() => {

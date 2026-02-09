@@ -10,11 +10,11 @@ const AUTO_SETTLE_PF_KEY = 'argfolio.autoSettleFixedTerms'
 export function useTrackCash() {
     const queryClient = useQueryClient()
 
-    // Initialize from localStorage, default false
+    // Initialize from localStorage, default true (only when key is missing)
     const [trackCash, setTrackCashState] = useState(() => {
         const stored = localStorage.getItem(STORAGE_KEY)
-        // If missing, default is FALSE (Simple Mode)
-        if (stored === null) return false
+        // If missing, default is ON for new users (do not persist until user decides)
+        if (stored === null) return true
         return stored === 'true'
     })
 

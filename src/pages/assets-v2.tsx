@@ -17,6 +17,8 @@ import { formatMoneyARS, formatMoneyUSD, formatPercent } from '@/lib/format'
 import { usePortfolioV2, type RubroV2, type ProviderV2, type ItemV2, type ItemKind } from '@/features/portfolioV2'
 import { useFxOverrides, type FxOverrideFamily, type FxOverrideSide } from '@/features/portfolioV2/fxOverrides'
 import { useProviderSettings } from '@/hooks/useProviderSettings'
+import { useMovements } from '@/hooks/use-movements'
+import { useTrackCash } from '@/hooks/use-preferences'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -80,6 +82,8 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 export function AssetsPageV2() {
     const portfolio = usePortfolioV2()
     const { calculateVNR } = useProviderSettings()
+    const { data: movements = [] } = useMovements()
+    const { trackCash, setTrackCash } = useTrackCash()
     const navigate = useNavigate()
     const location = useLocation()
     const { toast } = useToast()
@@ -409,6 +413,9 @@ export function AssetsPageV2() {
         )
     }
 
+    const isPortfolioEmpty = portfolio.rubros.length === 0
+    const showCashDisabledEmptyState = isPortfolioEmpty && !trackCash && movements.length > 0
+
     return (
         <div className="space-y-6 relative">
             {/* Header */}
@@ -560,10 +567,28 @@ export function AssetsPageV2() {
             )}
 
             {/* Empty State */}
-            {portfolio.rubros.length === 0 && (
-                <div className="text-center py-12 bg-muted/30 rounded-lg">
-                    <p className="text-muted-foreground">No hay activos registrados</p>
-                </div>
+            {isPortfolioEmpty && (
+                showCashDisabledEmptyState ? (
+                    <div className="text-center py-12 bg-muted/30 rounded-lg">
+                        <p className="text-foreground font-medium">
+                            Tenés movimientos de caja, pero la caja está desactivada en Preferencias.
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                            Activá caja para que esos movimientos impacten en Mis Activos.
+                        </p>
+                        <Button
+                            type="button"
+                            className="mt-4"
+                            onClick={() => setTrackCash(true)}
+                        >
+                            Activar caja
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="text-center py-12 bg-muted/30 rounded-lg">
+                        <p className="text-muted-foreground">No hay activos registrados</p>
+                    </div>
+                )
             )}
 
             {/* Detail Overlay */}

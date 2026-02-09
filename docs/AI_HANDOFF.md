@@ -1669,3 +1669,205 @@ Replace legacy `/dashboard` with Dashboard v2 based on `docs/prototypes/dash1.ht
 - Compare visible totals in browser:
   - `/mis-activos-v2` vs `/dashboard` (same numbers ARS/USD expected by shared `usePortfolioV2` source).
 - Validate full visual parity against prototype in desktop/mobile.
+
+---
+
+## CHECKPOINT - Dashboard KPIs + Net Income Range + Drivers por Resultado (2026-02-09)
+
+### Objetivo
+Corregir KPIs vacios del dashboard, agregar calculo real de Ingresos Netos por rango con desglose y tooltips, pasar Drivers a foco en Resultado por rubro (default), incluir devengado diario de PF para rangos, y reducir solo UI del boton "Agregar movimiento", sin refactors masivos.
+
+### Archivos tocados
+1. `src/features/dashboardV2/dashboard-metrics.ts` (nuevo)
+2. `src/features/dashboardV2/dashboard-metrics.test.ts` (nuevo)
+3. `src/pages/dashboard.tsx`
+4. `docs/AI_HANDOFF.md`
+
+### Cambios realizados
+- Se creo modulo puro `computeDashboardMetrics(...)` con entrada real del sistema (`portfolio`, `snapshots`, `movements`, `range`, `now`), sin dependencia de React.
+- El modulo devuelve:
+  - KPIs: `variation24h`, `mtd`, `ytd` con estado explicito (`ok` / `missing_history`) y hint cuando falta historial.
+  - `netIncome` por rango (`1D/7D/30D/90D/1Y/TOTAL`) con breakdown real: `interest`, `variation`, `fees`, `total`.
+  - `drivers` por rango enfocados en resultado por rubro (`resultArs/resultUsd/resultPct`) y label/estado explicito.
+- Timezone consistente para calculos de rango usando fecha local de Argentina (`America/Argentina/Buenos_Aires`).
+- Edge cases cubiertos:
+  - si falta snapshot base: estado explicito y mensaje (sin vacio silencioso),
+  - `TOTAL`: baseline en primer snapshot disponible,
+  - fallback de Drivers en `TOTAL` a resultado desde costo cuando no hay breakdown historico.
+- Plazos fijos:
+  - se agrego devengado lineal diario para el rango usando `fixedDepositDetails` (`expectedInterestArs / termDays` con solape de dias del periodo),
+  - se incorpora al componente `interest` del net income y a drivers por rubro.
+- Dashboard conectado al modulo:
+  - KPIs `Variacion Hoy / MTD / YTD` ahora usan metrica unificada y muestran `N/A` + hint si falta historial.
+  - Tarjeta `Ingresos Netos` ahora tiene selector de rango (`1D/7D/30D/90D/1Y/TOTAL`) y tooltips claros para `Int/Var/Fees`.
+  - `Drivers del Periodo` ahora muestra `Resultado` como columna principal (Tenencia secundaria).
+- UI boton `Agregar movimiento`:
+  - se achico visualmente (`px/py`, `min-width`, icon size) sin tocar handler ni navegacion.
+
+### Pendientes
+- QA manual visual/funcional en `/dashboard` con datos reales (rangos y textos).
+- Validar en datos con historial legacy sin snapshots V2 para confirmar mensajes de estado esperados.
+
+### Validacion ejecutada
+- [x] `npx tsc --noEmit` OK
+- [x] `npm run build` OK
+- [x] `npm test` OK (12 files, 87 tests)
+
+### QA manual recomendado
+1. Abrir `/dashboard` y verificar que KPIs (Hoy/MTD/YTD) muestran valor o `N/A` con hint explicito.
+2. En `Ingresos Netos`, cambiar rango (`1D`, `7D`, `30D`, `1Y`, `TOTAL`) y confirmar que total/chips cambian.
+3. Hover en chips `Int/Var/Fees` y validar texto explicativo.
+4. En `Drivers del Periodo`, cambiar rango y validar que la columna principal sea `Resultado` por rubro.
+5. Probar caso con PF activo y confirmar que en rangos cortos aparece aporte por devengado (no todo al vencimiento).
+6. Confirmar que `Agregar movimiento` abre igual que antes y solo cambio tamano visual.
+---
+
+### 2026-02-09 15:37:59 -03:00 - Codex - Audit dashboard proyecciones (Phase 0)
+- Audit realizado.
+- Archivos leidos (clave): `src/pages/dashboard.tsx`, `src/features/dashboardV2/dashboard-metrics.ts`, `src/features/dashboardV2/snapshot-v2.ts`, `src/features/dashboardV2/snapshot-helpers.ts`, `src/hooks/use-snapshots.ts`, `src/components/GlobalDataHandler.tsx`, `src/db/schema.ts`, `src/db/repositories/snapshots.ts`, `src/features/portfolioV2/usePortfolioV2.ts`, `src/features/portfolioV2/builder.ts`, `src/features/assets/useAssetsRows.ts`, `src/domain/yield/accrual.ts`, `src/domain/pf/processor.ts`, `src/domain/portfolio/fifo.ts`, `src/domain/portfolio/average-cost.ts`, `src/domain/portfolio/lot-allocation.ts`, `src/pages/history.tsx`, `src/pages/wallet-detail.tsx`, `src/pages/pf-detail.tsx`, `src/domain/types.ts`.
+- Reporte generado: `docs/audits/dashboard-proyecciones-audit.md`.
+
+---
+
+## CHECKPOINT - Drivers Historico/Proyeccion + Ganancia proyectada por rubro (2026-02-09)
+
+### Objetivo
+Agregar modo `PROYECCION` en `Drivers del Periodo` para mostrar ganancia proyectada por rubro en horizontes `HOY/MAÑ/7D/30D/90D/1A`, manteniendo el modo historico intacto y sin depender de snapshots para el calculo proyectado.
+
+### Archivos tocados
+1. `src/features/dashboardV2/projected-earnings.ts` (nuevo)
+2. `src/features/dashboardV2/projected-earnings.test.ts` (nuevo)
+3. `src/pages/dashboard.tsx`
+4. `docs/AI_HANDOFF.md`
+
+### Cambios realizados
+- Se creo modulo puro `computeProjectedEarningsByCategory({ portfolio, horizonDays, now })`.
+- Logica de proyeccion implementada con scope minimo:
+  - Wallets remuneradas: `P * ((1 + (TNA/100)/365)^h - 1)`.
+  - Plazos fijos: devengamiento lineal contractual con tope por `daysRemaining` y `termDays`.
+  - CEDEAR/Cripto/FCI (y rubros sin carry): incremental futuro `0` bajo supuesto de precio constante.
+- El resultado proyectado por rubro se define como:
+  - `resultArsProjected = pnlArsNow + carryArsProjected`.
+- Se agrego toggle visual `Historico | Proyeccion` dentro de `Drivers del Periodo` (sin tocar motor de snapshots/costeo).
+- En `PROYECCION`:
+  - el selector de rangos existente cambia labels a `HOY/MAÑ/7D/30D/90D/1A`,
+  - la columna principal pasa a `Ganancia (ARS)`,
+  - se muestra subtexto `carry +$X` cuando corresponde,
+  - se muestra nota visible: `CEDEAR/Cripto/FCI: precio constante (incremental 0)`.
+- En `HISTORICO`:
+  - se mantiene comportamiento previo,
+  - se evita mostrar resultado ambiguo cuando falta historial (`N/A` en resultado si aplica),
+  - el modal de detalle por activo queda habilitado solo en este modo.
+
+### Tests agregados
+- `src/features/dashboardV2/projected-earnings.test.ts` cubre:
+  - wallet con TNA y horizonte 1 dia (carry > 0),
+  - PF lineal (`expectedInterestArs=30000`, `termDays=30`, `h=15` => `15000`),
+  - CEDEAR/Cripto/FCI con carry `0` y resultado igual a PnL actual,
+  - edge de campos faltantes + horizonte negativo (clamp a 0, sin crash).
+
+### Validacion ejecutada
+- [x] `npm run test` OK (13 files, 91 tests)
+- [x] `npm run build` OK
+- [x] `npm run lint` OK (0 errores, warnings preexistentes)
+
+### Pendientes
+- QA manual en `/dashboard` para validar UX final del toggle y legibilidad en mobile.
+---
+
+## CHECKPOINT - FASE 1 Mis Activos V2: trackCash default ON + empty-state diagnostico (2026-02-09)
+
+### Objetivo
+Resolver el caso donde un deposito de caja aparece en Movimientos pero `/mis-activos-v2` queda vacio para usuarios nuevos sin preferencias, y mejorar UX cuando la caja esta desactivada.
+
+### Archivos tocados
+1. `src/hooks/use-preferences.ts`
+2. `src/hooks/use-computed-portfolio.ts`
+3. `src/pages/assets-v2.tsx`
+4. `docs/AI_HANDOFF.md`
+
+### Cambios concretos
+- `useTrackCash()` ahora usa default `true` cuando `argfolio.trackCash` no existe en localStorage.
+- Se mantiene el comportamiento de persistencia actual: solo se escribe localStorage cuando el usuario cambia la preferencia (`setTrackCash`), no en el primer render.
+- `use-computed-portfolio.ts` se alineo al mismo criterio para el engine:
+  - `trackCash: storedTrackCash !== 'false'` (default ON si key ausente).
+- `assets-v2.tsx` ahora evalua empty-state inteligente:
+  - Si `portfolio.rubros.length === 0`, `trackCash === false` y hay movimientos (`movements.length > 0`), muestra diagnostico en vez de "No hay activos registrados".
+  - Mensaje: "Tenes movimientos de caja, pero la caja esta desactivada en Preferencias."
+  - CTA: boton `Activar caja` que ejecuta `setTrackCash(true)`.
+- Si no se cumple esa condicion, se mantiene el empty-state anterior sin cambios.
+
+### Decision tecnica
+- Se eligio default ON para `trackCash` en ausencia de key para que usuarios nuevos vean caja sin configuracion previa.
+- Se agrego CTA directo en empty-state para resolver en 1 click el caso de usuarios con preferencia legacy `trackCash=false`, sin obligarlos a navegar a Settings.
+
+### Validacion ejecutada
+- [x] `npm run build` OK
+- [x] `npm run lint` OK (0 errores, 124 warnings preexistentes)
+
+### QA manual recomendado
+1. Abrir ventana incognito (sin localStorage previo).
+2. Crear `DEPOSIT` ARS en `/movements`.
+3. Ir a `/mis-activos-v2` y verificar que ya no quede vacio.
+4. Ejecutar en DevTools: `localStorage.setItem('argfolio.trackCash','false'); location.reload();`
+5. Verificar que aparece empty-state diagnostico + boton `Activar caja`.
+6. Click en `Activar caja` y verificar que reaparecen los valores.
+
+### Pendientes
+- Nice-to-have de FASE 1 (evitar totales en 0 con caja oculta) no se implemento para mantener scope minimo y evitar tocar motor/UI fuera del bug principal.
+
+---
+
+## CHECKPOINT - Dashboard Drivers/Modal/Expo USD hardening (2026-02-09)
+
+### Objetivo
+Corregir Drivers del dashboard para separar proyeccion real vs PnL actual, mostrar ARS/USD y totales en ambos modos, alinear Expo USD con Mis Activos V2 y mejorar UX del modal (overlay full-screen + blur + animacion).
+
+### Archivos tocados
+1. src/pages/dashboard.tsx
+2. src/features/dashboardV2/projected-earnings.ts
+3. src/features/dashboardV2/projected-earnings.test.ts
+4. src/features/dashboardV2/currency-exposure.ts (nuevo)
+5. src/components/AssetsKpiTop.tsx
+6. docs/AI_HANDOFF.md
+
+### Cambios concretos
+- Se reemplazo el motor de proyeccion por computeProjectedEarningsByRubro(...):
+  - Billeteras remuneradas: proyeccion por TNA con interes compuesto diario.
+  - Plazos fijos: devengado lineal acotado por dias remanentes.
+  - CEDEAR/Cripto/FCI: incremental proyectado = 0 (precio constante), con pnlNow separado.
+  - Salida con rows + totals, ARS/USD, status y notes por rubro/activo.
+- Drivers UI en dashboard:
+  - Historico: resultado ARS con USD debajo y fila de Totales (resultado + tenencia).
+  - Proyeccion: Ganancia proyectada (ARS) + USD debajo, leyenda explicita de escenario, PnL actual separado para CEDEAR/Cripto/FCI, y fila de Totales.
+  - Se mantiene etiqueta explicita de fallback historico Total (desde costo) cuando aplica.
+- Modal Drivers:
+  - Soporta ambos modos (historico/proyeccion).
+  - Overlay en portal (createPortal) con fixed inset-0, bg-slate-950/70, backdrop-blur-sm.
+  - Animacion de apertura/cierre (opacity + scale + translate) y bloqueo de scroll del body mientras esta abierto.
+  - En proyeccion muestra por activo: Tenencia, Ganancia proyectada, PnL actual y badge sin modelo cuando falta modelo/datos.
+- Expo USD:
+  - Se creo helper compartido computeCurrencyExposureSummary(...) con la misma logica de Exposicion Moneda de Mis Activos V2.
+  - Dashboard ahora usa ese helper para Riesgo y Metricas > Expo USD.
+  - AssetsKpiTop tambien consume el mismo helper para evitar divergencias futuras.
+
+### Decisiones
+- Definicion de horizonte:
+  - HOY = 1 dia proyectado.
+  - MAN = 1 dia proyectado (label distinto para UX).
+- Conversion USD en Drivers:
+  - Se prioriza USD directo cuando existe.
+  - Si falta USD y hay ARS + FX de referencia, se convierte con MEP/Oficial.
+  - Si falta FX para conversion, se marca missing_data con hint visible en proyeccion.
+
+### Validacion ejecutada
+- [x] npm test -> PASS (13 files, 91 tests)
+- [x] npm run build -> PASS (warnings preexistentes del repo)
+- [x] npm run lint -> PASS (0 errores, 124 warnings preexistentes)
+- [x] npx tsc --noEmit -> PASS
+
+### Pendientes
+- QA manual en browser para validar visualmente:
+  - coincidencia exacta de Expo USD entre /mis-activos-v2 y /dashboard,
+  - comportamiento del modal en mobile (scroll interno + backdrop),
+  - copy final de leyendas/proyeccion segun preferencia de producto.
