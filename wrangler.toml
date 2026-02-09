@@ -5,6 +5,5 @@ pages_build_output_dir = "./dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "argfolio-prod"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "59879068-6125-4ef4-88fd-a044d754ed5c"
 migrations_dir = "migrations"
-
