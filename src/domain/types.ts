@@ -252,6 +252,13 @@ export interface Snapshot {
         usdArs: number
         type: FxType
     }
+    source?: 'legacy' | 'v2'
+    breakdownRubros?: Record<string, { ars: number; usd: number }>
+    breakdownItems?: Record<string, { rubroId: string; ars: number; usd: number }>
+    meta?: {
+        fxRef?: string
+        notes?: string
+    }
     createdAtISO: string
 }
 

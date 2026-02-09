@@ -7,6 +7,7 @@
 
 import { ReactNode } from 'react'
 import { useAccrualScheduler } from '@/features/yield'
+import { useAutoDailySnapshotCapture } from '@/hooks/use-snapshots'
 
 interface GlobalDataHandlerProps {
     children: ReactNode
@@ -15,6 +16,8 @@ interface GlobalDataHandlerProps {
 export function GlobalDataHandler({ children }: GlobalDataHandlerProps) {
     // Run yield accrual once per day
     useAccrualScheduler()
+    // Run dashboard V2 auto snapshot (daily upsert) when setting is enabled
+    useAutoDailySnapshotCapture()
 
     return <>{children}</>
 }

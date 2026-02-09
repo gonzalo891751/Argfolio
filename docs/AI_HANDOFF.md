@@ -1570,3 +1570,102 @@ Agregar en el wizard CEDEAR (compra/venta) un modo de fecha `Auto` (hoy) y `Manu
   - Compra historica con fecha manual (2 meses atras)
   - Venta historica parcial con fecha manual (1 mes atras)
   - Toggle manual -> Auto y verificacion de fecha hoy en movimientos/mis activos
+
+---
+
+### 2026-02-09  Antigravity  Audit: Dashboard V2 Diagnostic
+
+**Goal:** Perform Phase 0 diagnostic for Dashboard V2, mapping data sources, identifying gaps in snapshot logic, and creating a migration plan.
+
+**Files Created:**
+- \docs/AUDIT_DASHBOARD_V2.md\ (NEW) - Technical audit and implementation plan.
+
+**Key Findings:**
+- **Snapshot Divergence:** Existing \useSnapshots\ uses legacy logic (\useComputedPortfolio\) which only stores totals. Dashboard v2 requires granular breakdown by rubro/asset for 'Drivers' and 'Evolución'.
+- **Database Schema Update Required:** The \snapshots\ table in Dexie needs to be updated to store a \reakdown\ JSON field.
+- **Price Infrastructure:** Confirmed \dolar-api\ source and \localStorage\ caching.
+- **Prototype:** \dash1.html\ structure mapped to React components.
+
+**Next Steps:**
+- Approve Audit Plan.
+- Execute Schema Migration (Phase 1).
+- Implement Dashboard V2 components (Phase 2).
+
+
+---
+
+## CHECKPOINT - Dashboard V2 Replacement + Snapshots V2 Backbone (2026-02-09)
+
+### Objective
+Replace legacy `/dashboard` with Dashboard v2 based on `docs/prototypes/dash1.html`, using `usePortfolioV2` as single source of truth, and migrate snapshots to V2 data shape for historical analytics/drivers/risk.
+
+### Files touched
+1. `src/pages/dashboard.tsx`
+2. `src/hooks/use-snapshots.ts`
+3. `src/components/GlobalDataHandler.tsx`
+4. `src/domain/types.ts`
+5. `src/db/schema.ts`
+6. `src/db/repositories/snapshots.ts`
+7. `src/db/repositories/snapshot-utils.ts`
+8. `src/db/repositories/snapshot-utils.test.ts`
+9. `src/features/dashboardV2/snapshot-v2.ts`
+10. `src/features/dashboardV2/snapshot-helpers.ts`
+11. `src/features/dashboardV2/snapshot-helpers.test.ts`
+12. `src/components/dashboard/category-card.tsx` (deleted)
+13. `src/components/dashboard/composition-chart.tsx` (deleted)
+14. `src/components/dashboard/debts-card.tsx` (deleted)
+15. `src/components/dashboard/empty-state.tsx` (deleted)
+16. `src/components/dashboard/kpi-card.tsx` (deleted)
+17. `src/components/dashboard/portfolio-chart.tsx` (deleted)
+18. `src/components/dashboard/top-positions.tsx` (deleted)
+19. `docs/IMPLEMENTATION_DASHBOARD_V2.md`
+20. `docs/AI_HANDOFF.md`
+
+### What changed
+- Dashboard route `/dashboard` now renders the new Dashboard v2 (legacy dashboard UI removed).
+- Dashboard totals, rubros, exposures, and current KPIs use `usePortfolioV2` only.
+- Snapshot model upgraded with:
+  - `source: 'legacy' | 'v2'`
+  - `breakdownRubros`
+  - `breakdownItems`
+  - optional `meta`
+- Dexie bumped to v7 with safe upgrade that tags existing snapshots as `source='legacy'`.
+- Snapshot writes now use `buildSnapshotFromPortfolioV2(...)` + `upsertByDate(...)` (idempotent one snapshot per day).
+- Auto snapshots:
+  - real toggle in localStorage
+  - daily auto capture hook in `GlobalDataHandler`
+  - manual `Guardar ahora`
+  - `Limpiar historial` wired to DB clear.
+- Dashboard v2 sections implemented:
+  - Hero + quick actions + `MovementWizard` CTA
+  - KPI cards (Total, 1D, MTD, YTD, Liquidez, Ingresos Netos 30D)
+  - Evolution chart (ARS/USD, range selector, Historico/Proyectado)
+  - Drivers by period with modal detail by asset and deep link to Mis Activos v2 routes
+  - Distribution donut + risk metrics (Vol 30D, MaxDD 90D, Sharpe 1Y, Expo USD)
+  - snapshots control strip + alertas placeholder.
+- Added pure helpers and tests for:
+  - `getSnapshotAtOrBefore`
+  - `getSnapshotForPeriod`
+  - `computeReturns`
+  - `computeDrivers`
+  - legacy snapshot normalization behavior.
+
+### Decisions locked
+- Drivers `TOTAL` default:
+  - first V2 snapshot baseline when available
+  - fallback to current PnL vs cost (`Total (desde costo)`).
+- Projection:
+  - yield assets via daily compounding from `yieldMeta.tna`
+  - non-yield assets use recent trend only when enough data, else neutral drift.
+- Risk metrics are snapshot-series based and return `N/A` when history is insufficient.
+
+### Validation executed
+- [x] `npm test` -> PASS (11 files, 84 tests)
+- [x] `npm run build` -> PASS (warnings only: CSS `@import` order, chunk size, CEDEAR source file missing)
+- [x] `npm run lint` -> PASS (0 errors, 124 warnings pre-existing)
+- [x] `npx tsc --noEmit` -> PASS
+
+### Pending manual QA
+- Compare visible totals in browser:
+  - `/mis-activos-v2` vs `/dashboard` (same numbers ARS/USD expected by shared `usePortfolioV2` source).
+- Validate full visual parity against prototype in desktop/mobile.

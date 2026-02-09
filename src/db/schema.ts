@@ -248,6 +248,18 @@ export class ArgfolioDatabase extends Dexie {
         this.version(6).stores({
             accountSettings: 'id',
         })
+
+        // V7: Snapshot source tagging + V2 breakdown support
+        this.version(7).stores({
+            snapshots: 'id, dateLocal, createdAtISO, source',
+        }).upgrade(async (tx) => {
+            const snapshotsTable = tx.table('snapshots')
+            await snapshotsTable.toCollection().modify((snapshot: Record<string, unknown>) => {
+                if (!snapshot.source) {
+                    snapshot.source = 'legacy'
+                }
+            })
+        })
     }
 }
 
