@@ -14,6 +14,16 @@ import { isRemoteSyncEnabled } from '@/sync/remote-sync'
 
 type FxPreference = 'MEP' | 'CCL'
 
+interface SyncPushResponse {
+    ok: boolean
+    counts: {
+        accountsUpserted: number
+        movementsUpserted: number
+        instrumentsUpserted: number
+    }
+    ignored?: string[]
+}
+
 export function SettingsPage() {
     const { theme, setTheme } = useTheme()
     const { isAutoRefreshEnabled, setAutoRefreshEnabled } = useAutoRefresh()
@@ -25,6 +35,7 @@ export function SettingsPage() {
     const [isResetting, setIsResetting] = useState(false)
     const [isExporting, setIsExporting] = useState(false)
     const [isImporting, setIsImporting] = useState(false)
+    const [isPushingToCloud, setIsPushingToCloud] = useState(false)
     const importInputRef = useRef<HTMLInputElement | null>(null)
 
     const handleFxChange = (pref: FxPreference) => {
@@ -98,6 +109,76 @@ export function SettingsPage() {
         } finally {
             event.target.value = ''
             setIsImporting(false)
+        }
+    }
+
+    const handlePushAllToD1 = async () => {
+        setIsPushingToCloud(true)
+        try {
+            const payload = await exportLocalBackup()
+            const hasAccounts = payload.data.accounts.length > 0
+            const hasMovements = payload.data.movements.length > 0
+            if (!hasAccounts && !hasMovements) {
+                alert('No hay cuentas ni movimientos para subir.')
+                return
+            }
+
+            const response = await fetch('/api/sync/push', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            })
+
+            const rawBody = await response.text()
+            let parsedBody: any = null
+            if (rawBody.trim().length > 0) {
+                try {
+                    parsedBody = JSON.parse(rawBody)
+                } catch {
+                    parsedBody = null
+                }
+            }
+
+            if (!response.ok) {
+                if (response.status === 403) {
+                    const hint = typeof parsedBody?.hint === 'string'
+                        ? `\n${parsedBody.hint}`
+                        : ''
+                    alert(`No se pudo escribir en D1.\nConfigurá ARGFOLIO_SYNC_WRITE_ENABLED=1.${hint}`)
+                    return
+                }
+
+                const apiError = typeof parsedBody?.error === 'string'
+                    ? parsedBody.error
+                    : `HTTP ${response.status}`
+                alert(`No se pudo subir a D1: ${apiError}`)
+                return
+            }
+
+            const result = parsedBody as SyncPushResponse | null
+            if (!result?.counts) {
+                alert('Subida completada, pero la API no devolvió conteos.')
+                return
+            }
+
+            const ignoredText = Array.isArray(result.ignored) && result.ignored.length > 0
+                ? `\nIgnorado: ${result.ignored.join(', ')}`
+                : ''
+
+            alert(
+                `Subida completada a D1.\n` +
+                `Cuentas: ${result.counts.accountsUpserted}\n` +
+                `Movimientos: ${result.counts.movementsUpserted}\n` +
+                `Instrumentos: ${result.counts.instrumentsUpserted}` +
+                ignoredText
+            )
+        } catch (error) {
+            console.error('Error pushing backup to D1:', error)
+            alert('No se pudo subir a D1 por un error de red. Los datos locales siguen intactos.')
+        } finally {
+            setIsPushingToCloud(false)
         }
     }
 
@@ -266,6 +347,21 @@ export function SettingsPage() {
                         className="hidden"
                         onChange={handleImportBackup}
                     />
+                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-3 space-y-2">
+                        <p className="text-sm font-medium">Sync a la nube (D1)</p>
+                        <p className="text-xs text-muted-foreground">
+                            Empuja todo el backup local a D1 en una sola operacion.
+                            Requiere `ARGFOLIO_SYNC_WRITE_ENABLED=1`.
+                        </p>
+                        <Button
+                            variant="default"
+                            onClick={handlePushAllToD1}
+                            disabled={isPushingToCloud || isExporting || isImporting}
+                        >
+                            <Cloud className={cn('h-4 w-4 mr-2', isPushingToCloud && 'animate-spin')} />
+                            {isPushingToCloud ? 'Subiendo todo...' : 'Subir todo a D1'}
+                        </Button>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                         Importación en modo merge seguro: upsert por `id` (sin duplicar).
                     </p>

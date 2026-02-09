@@ -1986,3 +1986,59 @@ Agregar puente local Export/Import y sync remoto mínimo con Cloudflare Pages Fun
 - [x] `npm run build` OK
 - [x] `npm test` OK
 - [x] Functions + migración + wrangler listos en repo para deploy.
+
+---
+
+## CHECKPOINT - FASE 4.1 Bulk Push Dexie -> D1 (2026-02-09)
+
+### Objetivo
+Agregar migracion masiva de datos existentes en Dexie hacia D1 con 1 click desde Settings, sin romper flujo local/offline.
+
+### Archivos tocados
+1. functions/api/sync/push.ts (nuevo)
+2. src/pages/settings.tsx
+3. docs/AI_HANDOFF.md
+
+### Cambios concretos
+- Backend nuevo: POST /api/sync/push.
+- Write gate respetado: si ARGFOLIO_SYNC_WRITE_ENABLED != "1" responde 403 con error + hint.
+- Body soportado: mismo JSON de exportLocalBackup() (version, exportedAtISO, data.accounts|movements|instruments|manualPrices|preferences).
+- Upsert por id en D1:
+  - accounts -> tabla accounts.
+  - movements -> tabla movements.
+  - instruments -> tabla instruments (si falla, no rompe push; se reporta en ignored).
+- manualPrices y preferences se ignoran en esta fase y se devuelven en ignored.
+- Response del push:
+  - { ok: true, counts: { accountsUpserted, movementsUpserted, instrumentsUpserted }, ignored: [] }.
+- Frontend Settings:
+  - Nuevo bloque Sync a la nube (D1).
+  - Nuevo boton Subir todo a D1.
+  - El boton reutiliza exportLocalBackup() (sin duplicar logica), hace fetch(/api/sync/push) y muestra feedback con conteos.
+  - Hardening UI: estado de carga, disabled durante push, manejo de 403, manejo de error de red y guard clause cuando no hay datos (0 accounts y 0 movements).
+- Se mantiene intacta la UI existente de Exportar JSON / Importar JSON.
+
+### Variable requerida para escritura remota
+- ARGFOLIO_SYNC_WRITE_ENABLED=1
+- Si no esta en 1, toda escritura remota sigue bloqueada (modo solo lectura).
+
+### Como usar (migracion 1-click)
+1. En Settings, usar Importar JSON si primero queres cargar un backup local.
+2. En el bloque Sync a la nube (D1), click en Subir todo a D1.
+3. Verificar alerta de resultado con conteos.
+4. Validar bootstrap remoto en /api/sync/bootstrap.
+
+### Comandos ejecutados
+- npm test -> OK (13 files, 91 tests passed)
+- npm run build -> OK (build green; warnings preexistentes de CSS/chunks/script de CEDEAR)
+
+### QA manual recomendado
+1. En ambiente con D1 configurado, cargar datos locales (opcional: Importar JSON).
+2. Click en Subir todo a D1.
+3. Verificar que /api/sync/bootstrap devuelva accounts/movements no vacios.
+4. Abrir Argfolio en otro navegador/dispositivo y confirmar bootstrap con los mismos datos.
+5. Verificar caso gate OFF: con ARGFOLIO_SYNC_WRITE_ENABLED ausente o distinto de 1, el push debe devolver 403 y mensaje claro.
+
+### Limitaciones actuales
+- manualPrices no se persiste en D1 en esta fase (se ignora).
+- preferences no se persiste en D1 en esta fase (se ignora).
+- snapshots no se suben por este endpoint (fuera de alcance MVP).
