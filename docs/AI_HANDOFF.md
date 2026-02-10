@@ -2093,3 +2093,66 @@ Corregir el error de produccion en `Settings -> Subir todo a D1` para que el fro
 2. Abrir `/api/sync/status` y verificar `d1Bound=true`.
 3. Si los datos estan en localhost, exportar JSON en localhost e importarlo en produccion.
 4. En `Settings -> Subir todo a D1`, ejecutar push y luego verificar en `/api/sync/status` que `counts` sea mayor a 0.
+
+---
+
+## CHECKPOINT - FASE 4.3 Sync D1 hardening + auth token obligatorio (2026-02-10)
+
+### Objetivo
+Corregir `HTTP 500` en `Subir todo a D1` (caso Cloudflare D1 meta/duration), evitar llamadas D1 invalidas/vacias y agregar autenticacion por token en todos los endpoints `/api/sync/*`.
+
+### Archivos tocados
+1. `functions/api/_lib/sync.ts`
+2. `functions/api/sync/_middleware.ts` (nuevo)
+3. `functions/api/sync/push.ts`
+4. `src/sync/remote-sync.ts`
+5. `src/pages/settings.tsx`
+6. `docs/AI_HANDOFF.md`
+
+### Cambios concretos
+- Auth central `/api/sync/*`:
+  - Middleware nuevo `functions/api/sync/_middleware.ts`.
+  - Requiere `Authorization: Bearer <ARGFOLIO_SYNC_TOKEN>`.
+  - Si falta/invalid token => `401` JSON.
+  - Si secret no esta configurado => `401` con hint para configurar `ARGFOLIO_SYNC_TOKEN`.
+  - CORS actualizado para permitir header `Authorization`.
+
+- Push D1 (`POST /api/sync/push`) hardening:
+  - Respuesta OK estandar:
+    - `{ ok: true, counts: { accounts, movements, instruments }, ignored: [...], durationMs }`.
+  - Caso payload sin datos (`accounts=0 && movements=0 && instruments=0`):
+    - devuelve `200` con counts en cero,
+    - NO toca D1,
+    - NO ejecuta schema/batch.
+  - Batch robusto:
+    - chunking de 50,
+    - filtro de statements invalidos (`filter(Boolean)`),
+    - nunca llama `db.batch` con array vacio,
+    - logs por chunk/stage en errores.
+  - Logs server-side agregados (`start`, `done`, `no-op`, `chunk failed`, `failed`) con conteos/etapa, sin datos sensibles.
+
+- Frontend token + sync:
+  - Nuevo bloque en Settings: `Token de Sync` (guardar/eliminar en `localStorage`).
+  - Key usada: `argfolio-sync-token`.
+  - Push a D1 envia `Authorization: Bearer <token>`.
+  - `bootstrap` remoto (`/api/sync/bootstrap`) ahora tambien envia token automaticamente.
+  - Mensajes claros para `401` (token faltante/invalido).
+
+### Validacion ejecutada
+- [x] `npm test` -> PASS (13 files, 91 tests)
+- [x] `npm run build` -> PASS
+- [ ] `npm run dev` + smoke real de Pages Functions: no reproducible en este entorno (falta runtime de Pages/Wrangler).
+
+### Como probar en produccion
+1. En Pages Secrets, configurar:
+   - `ARGFOLIO_SYNC_TOKEN=<token-fuerte>`
+   - `ARGFOLIO_SYNC_WRITE_ENABLED=1`
+2. Redeploy.
+3. En `/settings`, pegar token en `Token de Sync` y guardar.
+4. Probar `Subir todo a D1`:
+   - con payload vacio -> exito 200 con counts 0,
+   - con datos -> exito + counts > 0.
+5. Verificar bootstrap protegido:
+   - con token correcto responde,
+   - sin token/incorrecto devuelve `401`.
+6. Validar en otro dispositivo (celu) cargando mismo token: `/dashboard` debe bootstrapear desde D1.

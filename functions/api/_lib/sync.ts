@@ -1,6 +1,7 @@
 export interface SyncEnv {
     DB?: D1Database
     ARGFOLIO_SYNC_WRITE_ENABLED?: string
+    ARGFOLIO_SYNC_TOKEN?: string
 }
 
 export function corsHeaders() {
@@ -8,7 +9,7 @@ export function corsHeaders() {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
 }
 
@@ -82,4 +83,3 @@ CREATE TABLE IF NOT EXISTS instruments (
 );
 `)
 }
-

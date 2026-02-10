@@ -52,8 +52,25 @@ interface SerializedException {
     stack: string | null
 }
 
+interface PushCounts {
+    accounts: number
+    movements: number
+    instruments: number
+}
+
 function toIsoNow(): string {
     return new Date().toISOString()
+}
+
+function nowMs(): number {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+        return performance.now()
+    }
+    return Date.now()
+}
+
+function toDurationMs(startMs: number): number {
+    return Math.max(0, Math.round(nowMs() - startMs))
 }
 
 function toSafeAmount(value: unknown): number {
@@ -99,11 +116,33 @@ function serializeException(error: unknown): SerializedException {
 
 async function runBatchInChunks(
     db: D1Database,
-    statements: D1PreparedStatement[],
-    chunkSize = 100
+    rawStatements: Array<D1PreparedStatement | null | undefined>,
+    label: string,
+    chunkSize = 50
 ): Promise<void> {
+    const statements = rawStatements.filter((statement): statement is D1PreparedStatement => Boolean(statement))
+
+    if (statements.length === 0) {
+        console.info('[sync/push] skip empty batch', { label })
+        return
+    }
+
     for (let index = 0; index < statements.length; index += chunkSize) {
-        await db.batch(statements.slice(index, index + chunkSize))
+        const chunk = statements.slice(index, index + chunkSize).filter((statement): statement is D1PreparedStatement => Boolean(statement))
+        if (chunk.length === 0) continue
+        try {
+            await db.batch(chunk)
+        } catch (error) {
+            const serialized = serializeException(error)
+            console.error('[sync/push] chunk failed', {
+                label,
+                offset: index,
+                chunkSize: chunk.length,
+                name: serialized.name,
+                message: serialized.message,
+            })
+            throw error
+        }
     }
 }
 
@@ -207,6 +246,7 @@ ON CONFLICT(id) DO UPDATE SET
 }
 
 export const onRequest: PagesFunction<SyncEnv> = async (context) => {
+    const startedAtMs = nowMs()
     const method = context.request.method
     if (method === 'OPTIONS') {
         return optionsResponse()
@@ -217,22 +257,6 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             error: 'Method not allowed',
             details: `Unsupported method: ${method}`,
         }, 405)
-    }
-
-    if (!isWriteEnabled(context.env)) {
-        return jsonResponse({
-            error: 'Sync write disabled',
-            details: 'ARGFOLIO_SYNC_WRITE_ENABLED must be "1".',
-            hint: 'Write gate OFF: set ARGFOLIO_SYNC_WRITE_ENABLED=1 y redeploy.',
-        }, 403)
-    }
-
-    if (!context.env.DB) {
-        return jsonResponse({
-            error: 'D1 binding unavailable',
-            details: 'env.DB is undefined',
-            hint: 'Falta binding D1 DB',
-        }, 500)
     }
 
     try {
@@ -263,20 +287,6 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             typeof payload.data.preferences === 'object' &&
             Object.keys(payload.data.preferences).length > 0
 
-        const db = getDatabase(context.env)
-        await ensureSyncSchema(db)
-
-        const accountStatements = buildAccountStatements(db, accounts)
-        const movementStatements = buildMovementStatements(db, movements)
-
-        if (accountStatements.length > 0) {
-            await runBatchInChunks(db, accountStatements)
-        }
-        if (movementStatements.length > 0) {
-            await runBatchInChunks(db, movementStatements)
-        }
-
-        let instrumentsUpserted = 0
         const ignored: string[] = []
         if (manualPrices.length > 0) {
             ignored.push(`manualPrices (${manualPrices.length})`)
@@ -285,32 +295,99 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             ignored.push('preferences')
         }
 
+        if (accounts.length === 0 && movements.length === 0 && instruments.length === 0) {
+            const durationMs = toDurationMs(startedAtMs)
+            console.info('[sync/push] no-op payload', {
+                durationMs,
+                accounts: 0,
+                movements: 0,
+                instruments: 0,
+            })
+            return jsonResponse({
+                ok: true,
+                counts: {
+                    accounts: 0,
+                    movements: 0,
+                    instruments: 0,
+                },
+                ignored,
+                durationMs,
+            })
+        }
+
+        if (!isWriteEnabled(context.env)) {
+            return jsonResponse({
+                error: 'Sync write disabled',
+                details: 'ARGFOLIO_SYNC_WRITE_ENABLED must be "1".',
+                hint: 'Write gate OFF: set ARGFOLIO_SYNC_WRITE_ENABLED=1 y redeploy.',
+            }, 403)
+        }
+
+        if (!context.env.DB) {
+            return jsonResponse({
+                error: 'D1 binding unavailable',
+                details: 'env.DB is undefined',
+                hint: 'Falta binding D1 DB',
+            }, 500)
+        }
+
+        console.info('[sync/push] start', {
+            accounts: accounts.length,
+            movements: movements.length,
+            instruments: instruments.length,
+        })
+
+        const db = getDatabase(context.env)
+        await ensureSyncSchema(db)
+
+        const accountStatements = buildAccountStatements(db, accounts)
+        const movementStatements = buildMovementStatements(db, movements)
+
+        await runBatchInChunks(db, accountStatements, 'accounts')
+        await runBatchInChunks(db, movementStatements, 'movements')
+
+        let instrumentsUpserted = 0
+
         if (instruments.length > 0) {
             try {
                 const instrumentStatements = buildInstrumentStatements(db, instruments)
-                if (instrumentStatements.length > 0) {
-                    await runBatchInChunks(db, instrumentStatements)
-                }
+                await runBatchInChunks(db, instrumentStatements, 'instruments')
                 instrumentsUpserted = instruments.length
             } catch (error: any) {
                 ignored.push(`instruments (${error?.message || 'table missing or unavailable'})`)
             }
         }
 
+        const counts: PushCounts = {
+            accounts: accounts.length,
+            movements: movements.length,
+            instruments: instrumentsUpserted,
+        }
+        const durationMs = toDurationMs(startedAtMs)
+        console.info('[sync/push] done', {
+            durationMs,
+            ...counts,
+            ignored: ignored.length,
+        })
+
         return jsonResponse({
             ok: true,
-            counts: {
-                accountsUpserted: accounts.length,
-                movementsUpserted: movements.length,
-                instrumentsUpserted,
-            },
+            counts,
             ignored,
+            durationMs,
         })
     } catch (error) {
         const serialized = serializeException(error)
+        const durationMs = toDurationMs(startedAtMs)
+        console.error('[sync/push] failed', {
+            durationMs,
+            name: serialized.name,
+            message: serialized.message,
+        })
         return jsonResponse({
             error: 'Failed to push sync payload',
             details: serialized,
+            durationMs,
         }, 500)
     }
 }

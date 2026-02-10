@@ -3,6 +3,7 @@ import type { Account, Instrument, Movement } from '@/domain/types'
 
 const REMOTE_SYNC_FLAG = 'VITE_ARGFOLIO_REMOTE_SYNC'
 const REMOTE_SYNC_STATUS_EVENT = 'argfolio:remote-sync-status'
+const SYNC_TOKEN_STORAGE_KEY = 'argfolio-sync-token'
 
 interface RemoteSyncStatusDetail {
     title: string
@@ -51,11 +52,36 @@ function toJsonBody(value: unknown): BodyInit {
     return JSON.stringify(value)
 }
 
+function readSyncToken(): string {
+    if (typeof window === 'undefined') return ''
+    return (window.localStorage.getItem(SYNC_TOKEN_STORAGE_KEY) ?? '').trim()
+}
+
+function authHeaders(): Record<string, string> {
+    const token = readSyncToken()
+    return token.length > 0 ? { Authorization: `Bearer ${token}` } : {}
+}
+
+export function getSyncToken(): string {
+    return readSyncToken()
+}
+
+export function setSyncToken(token: string): void {
+    if (typeof window === 'undefined') return
+    const normalized = token.trim()
+    if (normalized.length === 0) {
+        window.localStorage.removeItem(SYNC_TOKEN_STORAGE_KEY)
+        return
+    }
+    window.localStorage.setItem(SYNC_TOKEN_STORAGE_KEY, normalized)
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await fetch(url, {
         ...init,
         headers: {
             'Content-Type': 'application/json',
+            ...authHeaders(),
             ...(init?.headers ?? {}),
         },
     })
@@ -91,6 +117,15 @@ export function subscribeRemoteSyncStatus(
 }
 
 function handleRemoteSyncError(error: unknown): void {
+    if (error instanceof HttpError && error.status === 401) {
+        emitSyncStatus({
+            title: 'Sync remoto sin token',
+            description: 'Configurá Token de Sync en Settings para bootstrap remoto.',
+            variant: 'error',
+        })
+        return
+    }
+
     if (error instanceof HttpError && error.status === 403) {
         emitSyncStatus({
             title: 'Sync remoto en solo lectura',
@@ -220,4 +255,3 @@ export async function syncRemoteAccountDelete(id: string): Promise<void> {
         throw error
     }
 }
-

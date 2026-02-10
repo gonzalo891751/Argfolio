@@ -5,23 +5,25 @@ import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { resetDatabase } from '@/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTrackCash } from '@/hooks/use-preferences'
 import { exportLocalBackup, importLocalBackup, parseBackupJson } from '@/domain/sync/local-backup'
-import { isRemoteSyncEnabled } from '@/sync/remote-sync'
+import { getSyncToken, isRemoteSyncEnabled, setSyncToken } from '@/sync/remote-sync'
 
 type FxPreference = 'MEP' | 'CCL'
 
 interface SyncPushResponse {
     ok: boolean
     counts: {
-        accountsUpserted: number
-        movementsUpserted: number
-        instrumentsUpserted: number
+        accounts: number
+        movements: number
+        instruments: number
     }
     ignored?: string[]
+    durationMs?: number
 }
 
 interface ApiErrorBody {
@@ -42,6 +44,7 @@ export function SettingsPage() {
     const [isExporting, setIsExporting] = useState(false)
     const [isImporting, setIsImporting] = useState(false)
     const [isPushingToCloud, setIsPushingToCloud] = useState(false)
+    const [syncTokenInput, setSyncTokenInput] = useState(() => getSyncToken())
     const importInputRef = useRef<HTMLInputElement | null>(null)
 
     const handleFxChange = (pref: FxPreference) => {
@@ -118,24 +121,28 @@ export function SettingsPage() {
         }
     }
 
+    const handleSaveSyncToken = () => {
+        setSyncToken(syncTokenInput)
+        const hasToken = syncTokenInput.trim().length > 0
+        alert(hasToken ? 'Token de Sync guardado.' : 'Token de Sync eliminado.')
+    }
+
     const handlePushAllToD1 = async () => {
         setIsPushingToCloud(true)
         try {
-            const payload = await exportLocalBackup()
-            const hasAccounts = payload.data.accounts.length > 0
-            const hasMovements = payload.data.movements.length > 0
-            if (!hasAccounts && !hasMovements) {
-                alert(
-                    'No hay cuentas ni movimientos para subir desde este entorno.\n' +
-                    'Si tus datos están en localhost, primero exportá JSON en localhost e importalo acá (producción).'
-                )
+            const syncToken = getSyncToken()
+            if (!syncToken) {
+                alert('Falta Token de Sync. Configuralo en Settings antes de subir a D1.')
                 return
             }
+
+            const payload = await exportLocalBackup()
 
             const response = await fetch('/api/sync/push', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    Authorization: `Bearer ${syncToken}`,
                 },
                 body: JSON.stringify(payload),
             })
@@ -152,6 +159,23 @@ export function SettingsPage() {
             }
 
             if (!response.ok) {
+                if (response.status === 401) {
+                    const body = parsedBody as ApiErrorBody | null
+                    const detailsValue = body?.details == null
+                        ? ''
+                        : typeof body.details === 'string'
+                            ? body.details
+                            : JSON.stringify(body.details)
+                    const detailsText = detailsValue.length > 0 ? `\nDetails: ${detailsValue}` : ''
+                    alert(
+                        'No autorizado (HTTP 401).\n' +
+                        'Token de Sync faltante o invalido. Revisalo en Settings.\n' +
+                        detailsText +
+                        `\nBody: ${bodyText}`
+                    )
+                    return
+                }
+
                 if (response.status === 403) {
                     const body = parsedBody as ApiErrorBody | null
                     const errorText = typeof body?.error === 'string' ? body.error : 'Forbidden'
@@ -206,9 +230,10 @@ export function SettingsPage() {
 
             alert(
                 `Subida completada a D1.\n` +
-                `Cuentas: ${result.counts.accountsUpserted}\n` +
-                `Movimientos: ${result.counts.movementsUpserted}\n` +
-                `Instrumentos: ${result.counts.instrumentsUpserted}` +
+                `Cuentas: ${result.counts.accounts}\n` +
+                `Movimientos: ${result.counts.movements}\n` +
+                `Instrumentos: ${result.counts.instruments}` +
+                (typeof result.durationMs === 'number' ? `\nDuracion: ${result.durationMs}ms` : '') +
                 ignoredText
             )
         } catch (error) {
@@ -357,6 +382,28 @@ export function SettingsPage() {
                         <p className="text-xs text-muted-foreground mt-1">
                             Flag: `VITE_ARGFOLIO_REMOTE_SYNC=1` para bootstrap desde API + escritura remota con fallback local.
                         </p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-3 space-y-2">
+                        <p className="text-sm font-medium">Token de Sync</p>
+                        <p className="text-xs text-muted-foreground">
+                            Se envÃ­a como `Authorization: Bearer &lt;token&gt;` en `/api/sync/*`.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <Input
+                                type="password"
+                                value={syncTokenInput}
+                                onChange={(event) => setSyncTokenInput(event.target.value)}
+                                placeholder="PegÃ¡ ARGFOLIO_SYNC_TOKEN"
+                                className="min-w-[240px] flex-1"
+                            />
+                            <Button
+                                variant="outline"
+                                onClick={handleSaveSyncToken}
+                                disabled={isPushingToCloud}
+                            >
+                                Guardar token
+                            </Button>
+                        </div>
                     </div>
 
                     <div className="flex flex-wrap gap-3">
