@@ -24,6 +24,12 @@ interface SyncPushResponse {
     ignored?: string[]
 }
 
+interface ApiErrorBody {
+    error?: string
+    details?: unknown
+    hint?: string
+}
+
 export function SettingsPage() {
     const { theme, setTheme } = useTheme()
     const { isAutoRefreshEnabled, setAutoRefreshEnabled } = useAutoRefresh()
@@ -119,7 +125,10 @@ export function SettingsPage() {
             const hasAccounts = payload.data.accounts.length > 0
             const hasMovements = payload.data.movements.length > 0
             if (!hasAccounts && !hasMovements) {
-                alert('No hay cuentas ni movimientos para subir.')
+                alert(
+                    'No hay cuentas ni movimientos para subir desde este entorno.\n' +
+                    'Si tus datos están en localhost, primero exportá JSON en localhost e importalo acá (producción).'
+                )
                 return
             }
 
@@ -132,10 +141,11 @@ export function SettingsPage() {
             })
 
             const rawBody = await response.text()
-            let parsedBody: any = null
+            let parsedBody: ApiErrorBody | SyncPushResponse | null = null
+            const bodyText = rawBody.trim().length > 0 ? rawBody.slice(0, 2000) : '(empty body)'
             if (rawBody.trim().length > 0) {
                 try {
-                    parsedBody = JSON.parse(rawBody)
+                    parsedBody = JSON.parse(rawBody) as ApiErrorBody | SyncPushResponse
                 } catch {
                     parsedBody = null
                 }
@@ -143,17 +153,44 @@ export function SettingsPage() {
 
             if (!response.ok) {
                 if (response.status === 403) {
-                    const hint = typeof parsedBody?.hint === 'string'
-                        ? `\n${parsedBody.hint}`
-                        : ''
-                    alert(`No se pudo escribir en D1.\nConfigurá ARGFOLIO_SYNC_WRITE_ENABLED=1.${hint}`)
+                    const body = parsedBody as ApiErrorBody | null
+                    const errorText = typeof body?.error === 'string' ? body.error : 'Forbidden'
+                    const detailsValue = body?.details == null
+                        ? ''
+                        : typeof body.details === 'string'
+                            ? body.details
+                            : JSON.stringify(body.details)
+                    const detailsText = detailsValue.length > 0 ? `\nDetails: ${detailsValue}` : ''
+                    const hintText = typeof body?.hint === 'string'
+                        ? `\nHint: ${body.hint}`
+                        : '\nHint: Write gate OFF: set ARGFOLIO_SYNC_WRITE_ENABLED=1 y redeploy.'
+                    alert(
+                        `No se pudo subir a D1 (HTTP 403).\n` +
+                        'Write gate OFF: set ARGFOLIO_SYNC_WRITE_ENABLED=1 y redeploy.\n' +
+                        `Error: ${errorText}` +
+                        detailsText +
+                        hintText +
+                        `\nBody: ${bodyText}`
+                    )
                     return
                 }
 
-                const apiError = typeof parsedBody?.error === 'string'
-                    ? parsedBody.error
-                    : `HTTP ${response.status}`
-                alert(`No se pudo subir a D1: ${apiError}`)
+                const body = parsedBody as ApiErrorBody | null
+                const errorText = typeof body?.error === 'string' ? body.error : 'unknown_error'
+                const detailsValue = body?.details == null
+                    ? ''
+                    : typeof body.details === 'string'
+                        ? body.details
+                        : JSON.stringify(body.details)
+                const detailsText = detailsValue.length > 0 ? `\nDetails: ${detailsValue}` : ''
+                const hintText = typeof body?.hint === 'string' ? `\nHint: ${body.hint}` : ''
+                alert(
+                    `No se pudo subir a D1 (HTTP ${response.status}).\n` +
+                    `Error: ${errorText}` +
+                    detailsText +
+                    hintText +
+                    `\nBody: ${bodyText}`
+                )
                 return
             }
 
@@ -352,6 +389,10 @@ export function SettingsPage() {
                         <p className="text-xs text-muted-foreground">
                             Empuja todo el backup local a D1 en una sola operacion.
                             Requiere `ARGFOLIO_SYNC_WRITE_ENABLED=1`.
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            Nota: localhost y producción no comparten IndexedDB/origin. Si en producción aparece vacío,
+                            exportá JSON en localhost e importalo acá antes de subir a D1.
                         </p>
                         <Button
                             variant="default"

@@ -2042,3 +2042,54 @@ Agregar migracion masiva de datos existentes en Dexie hacia D1 con 1 click desde
 - manualPrices no se persiste en D1 en esta fase (se ignora).
 - preferences no se persiste en D1 en esta fase (se ignora).
 - snapshots no se suben por este endpoint (fuera de alcance MVP).
+
+---
+
+## CHECKPOINT - FASE 4.2 Push D1 diagnostico real + status endpoint (2026-02-10)
+
+### Objetivo
+Corregir el error de produccion en `Settings -> Subir todo a D1` para que el frontend muestre motivo real (HTTP status + body) y endurecer `POST /api/sync/push` con respuestas JSON consistentes. Agregar endpoint de diagnostico rapido `GET /api/sync/status`.
+
+### Archivos tocados
+1. `src/pages/settings.tsx`
+2. `functions/api/sync/push.ts`
+3. `functions/api/sync/status.ts` (nuevo)
+4. `docs/AI_HANDOFF.md`
+
+### Cambios concretos
+- Frontend (`settings.tsx`):
+  - Se mantuvo el flujo con `exportLocalBackup()` + `fetch('/api/sync/push')`.
+  - En errores ahora muestra:
+    - `HTTP <status>`
+    - `error`, `details`, `hint` cuando vienen en JSON
+    - `Body: <response body>` (recortado)
+  - Caso `403` con mensaje explicito:
+    - `Write gate OFF: set ARGFOLIO_SYNC_WRITE_ENABLED=1 y redeploy.`
+  - Guard clause UI para el caso comun de origen distinto (`localhost` vs produccion):
+    - si no hay cuentas/movimientos locales, sugiere exportar JSON en localhost e importarlo en produccion.
+  - Se agrego texto aclaratorio en bloque `Sync a la nube (D1)` sobre que localhost y produccion no comparten IndexedDB/origin.
+
+- Backend (`sync/push.ts`):
+  - Respuestas de error uniformes en JSON con shape `{ error, details, hint? }`.
+  - `403` cuando write gate esta OFF con `hint` claro.
+  - `500` explicito si falta binding `DB` con `hint: "Falta binding D1 DB"`.
+  - `try/catch` endurecido con serializacion de excepcion (`name/message/stack`) recortada para diagnostico.
+  - `405` y `400` incluyen `details` explicito.
+
+- Nuevo endpoint (`sync/status.ts`):
+  - `GET /api/sync/status` devuelve:
+    - `{ ok, d1Bound, writeEnabled, counts: { accounts, movements, instruments } }`
+  - `counts` se calcula via `SELECT COUNT(*)` en cada tabla.
+  - No expone secrets, solo flags booleanos.
+  - Si falta `DB`, responde `ok: true`, `d1Bound: false`, `counts` en 0.
+
+### Validacion ejecutada
+- [x] `npm test` -> PASS (13 files, 91 tests)
+- [x] `npm run build` -> PASS
+- [ ] `wrangler` local smoke (`npm run dev`, simular 403/200): no ejecutado porque `wrangler` no esta instalado en este entorno.
+
+### Pasos de validacion en Pages (produccion)
+1. Redeploy en Cloudflare Pages.
+2. Abrir `/api/sync/status` y verificar `d1Bound=true`.
+3. Si los datos estan en localhost, exportar JSON en localhost e importarlo en produccion.
+4. En `Settings -> Subir todo a D1`, ejecutar push y luego verificar en `/api/sync/status` que `counts` sea mayor a 0.

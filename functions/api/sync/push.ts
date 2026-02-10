@@ -46,6 +46,12 @@ interface PushPayload {
     }
 }
 
+interface SerializedException {
+    name: string
+    message: string
+    stack: string | null
+}
+
 function toIsoNow(): string {
     return new Date().toISOString()
 }
@@ -60,6 +66,35 @@ function toArray<T>(value: unknown, field: string): T[] {
         throw new Error(`Invalid payload: ${field} must be an array`)
     }
     return value as T[]
+}
+
+function trimText(value: string, maxLength: number): string {
+    if (value.length <= maxLength) return value
+    return `${value.slice(0, maxLength)}...`
+}
+
+function serializeException(error: unknown): SerializedException {
+    if (error instanceof Error) {
+        return {
+            name: trimText(error.name || 'Error', 120),
+            message: trimText(error.message || 'unknown_error', 1000),
+            stack: typeof error.stack === 'string' ? trimText(error.stack, 2000) : null,
+        }
+    }
+
+    const raw = (() => {
+        try {
+            return JSON.stringify(error)
+        } catch {
+            return String(error)
+        }
+    })()
+
+    return {
+        name: 'NonError',
+        message: trimText(raw || 'unknown_error', 1000),
+        stack: null,
+    }
 }
 
 async function runBatchInChunks(
@@ -178,26 +213,45 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
     }
 
     if (method !== 'POST') {
-        return jsonResponse({ error: 'Method not allowed' }, 405)
+        return jsonResponse({
+            error: 'Method not allowed',
+            details: `Unsupported method: ${method}`,
+        }, 405)
     }
 
     if (!isWriteEnabled(context.env)) {
         return jsonResponse({
             error: 'Sync write disabled',
-            hint: 'Set ARGFOLIO_SYNC_WRITE_ENABLED=1 after protecting the site with Cloudflare Access.',
+            details: 'ARGFOLIO_SYNC_WRITE_ENABLED must be "1".',
+            hint: 'Write gate OFF: set ARGFOLIO_SYNC_WRITE_ENABLED=1 y redeploy.',
         }, 403)
+    }
+
+    if (!context.env.DB) {
+        return jsonResponse({
+            error: 'D1 binding unavailable',
+            details: 'env.DB is undefined',
+            hint: 'Falta binding D1 DB',
+        }, 500)
     }
 
     try {
         let payload: PushPayload
         try {
             payload = await parseJsonBody<PushPayload>(context.request)
-        } catch {
-            return jsonResponse({ error: 'Invalid JSON body' }, 400)
+        } catch (error) {
+            const serialized = serializeException(error)
+            return jsonResponse({
+                error: 'Invalid JSON body',
+                details: serialized.message,
+            }, 400)
         }
 
         if (!payload || typeof payload !== 'object' || !payload.data || typeof payload.data !== 'object') {
-            return jsonResponse({ error: 'Invalid payload: expected exportLocalBackup() JSON with data block.' }, 400)
+            return jsonResponse({
+                error: 'Invalid payload: expected exportLocalBackup() JSON with data block.',
+                details: 'Missing or invalid "data" object in request payload.',
+            }, 400)
         }
 
         const accounts = toArray<AccountPayload>(payload.data.accounts, 'data.accounts')
@@ -252,10 +306,11 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             },
             ignored,
         })
-    } catch (error: any) {
+    } catch (error) {
+        const serialized = serializeException(error)
         return jsonResponse({
             error: 'Failed to push sync payload',
-            details: error?.message || 'unknown_error',
+            details: serialized,
         }, 500)
     }
 }
