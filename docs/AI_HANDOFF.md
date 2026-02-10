@@ -2268,3 +2268,73 @@ Eliminar paths vulnerables que pudieran disparar errores internos D1 (`duration`
 1. `GET /api/sync/status` con token valido -> 200 sin `details` de `duration`.
 2. `GET /api/sync/bootstrap` con token valido -> 200 y arrays aunque vacios.
 3. `/settings` -> `Subir todo a D1` -> sin HTTP 500 por `duration`.
+
+---
+
+## CHECKPOINT - FASE 4.7 Sync D1 snapshots entre dispositivos (2026-02-10)
+
+### Objetivo
+Extender sync remoto para incluir `snapshots` (v2) con cambios minimos: tabla D1 nueva, push por fecha, bootstrap con snapshots y persistencia en Dexie, sin refactor masivo.
+
+### Archivos tocados
+1. `migrations/0002_sync_snapshots.sql` (nuevo)
+2. `functions/api/_lib/sync.ts`
+3. `functions/api/sync/bootstrap.ts`
+4. `functions/api/sync/push.ts`
+5. `functions/api/sync/status.ts`
+6. `src/domain/sync/local-backup.ts`
+7. `src/sync/remote-sync.ts`
+8. `src/hooks/use-remote-sync.ts`
+9. `src/pages/settings.tsx`
+10. `docs/AI_HANDOFF.md`
+
+### Cambios concretos
+- D1 schema:
+  - Nueva tabla `snapshots`:
+    - `date TEXT PRIMARY KEY`
+    - `payload_json TEXT NOT NULL`
+    - `updated_at INTEGER`
+  - `ensureSyncSchema(...)` crea tambien `snapshots` para hardening runtime.
+
+- `GET /api/sync/bootstrap`:
+  - Ahora devuelve `snapshots` en el payload (ademas de accounts/movements/instruments).
+  - Regla de lectura:
+    - si la tabla es chica (`<= 180` filas), devuelve todos,
+    - si crece, devuelve por defecto ultimos ~180 dias (`date >= now-180d`).
+  - Lectura tolerante a fallos por dataset (si falla snapshots, no rompe bootstrap).
+
+- `POST /api/sync/push`:
+  - Acepta `data.snapshots` desde `exportLocalBackup()`.
+  - Upsert por fecha en D1 (`ON CONFLICT(date)`), guardando snapshot stringificado en `payload_json`.
+  - `updated_at` en unix ms.
+  - `counts` ahora incluye `snapshots`.
+  - Manejo aislado: si snapshots falla, se agrega a `ignored` y no rompe cuentas/movimientos.
+
+- `GET /api/sync/status`:
+  - `counts` incluye `snapshots` (aditivo, no rompe contrato previo).
+
+- Cliente:
+  - `exportLocalBackup()` ahora incluye `snapshots`.
+  - `parseBackupJson()` acepta backups viejos sin `data.snapshots` (fallback `[]`).
+  - `importLocalBackup()` tambien persiste `snapshots`.
+  - En bootstrap remoto (`src/sync/remote-sync.ts`):
+    - se procesa `payload.snapshots`,
+    - se hace `bulkPut` en Dexie,
+    - antes se limpia por `dateLocal` para evitar duplicados por dia en fechas recibidas.
+  - `useRemoteSync` invalida query `['snapshots']` al finalizar bootstrap OK.
+  - Settings muestra `Snapshots` en resultados de import y push.
+
+### Seguridad
+- Se mantiene middleware obligatorio de token en `/api/sync/*` (`functions/api/sync/_middleware.ts`), sin cambios de bypass.
+
+### Validacion ejecutada
+- [x] `npm test` -> PASS (13 files, 91 tests)
+- [x] `npm run build` -> PASS
+
+### Smoke recomendado en Pages
+1. `GET /api/sync/status` con token valido -> `200`, `counts` incluye `snapshots`.
+2. `GET /api/sync/bootstrap` con token valido -> incluye `accounts/movements/instruments/snapshots`.
+3. Dispositivo A: crear snapshots (manual/auto) y `Settings -> Subir todo a D1`.
+4. Verificar en D1 Studio tabla `snapshots` (filas por `date`).
+5. Dispositivo B: configurar mismo token, recargar -> historial de snapshots sin duplicados por dia.
+6. Sin token o token invalido -> endpoints `/api/sync/*` deben devolver `401`.

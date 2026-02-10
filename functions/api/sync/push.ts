@@ -35,6 +35,12 @@ interface InstrumentPayload {
     nativeCurrency: string
 }
 
+interface SnapshotPayload {
+    id?: string
+    dateLocal?: string
+    [key: string]: unknown
+}
+
 interface PushPayload {
     version?: number
     exportedAtISO?: string
@@ -42,6 +48,7 @@ interface PushPayload {
         accounts?: AccountPayload[]
         movements?: MovementPayload[]
         instruments?: InstrumentPayload[]
+        snapshots?: SnapshotPayload[]
         manualPrices?: unknown[]
         preferences?: Record<string, unknown>
     }
@@ -57,6 +64,7 @@ interface PushCounts {
     accounts: number
     movements: number
     instruments: number
+    snapshots: number
 }
 
 function toIsoNow(): string {
@@ -76,6 +84,10 @@ function toDurationMs(startMs: number): number {
 
 function toSafeAmount(value: unknown): number {
     return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function isDateLocal(value: unknown): value is string {
+    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
 function toArray<T>(value: unknown, field: string): T[] {
@@ -249,6 +261,37 @@ ON CONFLICT(id) DO UPDATE SET
     })
 }
 
+function buildSnapshotStatements(db: D1Database, snapshots: SnapshotPayload[]): D1PreparedStatement[] {
+    const updatedAt = Date.now()
+    return snapshots.map((snapshot, index) => {
+        const dateLocal = snapshot?.dateLocal
+        if (!isDateLocal(dateLocal)) {
+            throw new Error(`Invalid snapshot at index ${index}: dateLocal must be YYYY-MM-DD`)
+        }
+
+        const normalized: SnapshotPayload = {
+            ...snapshot,
+            dateLocal,
+            id: typeof snapshot.id === 'string' && snapshot.id.trim().length > 0
+                ? snapshot.id
+                : dateLocal,
+        }
+
+        return db.prepare(`
+INSERT INTO snapshots (date, payload_json, updated_at)
+VALUES (?1, ?2, ?3)
+ON CONFLICT(date) DO UPDATE SET
+  payload_json = excluded.payload_json,
+  updated_at = excluded.updated_at
+`)
+            .bind(
+                dateLocal,
+                JSON.stringify(normalized),
+                updatedAt
+            )
+    })
+}
+
 export const onRequest: PagesFunction<SyncEnv> = async (context) => {
     const startedAtMs = nowMs()
     const method = context.request.method
@@ -287,6 +330,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         const accounts = toArray<AccountPayload>(payload.data.accounts, 'data.accounts')
         const movements = toArray<MovementPayload>(payload.data.movements, 'data.movements')
         const instruments = toArray<InstrumentPayload>(payload.data.instruments, 'data.instruments')
+        const snapshots = toArray<SnapshotPayload>(payload.data.snapshots, 'data.snapshots')
         const manualPrices = toArray<unknown>(payload.data.manualPrices, 'data.manualPrices')
         const hasPreferences =
             payload.data.preferences != null &&
@@ -301,13 +345,14 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             ignored.push('preferences')
         }
 
-        if (accounts.length === 0 && movements.length === 0 && instruments.length === 0) {
+        if (accounts.length === 0 && movements.length === 0 && instruments.length === 0 && snapshots.length === 0) {
             const durationMs = toDurationMs(startedAtMs)
             console.log('[sync][push] no-op payload', {
                 durationMs,
                 accounts: 0,
                 movements: 0,
                 instruments: 0,
+                snapshots: 0,
             })
             return jsonResponse({
                 ok: true,
@@ -315,6 +360,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
                     accounts: 0,
                     movements: 0,
                     instruments: 0,
+                    snapshots: 0,
                 },
                 ignored,
                 durationMs,
@@ -341,6 +387,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             accounts: accounts.length,
             movements: movements.length,
             instruments: instruments.length,
+            snapshots: snapshots.length,
         })
 
         const db = getDatabase(context.env)
@@ -357,6 +404,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         await runBatchInChunks(db, movementStatements, 'movements')
 
         let instrumentsUpserted = 0
+        let snapshotsUpserted = 0
 
         if (instruments.length > 0) {
             try {
@@ -368,10 +416,21 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             }
         }
 
+        if (snapshots.length > 0) {
+            try {
+                const snapshotStatements = buildSnapshotStatements(db, snapshots)
+                await runBatchInChunks(db, snapshotStatements, 'snapshots')
+                snapshotsUpserted = snapshots.length
+            } catch (error: any) {
+                ignored.push(`snapshots (${error?.message || 'table missing or unavailable'})`)
+            }
+        }
+
         const counts: PushCounts = {
             accounts: accounts.length,
             movements: movements.length,
             instruments: instrumentsUpserted,
+            snapshots: snapshotsUpserted,
         }
         const durationMs = toDurationMs(startedAtMs)
         console.log('[sync][push] done', {

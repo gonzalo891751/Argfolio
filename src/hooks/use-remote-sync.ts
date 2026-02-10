@@ -31,6 +31,7 @@ export function useRemoteSync() {
             queryClient.invalidateQueries({ queryKey: ['accounts'] })
             queryClient.invalidateQueries({ queryKey: ['movements'] })
             queryClient.invalidateQueries({ queryKey: ['instruments'] })
+            queryClient.invalidateQueries({ queryKey: ['snapshots'] })
             queryClient.invalidateQueries({ queryKey: ['portfolio'] })
         })
 
@@ -40,4 +41,3 @@ export function useRemoteSync() {
         }
     }, [queryClient, toast])
 }
-

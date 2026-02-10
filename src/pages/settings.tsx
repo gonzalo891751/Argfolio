@@ -21,6 +21,7 @@ interface SyncPushResponse {
         accounts: number
         movements: number
         instruments: number
+        snapshots?: number
     }
     ignored?: string[]
     durationMs?: number
@@ -109,9 +110,16 @@ export function SettingsPage() {
             queryClient.invalidateQueries({ queryKey: ['accounts'] })
             queryClient.invalidateQueries({ queryKey: ['instruments'] })
             queryClient.invalidateQueries({ queryKey: ['movements'] })
+            queryClient.invalidateQueries({ queryKey: ['snapshots'] })
             queryClient.invalidateQueries({ queryKey: ['portfolio'] })
 
-            alert(`Importación completada. Cuentas: ${result.accounts}, Instrumentos: ${result.instruments}, Movimientos: ${result.movements}.`)
+            alert(
+                `Importación completada.\n` +
+                `Cuentas: ${result.accounts}\n` +
+                `Instrumentos: ${result.instruments}\n` +
+                `Movimientos: ${result.movements}\n` +
+                `Snapshots: ${result.snapshots}`
+            )
         } catch (error: any) {
             console.error('Error importing backup:', error)
             alert(error?.message || 'No se pudo importar el backup')
@@ -233,6 +241,7 @@ export function SettingsPage() {
                 `Cuentas: ${result.counts.accounts}\n` +
                 `Movimientos: ${result.counts.movements}\n` +
                 `Instrumentos: ${result.counts.instruments}` +
+                (typeof result.counts.snapshots === 'number' ? `\nSnapshots: ${result.counts.snapshots}` : '') +
                 (typeof result.durationMs === 'number' ? `\nDuracion: ${result.durationMs}ms` : '') +
                 ignoredText
             )

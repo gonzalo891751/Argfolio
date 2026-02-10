@@ -83,6 +83,12 @@ CREATE TABLE IF NOT EXISTS instruments (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )`),
+        db.prepare(`
+CREATE TABLE IF NOT EXISTS snapshots (
+  date TEXT PRIMARY KEY,
+  payload_json TEXT NOT NULL,
+  updated_at INTEGER
+)`),
     ]
 
     await safeBatch(db, statements, 50)

@@ -1,5 +1,5 @@
 import { db } from '@/db/schema'
-import type { Account, Instrument, Movement } from '@/domain/types'
+import type { Account, Instrument, Movement, Snapshot } from '@/domain/types'
 
 const REMOTE_SYNC_FLAG = 'VITE_ARGFOLIO_REMOTE_SYNC'
 const REMOTE_SYNC_STATUS_EVENT = 'argfolio:remote-sync-status'
@@ -16,6 +16,7 @@ interface BootstrapResponse {
     accounts: Account[]
     movements: Movement[]
     instruments?: Instrument[]
+    snapshots?: Snapshot[]
 }
 
 class HttpError extends Error {
@@ -157,11 +158,22 @@ export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean;
             const accounts = Array.isArray(payload.accounts) ? payload.accounts : []
             const movements = Array.isArray(payload.movements) ? payload.movements : []
             const instruments = Array.isArray(payload.instruments) ? payload.instruments : []
+            const snapshots = Array.isArray(payload.snapshots) ? payload.snapshots : []
+            const snapshotsToPersist = snapshots.filter((snapshot): snapshot is Snapshot => {
+                return typeof snapshot?.dateLocal === 'string' && snapshot.dateLocal.length > 0
+            })
 
-            await db.transaction('rw', [db.accounts, db.movements, db.instruments], async () => {
+            await db.transaction('rw', [db.accounts, db.movements, db.instruments, db.snapshots], async () => {
                 if (accounts.length > 0) await db.accounts.bulkPut(accounts)
                 if (movements.length > 0) await db.movements.bulkPut(movements)
                 if (instruments.length > 0) await db.instruments.bulkPut(instruments)
+                if (snapshotsToPersist.length > 0) {
+                    const snapshotDates = Array.from(new Set(snapshotsToPersist.map((snapshot) => snapshot.dateLocal)))
+                    if (snapshotDates.length > 0) {
+                        await db.snapshots.where('dateLocal').anyOf(snapshotDates).delete()
+                    }
+                    await db.snapshots.bulkPut(snapshotsToPersist)
+                }
             })
 
             return { ok: true, offline: false }

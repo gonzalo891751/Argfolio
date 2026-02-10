@@ -11,6 +11,7 @@ interface SyncStatusCounts {
     accounts: number
     movements: number
     instruments: number
+    snapshots: number
 }
 
 function trimText(value: string, maxLength: number): string {
@@ -35,6 +36,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         accounts: 0,
         movements: 0,
         instruments: 0,
+        snapshots: 0,
     }
 
     console.log('[sync][status] start', {
@@ -70,6 +72,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             accounts: 0,
             movements: 0,
             instruments: 0,
+            snapshots: 0,
         }
         if (schemaError) details.push(`stage=schema: ${schemaError}`)
 
@@ -103,6 +106,16 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             const message = trimText(error?.message || 'unknown_error', 500)
             details.push(`stage=counts.instruments: ${message}`)
             counts.instruments = 0
+        }
+
+        try {
+            const s = await db.prepare('SELECT COUNT(*) AS c FROM snapshots').first<{ c?: number | string }>()
+            const parsed = Number(s?.c ?? 0)
+            counts.snapshots = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+        } catch (error: any) {
+            const message = trimText(error?.message || 'unknown_error', 500)
+            details.push(`stage=counts.snapshots: ${message}`)
+            counts.snapshots = 0
         }
 
         console.log('[sync][status] done', {

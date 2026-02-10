@@ -1,5 +1,5 @@
 import { db } from '@/db/schema'
-import type { Account, Instrument, ManualPrice, Movement } from '@/domain/types'
+import type { Account, Instrument, ManualPrice, Movement, Snapshot } from '@/domain/types'
 
 const BACKUP_VERSION = 1
 
@@ -19,6 +19,7 @@ export interface LocalBackupPayload {
         accounts: Account[]
         instruments: Instrument[]
         movements: Movement[]
+        snapshots: Snapshot[]
         manualPrices: ManualPrice[]
         preferences: Partial<Record<typeof PREFERENCE_KEYS[number], string>>
     }
@@ -26,16 +27,22 @@ export interface LocalBackupPayload {
 
 function assertArray(value: unknown, field: string): unknown[] {
     if (!Array.isArray(value)) {
-        throw new Error(`Formato inválido: ${field} debe ser un array.`)
+        throw new Error(`Formato invalido: ${field} debe ser un array.`)
     }
     return value
 }
 
+function assertOptionalArray(value: unknown, field: string): unknown[] {
+    if (value == null) return []
+    return assertArray(value, field)
+}
+
 export async function exportLocalBackup(): Promise<LocalBackupPayload> {
-    const [accounts, instruments, movements, manualPrices] = await Promise.all([
+    const [accounts, instruments, movements, snapshots, manualPrices] = await Promise.all([
         db.accounts.toArray(),
         db.instruments.toArray(),
         db.movements.toArray(),
+        db.snapshots.toArray(),
         db.manualPrices.toArray(),
     ])
 
@@ -52,6 +59,7 @@ export async function exportLocalBackup(): Promise<LocalBackupPayload> {
             accounts,
             instruments,
             movements,
+            snapshots,
             manualPrices,
             preferences,
         },
@@ -63,25 +71,26 @@ export function parseBackupJson(raw: string): LocalBackupPayload {
     try {
         parsed = JSON.parse(raw)
     } catch {
-        throw new Error('El archivo no es un JSON válido.')
+        throw new Error('El archivo no es un JSON valido.')
     }
 
     if (!parsed || typeof parsed !== 'object') {
-        throw new Error('Formato inválido: contenido vacío.')
+        throw new Error('Formato invalido: contenido vacio.')
     }
 
     const payload = parsed as Partial<LocalBackupPayload>
     if (payload.version !== BACKUP_VERSION) {
-        throw new Error(`Versión de backup no soportada: ${String(payload.version)}.`)
+        throw new Error(`Version de backup no soportada: ${String(payload.version)}.`)
     }
     if (!payload.data || typeof payload.data !== 'object') {
-        throw new Error('Formato inválido: falta bloque data.')
+        throw new Error('Formato invalido: falta bloque data.')
     }
 
-    const data = payload.data as LocalBackupPayload['data']
+    const data = payload.data as LocalBackupPayload['data'] & { snapshots?: unknown }
     assertArray(data.accounts, 'data.accounts')
     assertArray(data.instruments, 'data.instruments')
     assertArray(data.movements, 'data.movements')
+    const snapshots = assertOptionalArray(data.snapshots, 'data.snapshots')
     assertArray(data.manualPrices, 'data.manualPrices')
 
     return {
@@ -91,6 +100,7 @@ export function parseBackupJson(raw: string): LocalBackupPayload {
             accounts: data.accounts as Account[],
             instruments: data.instruments as Instrument[],
             movements: data.movements as Movement[],
+            snapshots: snapshots as Snapshot[],
             manualPrices: data.manualPrices as ManualPrice[],
             preferences: (data.preferences && typeof data.preferences === 'object')
                 ? data.preferences as Partial<Record<typeof PREFERENCE_KEYS[number], string>>
@@ -103,14 +113,16 @@ export async function importLocalBackup(payload: LocalBackupPayload): Promise<{
     accounts: number
     instruments: number
     movements: number
+    snapshots: number
     manualPrices: number
 }> {
-    const { accounts, instruments, movements, manualPrices, preferences } = payload.data
+    const { accounts, instruments, movements, snapshots, manualPrices, preferences } = payload.data
 
-    await db.transaction('rw', [db.accounts, db.instruments, db.movements, db.manualPrices], async () => {
+    await db.transaction('rw', [db.accounts, db.instruments, db.movements, db.snapshots, db.manualPrices], async () => {
         if (accounts.length > 0) await db.accounts.bulkPut(accounts)
         if (instruments.length > 0) await db.instruments.bulkPut(instruments)
         if (movements.length > 0) await db.movements.bulkPut(movements)
+        if (snapshots.length > 0) await db.snapshots.bulkPut(snapshots)
         if (manualPrices.length > 0) await db.manualPrices.bulkPut(manualPrices)
     })
 
@@ -125,7 +137,7 @@ export async function importLocalBackup(payload: LocalBackupPayload): Promise<{
         accounts: accounts.length,
         instruments: instruments.length,
         movements: movements.length,
+        snapshots: snapshots.length,
         manualPrices: manualPrices.length,
     }
 }
-
