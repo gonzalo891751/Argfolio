@@ -2156,3 +2156,74 @@ Corregir `HTTP 500` en `Subir todo a D1` (caso Cloudflare D1 meta/duration), evi
    - con token correcto responde,
    - sin token/incorrecto devuelve `401`.
 6. Validar en otro dispositivo (celu) cargando mismo token: `/dashboard` debe bootstrapear desde D1.
+
+---
+
+## CHECKPOINT - FASE 4.4 D1 duration guard rails (2026-02-10)
+
+### Objetivo
+Eliminar rutas vulnerables en sync que puedan gatillar errores internos de D1 tipo `Cannot read properties of undefined (reading 'duration')`, manteniendo respuestas estables en `status` y `push`.
+
+### Archivos tocados
+1. `functions/api/sync/status.ts`
+2. `functions/api/sync/push.ts`
+3. `functions/api/sync/bootstrap.ts`
+4. `docs/AI_HANDOFF.md`
+
+### Cambios concretos
+- `GET /api/sync/status`:
+  - Hardening de conteo por tabla con `safeCount()` y `SELECT COUNT(*) AS c`.
+  - Cada tabla falla en aislamiento (no tumba todo el endpoint).
+  - Response estable: `{ ok, d1Bound, writeEnabled, counts }` y opcional `{ error, details }`.
+- `POST /api/sync/push`:
+  - Guardas runtime para batch items invalidos (falsy / promise-like / non-statement).
+  - Nunca ejecuta `db.batch` con arrays vacios.
+  - Se mantienen no-op 200 para payload vacio con counts en 0.
+- `GET /api/sync/bootstrap`:
+  - Logs de etapa (`start`, `schema`, `done`) para diagnostico en Cloudflare logs.
+
+### Como validar en produccion
+1. `GET /api/sync/status` con `Authorization: Bearer <token>` -> `200` sin error `duration`.
+2. `POST /api/sync/push` desde `/settings` -> `200` con counts coherentes, sin HTTP 500.
+3. Crear/editar movimiento con token valido -> sin fallback forzado a "Sin conexion (Dexie)".
+
+---
+
+## CHECKPOINT - FASE 4.5 D1 batch hardening final + status secuencial (2026-02-10)
+
+### Objetivo
+Eliminar el error interno de D1 `Cannot read properties of undefined (reading 'duration')` reforzando `POST /api/sync/push` para no ejecutar batches invalidos/vacios y haciendo `GET /api/sync/status` con conteo secuencial tolerante a fallos por tabla.
+
+### Archivos tocados
+1. `functions/api/sync/push.ts`
+2. `functions/api/sync/status.ts`
+3. `docs/AI_HANDOFF.md`
+
+### Cambios concretos
+- `POST /api/sync/push`:
+  - `runBatchInChunks` ahora construye `stmts` validos con `filter(Boolean)` + type guard de `D1PreparedStatement`.
+  - Si `stmts.length === 0`, retorna no-op y no llama `db.batch`.
+  - Se evita ejecutar chunks vacios.
+  - Logging minimo para Cloudflare:
+    - `console.log("[sync][push] stmts=", stmts.length, "chunks=", chunksCount)`
+    - `console.log("[sync][push] empty batch -> no-op")`
+- `GET /api/sync/status`:
+  - Conteos secuenciales (sin `batch`) con:
+    - `SELECT COUNT(*) AS c FROM accounts`
+    - `SELECT COUNT(*) AS c FROM movements`
+    - `SELECT COUNT(*) AS c FROM instruments`
+  - Parse robusto: `Number(row?.c ?? 0)` y fallback `0`.
+  - Si una tabla falla, no rompe la respuesta completa: conserva `counts` y agrega `details` claros.
+  - Logging minimo:
+    - `console.log("[sync][status] counting...")`
+
+### Validacion ejecutada
+- [x] `rg "DB\\.batch\\(|db\\.batch\\(" -n functions` -> solo `functions/api/sync/push.ts`.
+- [x] `npm run build` -> PASS.
+
+### Pasos de validacion en produccion
+1. `GET /api/sync/status` con token valido -> `200` y sin error `duration`.
+2. Desde `/settings`, ejecutar `Subir todo a D1`:
+   - payload vacio -> `200` no-op
+   - payload con datos -> `200` con `counts` coherentes
+3. Verificar en logs de Cloudflare las nuevas lineas `[sync][status] counting...` y `[sync][push] stmts= ...`.

@@ -114,27 +114,52 @@ function serializeException(error: unknown): SerializedException {
     }
 }
 
+function isPromiseLike(value: unknown): boolean {
+    return !!value && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function'
+}
+
+function isPreparedStatement(value: unknown): value is D1PreparedStatement {
+    if (!value || typeof value !== 'object' || isPromiseLike(value)) return false
+    const candidate = value as { bind?: unknown; run?: unknown; first?: unknown; all?: unknown }
+    return typeof candidate.bind === 'function' &&
+        typeof candidate.run === 'function' &&
+        typeof candidate.first === 'function' &&
+        typeof candidate.all === 'function'
+}
+
 async function runBatchInChunks(
     db: D1Database,
     rawStatements: Array<D1PreparedStatement | null | undefined>,
     label: string,
     chunkSize = 50
 ): Promise<void> {
-    const statements = rawStatements.filter((statement): statement is D1PreparedStatement => Boolean(statement))
+    const stmts = rawStatements.filter(Boolean)
+        .filter((statement): statement is D1PreparedStatement => isPreparedStatement(statement))
+    const dropped = rawStatements.length - stmts.length
 
-    if (statements.length === 0) {
-        console.info('[sync/push] skip empty batch', { label })
+    if (dropped > 0) {
+        console.log('[sync][push] dropped invalid batch items', { label, dropped })
+    }
+
+    if (stmts.length === 0) {
+        console.log('[sync][push] empty batch -> no-op')
         return
     }
 
-    for (let index = 0; index < statements.length; index += chunkSize) {
-        const chunk = statements.slice(index, index + chunkSize).filter((statement): statement is D1PreparedStatement => Boolean(statement))
+    const chunksCount = Math.ceil(stmts.length / chunkSize)
+    console.log('[sync][push] stmts=', stmts.length, 'chunks=', chunksCount)
+
+    for (let index = 0; index < stmts.length; index += chunkSize) {
+        const chunk = stmts
+            .slice(index, index + chunkSize)
+            .filter((statement): statement is D1PreparedStatement => isPreparedStatement(statement))
         if (chunk.length === 0) continue
+        console.log('[sync][push] chunk', { label, offset: index, chunkSize: chunk.length })
         try {
             await db.batch(chunk)
         } catch (error) {
             const serialized = serializeException(error)
-            console.error('[sync/push] chunk failed', {
+            console.error('[sync][push] chunk failed', {
                 label,
                 offset: index,
                 chunkSize: chunk.length,
@@ -297,7 +322,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
 
         if (accounts.length === 0 && movements.length === 0 && instruments.length === 0) {
             const durationMs = toDurationMs(startedAtMs)
-            console.info('[sync/push] no-op payload', {
+            console.log('[sync][push] no-op payload', {
                 durationMs,
                 accounts: 0,
                 movements: 0,
@@ -331,14 +356,16 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             }, 500)
         }
 
-        console.info('[sync/push] start', {
+        console.log('[sync][push] start', {
             accounts: accounts.length,
             movements: movements.length,
             instruments: instruments.length,
         })
 
         const db = getDatabase(context.env)
+        console.log('[sync][push] schema ensure start')
         await ensureSyncSchema(db)
+        console.log('[sync][push] schema ensure done')
 
         const accountStatements = buildAccountStatements(db, accounts)
         const movementStatements = buildMovementStatements(db, movements)
@@ -364,7 +391,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             instruments: instrumentsUpserted,
         }
         const durationMs = toDurationMs(startedAtMs)
-        console.info('[sync/push] done', {
+        console.log('[sync][push] done', {
             durationMs,
             ...counts,
             ignored: ignored.length,
@@ -379,7 +406,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
     } catch (error) {
         const serialized = serializeException(error)
         const durationMs = toDurationMs(startedAtMs)
-        console.error('[sync/push] failed', {
+        console.error('[sync][push] failed', {
             durationMs,
             name: serialized.name,
             message: serialized.message,

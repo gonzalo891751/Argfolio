@@ -75,11 +75,14 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
 
     const startedAtMs = nowMs()
     const asOfISO = new Date().toISOString()
+    console.log('[sync/bootstrap] start', { hasDb: Boolean(context.env.DB) })
 
     try {
         const db = getDatabase(context.env)
+        console.log('[sync/bootstrap] schema ensure start')
         try {
             await ensureSyncSchema(db)
+            console.log('[sync/bootstrap] schema ensure done')
         } catch (error: any) {
             console.warn('[sync/bootstrap] schema ensure failed; continuing with empty-safe reads', {
                 error: error?.message || 'unknown_error',
@@ -93,6 +96,13 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         ])
 
         const durationMs = toDurationMs(startedAtMs)
+        console.log('[sync/bootstrap] done', {
+            durationMs,
+            accounts: accounts.length,
+            movements: movements.length,
+            instruments: instruments.length,
+            degraded: false,
+        })
         console.info('[sync/bootstrap] snapshot served', {
             durationMs,
             accounts: accounts.length,
@@ -115,6 +125,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         })
     } catch (error: any) {
         const durationMs = toDurationMs(startedAtMs)
+        console.log('[sync/bootstrap] done with degraded payload', { durationMs })
         console.error('[sync/bootstrap] failed; returning empty bootstrap payload', {
             durationMs,
             error: error?.message || 'unknown_error',
