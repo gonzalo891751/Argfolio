@@ -1,3 +1,5 @@
+import { safeBatch } from './safe-batch'
+
 export interface SyncEnv {
     DB?: D1Database
     ARGFOLIO_SYNC_WRITE_ENABLED?: string
@@ -43,7 +45,8 @@ export async function parseJsonBody<T>(request: Request): Promise<T> {
 }
 
 export async function ensureSyncSchema(db: D1Database): Promise<void> {
-    await db.exec(`
+    const statements: Array<D1PreparedStatement | null | undefined> = [
+        db.prepare(`
 CREATE TABLE IF NOT EXISTS accounts (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -52,8 +55,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   payload_json TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
-);
-
+)`),
+        db.prepare(`
 CREATE TABLE IF NOT EXISTS movements (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
@@ -67,11 +70,10 @@ CREATE TABLE IF NOT EXISTS movements (
   payload_json TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_movements_account_date ON movements(account_id, date DESC);
-CREATE INDEX IF NOT EXISTS idx_movements_date ON movements(date DESC);
-
+)`),
+        db.prepare('CREATE INDEX IF NOT EXISTS idx_movements_account_date ON movements(account_id, date DESC)'),
+        db.prepare('CREATE INDEX IF NOT EXISTS idx_movements_date ON movements(date DESC)'),
+        db.prepare(`
 CREATE TABLE IF NOT EXISTS instruments (
   id TEXT PRIMARY KEY,
   symbol TEXT NOT NULL,
@@ -80,6 +82,8 @@ CREATE TABLE IF NOT EXISTS instruments (
   payload_json TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
-);
-`)
+)`),
+    ]
+
+    await safeBatch(db, statements, 50)
 }

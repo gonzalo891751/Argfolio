@@ -7,6 +7,7 @@ import {
     parseJsonBody,
     type SyncEnv,
 } from '../_lib/sync'
+import { filterBatchStatements, getChunksCount, safeBatch } from '../_lib/safe-batch'
 
 interface AccountPayload {
     id: string
@@ -114,27 +115,13 @@ function serializeException(error: unknown): SerializedException {
     }
 }
 
-function isPromiseLike(value: unknown): boolean {
-    return !!value && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function'
-}
-
-function isPreparedStatement(value: unknown): value is D1PreparedStatement {
-    if (!value || typeof value !== 'object' || isPromiseLike(value)) return false
-    const candidate = value as { bind?: unknown; run?: unknown; first?: unknown; all?: unknown }
-    return typeof candidate.bind === 'function' &&
-        typeof candidate.run === 'function' &&
-        typeof candidate.first === 'function' &&
-        typeof candidate.all === 'function'
-}
-
 async function runBatchInChunks(
     db: D1Database,
     rawStatements: Array<D1PreparedStatement | null | undefined>,
     label: string,
     chunkSize = 50
 ): Promise<void> {
-    const stmts = rawStatements.filter(Boolean)
-        .filter((statement): statement is D1PreparedStatement => isPreparedStatement(statement))
+    const stmts = filterBatchStatements(rawStatements)
     const dropped = rawStatements.length - stmts.length
 
     if (dropped > 0) {
@@ -146,28 +133,20 @@ async function runBatchInChunks(
         return
     }
 
-    const chunksCount = Math.ceil(stmts.length / chunkSize)
+    const chunksCount = getChunksCount(stmts.length, chunkSize)
     console.log('[sync][push] stmts=', stmts.length, 'chunks=', chunksCount)
 
-    for (let index = 0; index < stmts.length; index += chunkSize) {
-        const chunk = stmts
-            .slice(index, index + chunkSize)
-            .filter((statement): statement is D1PreparedStatement => isPreparedStatement(statement))
-        if (chunk.length === 0) continue
-        console.log('[sync][push] chunk', { label, offset: index, chunkSize: chunk.length })
-        try {
-            await db.batch(chunk)
-        } catch (error) {
-            const serialized = serializeException(error)
-            console.error('[sync][push] chunk failed', {
-                label,
-                offset: index,
-                chunkSize: chunk.length,
-                name: serialized.name,
-                message: serialized.message,
-            })
-            throw error
-        }
+    try {
+        await safeBatch(db, stmts, chunkSize)
+    } catch (error) {
+        const serialized = serializeException(error)
+        console.error('[sync][push] chunk failed', {
+            stage: 'push-batch',
+            label,
+            name: serialized.name,
+            message: serialized.message,
+        })
+        throw error
     }
 }
 
@@ -284,6 +263,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         }, 405)
     }
 
+    let stage = 'parse-body'
     try {
         let payload: PushPayload
         try {
@@ -303,6 +283,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             }, 400)
         }
 
+        stage = 'validate-payload'
         const accounts = toArray<AccountPayload>(payload.data.accounts, 'data.accounts')
         const movements = toArray<MovementPayload>(payload.data.movements, 'data.movements')
         const instruments = toArray<InstrumentPayload>(payload.data.instruments, 'data.instruments')
@@ -364,9 +345,11 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
 
         const db = getDatabase(context.env)
         console.log('[sync][push] schema ensure start')
+        stage = 'schema'
         await ensureSyncSchema(db)
         console.log('[sync][push] schema ensure done')
 
+        stage = 'push-batch'
         const accountStatements = buildAccountStatements(db, accounts)
         const movementStatements = buildMovementStatements(db, movements)
 
@@ -407,12 +390,14 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         const serialized = serializeException(error)
         const durationMs = toDurationMs(startedAtMs)
         console.error('[sync][push] failed', {
+            stage,
             durationMs,
             name: serialized.name,
             message: serialized.message,
         })
         return jsonResponse({
             error: 'Failed to push sync payload',
+            stage,
             details: serialized,
             durationMs,
         }, 500)

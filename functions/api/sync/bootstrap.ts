@@ -57,6 +57,7 @@ async function safeQueryRows<T>(db: D1Database, sql: string, dataset: string): P
         return parseRows<T>(result?.results ?? [])
     } catch (error: any) {
         console.warn('[sync/bootstrap] query failed; returning empty dataset', {
+            stage: 'bootstrap-read',
             dataset,
             error: error?.message || 'unknown_error',
         })
@@ -77,6 +78,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
     const asOfISO = new Date().toISOString()
     console.log('[sync/bootstrap] start', { hasDb: Boolean(context.env.DB) })
 
+    let stage = 'schema'
     try {
         const db = getDatabase(context.env)
         console.log('[sync/bootstrap] schema ensure start')
@@ -85,10 +87,12 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             console.log('[sync/bootstrap] schema ensure done')
         } catch (error: any) {
             console.warn('[sync/bootstrap] schema ensure failed; continuing with empty-safe reads', {
+                stage: 'schema',
                 error: error?.message || 'unknown_error',
             })
         }
 
+        stage = 'bootstrap-read'
         const [accounts, movements, instruments] = await Promise.all([
             safeQueryRows(db, 'SELECT payload_json FROM accounts ORDER BY updated_at DESC', 'accounts'),
             safeQueryRows(db, 'SELECT payload_json FROM movements ORDER BY date DESC', 'movements'),
@@ -127,6 +131,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         const durationMs = toDurationMs(startedAtMs)
         console.log('[sync/bootstrap] done with degraded payload', { durationMs })
         console.error('[sync/bootstrap] failed; returning empty bootstrap payload', {
+            stage,
             durationMs,
             error: error?.message || 'unknown_error',
             stack: error?.stack,

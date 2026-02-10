@@ -2227,3 +2227,44 @@ Eliminar el error interno de D1 `Cannot read properties of undefined (reading 'd
    - payload vacio -> `200` no-op
    - payload con datos -> `200` con `counts` coherentes
 3. Verificar en logs de Cloudflare las nuevas lineas `[sync][status] counting...` y `[sync][push] stmts= ...`.
+
+---
+
+## CHECKPOINT - FASE 4.6 safeBatch transversal en sync (2026-02-10)
+
+### Objetivo
+Eliminar paths vulnerables que pudieran disparar errores internos D1 (`duration`) por `db.batch` con arrays vacios o statements invalidos, manteniendo compatibilidad del contrato en `status`, `bootstrap` y `push`.
+
+### Archivos tocados
+1. `functions/api/_lib/safe-batch.ts` (nuevo)
+2. `functions/api/_lib/sync.ts`
+3. `functions/api/sync/push.ts`
+4. `functions/api/sync/status.ts`
+5. `functions/api/sync/bootstrap.ts`
+6. `docs/AI_HANDOFF.md`
+
+### Cambios concretos
+- Nuevo helper reusable `safeBatch(db, statements, chunkSize)`:
+  - acepta `(D1PreparedStatement | undefined | null)[]`,
+  - filtra falsy + no-prepared,
+  - si queda vacio retorna `[]` y no llama `db.batch`,
+  - si hay items, ejecuta en chunks de 50 y concatena resultados.
+- `ensureSyncSchema` ahora usa statements preparados + `safeBatch` (sin `db.batch` directo fuera del helper).
+- `POST /api/sync/push`:
+  - `runBatchInChunks` delega en `safeBatch`,
+  - mantiene guardas de no-op batch vacio,
+  - agrega `stage` en errores (`schema`, `push-batch`) para diagnostico.
+- `GET /api/sync/status`:
+  - mantiene counts secuenciales por tabla,
+  - endurece detalles con `stage=schema` y `stage=counts.*` sin romper respuesta.
+- `GET /api/sync/bootstrap`:
+  - agrega `stage` en logs de fallos (`schema`, `bootstrap-read`) para trazabilidad.
+
+### Validacion ejecutada
+- [x] `rg -n "db\\.batch\\(" functions/api` -> solo `functions/api/_lib/safe-batch.ts`.
+- [x] `npm run build` -> PASS.
+
+### Validacion manual recomendada (prod)
+1. `GET /api/sync/status` con token valido -> 200 sin `details` de `duration`.
+2. `GET /api/sync/bootstrap` con token valido -> 200 y arrays aunque vacios.
+3. `/settings` -> `Subir todo a D1` -> sin HTTP 500 por `duration`.

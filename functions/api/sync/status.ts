@@ -52,6 +52,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         })
     }
 
+    let stage = 'schema'
     try {
         const db = getDatabase(context.env)
         let schemaError = ''
@@ -61,7 +62,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             console.log('[sync][status] schema ensure done')
         } catch (error: any) {
             schemaError = trimText(error?.message || 'unknown_error', 500)
-            console.log('[sync][status] schema ensure failed', { error: schemaError })
+            console.log('[sync][status] schema ensure failed', { stage: 'schema', error: schemaError })
         }
 
         const details: string[] = []
@@ -70,8 +71,9 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             movements: 0,
             instruments: 0,
         }
-        if (schemaError) details.push(`schema: ${schemaError}`)
+        if (schemaError) details.push(`stage=schema: ${schemaError}`)
 
+        stage = 'counts'
         console.log('[sync][status] counting...')
         try {
             const a = await db.prepare('SELECT COUNT(*) AS c FROM accounts').first<{ c?: number | string }>()
@@ -79,7 +81,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             counts.accounts = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
         } catch (error: any) {
             const message = trimText(error?.message || 'unknown_error', 500)
-            details.push(`accounts: ${message}`)
+            details.push(`stage=counts.accounts: ${message}`)
             counts.accounts = 0
         }
 
@@ -89,7 +91,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             counts.movements = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
         } catch (error: any) {
             const message = trimText(error?.message || 'unknown_error', 500)
-            details.push(`movements: ${message}`)
+            details.push(`stage=counts.movements: ${message}`)
             counts.movements = 0
         }
 
@@ -99,7 +101,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             counts.instruments = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
         } catch (error: any) {
             const message = trimText(error?.message || 'unknown_error', 500)
-            details.push(`instruments: ${message}`)
+            details.push(`stage=counts.instruments: ${message}`)
             counts.instruments = 0
         }
 
@@ -122,14 +124,14 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         })
     } catch (error: any) {
         const details = trimText(error?.message || 'unknown_error', 500)
-        console.log('[sync][status] fatal error', { error: details })
+        console.log('[sync][status] fatal error', { stage, error: details })
         return jsonResponse({
             ok: true,
             d1Bound: true,
             writeEnabled,
             counts: emptyCounts,
             error: 'Failed to read sync status',
-            details,
+            details: `stage=${stage}: ${details}`,
         })
     }
 }
