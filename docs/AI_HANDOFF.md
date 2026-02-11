@@ -2447,3 +2447,36 @@ El componente `MobileNav` (drawer/Sheet con navegacion) estaba implementado y ex
 ```bash
 git checkout main -- index.html src/components/layout/app-layout.tsx src/components/layout/sidebar.tsx src/components/layout/ArgfolioHeader.tsx
 ```
+
+---
+
+## CHECKPOINT - Mobile Hardening: Sheet close button + DebtsPage responsive (2026-02-10)
+
+### Branch
+`fix/mobile-nav` (continuacion)
+
+### Cambios
+| Archivo | Cambio |
+|---------|--------|
+| `src/components/ui/sheet.tsx` | Close button (X) ampliado a 44px touch target (`w-11 h-11`, `rounded-full`, `flex items-center justify-center`); posicion `right-2 top-2` + `marginTop: env(safe-area-inset-top)` para respetar notch sin doble-offset |
+| `src/pages/debts.tsx` | Debt item rows: `flex-col sm:flex-row` para que info y acciones se apilen en mobile; `min-w-0` + `truncate` en nombre para evitar overflow |
+
+### Decisiones
+- **Sheet close button safe-area**: el boton X usa `position: absolute` (relativo al contenedor fixed del sheet), por lo que `top-2` lo pone a 8px del borde fisico de pantalla. `marginTop: env(safe-area-inset-top)` lo baja debajo del notch. Esto es independiente del `pt-[env(...)]` del SheetContent que solo afecta contenido flow. No hay doble-offset.
+- **DebtsPage**: cambio minimo — solo se agrego responsividad al listado de deudas sin tocar logica ni dialogs. `shrink-0` en acciones evita que se compriman.
+
+### Verificacion QA (code review)
+- [x] z-index: Sheet `z-[100]`/`z-[101]` > header `z-30` ✅
+- [x] Body scroll lock cuando sheet abierto ✅
+- [x] Route-change auto-close via `useEffect(location)` ✅
+- [x] NavItem click cierra drawer ✅
+- [x] Backdrop click cierra drawer ✅
+- [x] X button cierra drawer (44px touch target) ✅
+- [x] `npx tsc --noEmit` -> PASS
+- [x] `eslint` changed files -> 0 errors (1 pre-existing warning)
+- [x] `npm run build` -> PASS
+
+### Rollback
+```bash
+git checkout main -- src/components/ui/sheet.tsx src/pages/debts.tsx
+```

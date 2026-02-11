@@ -199,18 +199,18 @@ export function DebtsPage() {
                                     <div
                                         key={debt.id}
                                         className={cn(
-                                            'flex items-center justify-between p-4 rounded-lg border',
+                                            'flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg border',
                                             isPaid && 'opacity-60',
                                             isUrgent && 'border-warning/50 bg-warning/5'
                                         )}
                                     >
-                                        <div className="space-y-1">
-                                            <p className="font-medium">{debt.name}</p>
+                                        <div className="space-y-1 min-w-0">
+                                            <p className="font-medium truncate">{debt.name}</p>
                                             <p className="text-sm text-muted-foreground">
                                                 Vence: {new Date(debt.dueDateLocal).toLocaleDateString('es-AR')}
                                             </p>
                                         </div>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-3 shrink-0">
                                             <div className="text-right">
                                                 <p className="font-semibold font-numeric">
                                                     {formatCurrency(debt.currentBalance, debt.currency)}
