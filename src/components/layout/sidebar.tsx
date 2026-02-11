@@ -8,13 +8,13 @@ import {
     CreditCard,
     Settings,
     ChevronLeft,
-    Menu,
+
     TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Sheet, SheetContent, SheetHeader, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetHeader } from '@/components/ui/sheet'
 
 import { ArgfolioLogo } from '@/components/brand/ArgfolioLogo'
 
@@ -202,13 +202,8 @@ export function MobileNav() {
 
     return (
         <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-            <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="lg:hidden">
-                    <Menu className="h-5 w-5" />
-                    <span className="sr-only">Menú</span>
-                </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-0">
+            {/* No SheetTrigger here — header hamburger button controls isMobileOpen via context */}
+            <SheetContent side="left" className="w-72 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
                 <SheetHeader className="border-b px-4 py-4">
                     <div className="flex items-center gap-3">
                         <ArgfolioLogo variant="full" className="h-9 w-auto" />
