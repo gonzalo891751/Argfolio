@@ -2610,8 +2610,136 @@ npx wrangler d1 migrations apply argfolio-prod --remote
 - [ ] Backward compat: backup sin `financeExpress` importa sin error
 
 ### Pendientes para Fase C
-1. **Migración a React nativo** — portar el módulo HTML a componentes React para eliminar el iframe y unificar estilos/tema
-2. **Sync bidireccional en tiempo real** — actualmente es last-write-wins manual; podría usar postMessage para detectar cambios dentro del iframe y trigger auto-sync
-3. **Conflicto de temas** — el módulo tiene su propio toggle dark/light independiente del tema de Argfolio; unificar via postMessage o CSS injection
-4. **FX rate sharing** — el módulo fetches dolar oficial por su cuenta; podría usar el FX de Argfolio via postMessage
+1. ~~**Sync bidireccional en tiempo real**~~ DONE (C1a)
+2. ~~**Conflicto de temas**~~ DONE (C1b)
+3. ~~**FX rate sharing**~~ DONE (C1c)
+4. **Migración a React nativo** — starter creado (C2), pero necesita paridad completa antes de cambiar default
+
+---
+
+## CHECKPOINT - Fase C: Tiempo Real + Tema + FX + Migración Nativa Starter (2026-02-11)
+
+### Objetivo
+Implementar auto-sync en tiempo real, unificación de tema, sharing de FX rate, y comenzar migración a React nativo con fallback al iframe.
+
+### C1a — Auto-sync en tiempo real
+
+**Mecanismo**: `storage` event listener en el parent. Cuando el iframe escribe a `localStorage['budget_fintech']`, el parent recibe el evento (son browsing contexts separados, mismo origen).
+
+**Flujo**:
+1. Usuario edita en Presupuesto Express → iframe `save()` escribe a localStorage
+2. Parent recibe `storage` event (key = `budget_fintech`)
+3. Debounce 1200ms para no spamear
+4. Push parcial: `POST /api/sync/push` con `{ data: { financeExpress: "..." } }`
+5. Status UI en toolbar: Guardando… → Guardado → (idle después de 3s)
+
+**Tolerancia a fallos**:
+- Si push falla por red → status "Sin conexión", retry automático a los 10s
+- Si push falla por HTTP error → status "Error al sincronizar"
+- Si remote sync no está habilitado o no hay token → no pushea (silencioso)
+
+**Anti-loop**: `lastPushedRef` guarda el último valor pushed. Si el `storage` event trae el mismo valor (e.g., bootstrap restore), no re-pushea.
+
+**Archivos**: `src/pages/finanzas-express.tsx`
+
+### C1b — Tema unificado
+
+**Mecanismo**: `postMessage` de parent a iframe.
+
+**Protocolo**:
+- Parent envía `{ type: 'argfolio:init' }` al cargar iframe → iframe agrega class `from-argfolio` a `<html>`
+- Parent envía `{ type: 'argfolio:theme', resolved: 'dark'|'light' }` en cada cambio
+- Iframe setea `data-theme` según el mensaje
+- CSS `html.from-argfolio .btn-theme-toggle { display: none }` oculta el toggle propio del módulo
+
+**Nota clave**: Argfolio usa `class="dark"` en `<html>`, el módulo usa `data-theme="dark"`. Están en documentos separados (parent vs iframe), no se pisan.
+
+**Archivos**: `src/pages/finanzas-express.tsx` + `public/apps/finanzas-express/index.html`
+
+### C1c — FX rate compartido
+
+**Mecanismo**: `postMessage` de parent a iframe.
+
+**Protocolo**:
+- Parent envía `{ type: 'argfolio:fx', compra: N, venta: N, source: '...' }` cuando `useFxRates()` tiene datos
+- Iframe recibe y llama `app.updateFxState(compra, venta)` que actualiza state y persiste
+- Fallback: si Argfolio no tiene FX todavía (e.g., offline), el módulo sigue usando su propio fetch con cache de 6h
+
+**Archivos**: `src/pages/finanzas-express.tsx` + `public/apps/finanzas-express/index.html`
+
+### C2 — Migración nativa (starter)
+
+**Estructura creada**:
+- `src/features/finanzas-express/types.ts` — tipos TypeScript del modelo `budget_fintech`
+- `src/features/finanzas-express/use-budget.ts` — hook completo con operaciones CRUD + computed totals
+- `src/features/finanzas-express/FinanzasExpressNative.tsx` — vista summary read-only + listados
+
+**Toggle**: `?native=1` en la URL activa el modo nativo (preview). Default sigue siendo iframe.
+
+**Gaps para paridad completa** (no implementados aún):
+- Edición inline (agregar/editar/borrar cards/services/planned/incomes)
+- USD items dentro de cards
+- Payments y tracking de pagos (pay_card, pay_service, pay_plan)
+- Fee management por tarjeta
+- Undo/ledger system
+- Modal de confirmación
+- Bottom dock fijo
+- Money input con formato ARS
+- Responsive 2 columnas (mobile → 1 col, desktop → 2 col)
+
+### Archivos Tocados
+
+| Archivo | Cambio |
+|---------|--------|
+| `public/apps/finanzas-express/index.html` | EDITADO — postMessage listener (theme/FX/data), storage event reload, CSS hide toggle |
+| `src/pages/finanzas-express.tsx` | REESCRITO — auto-sync bridge + theme/FX posting + status UI + native toggle |
+| `src/features/finanzas-express/types.ts` | NUEVO — tipos del modelo budget_fintech |
+| `src/features/finanzas-express/use-budget.ts` | NUEVO — hook con state management + CRUD + computed totals |
+| `src/features/finanzas-express/FinanzasExpressNative.tsx` | NUEVO — vista nativa (summary + listados read-only) |
+
+### Decisiones de diseño
+
+| Decisión | Alternativa considerada | Por qué |
+|----------|------------------------|---------|
+| `storage` event para auto-sync | Polling localStorage | `storage` event es nativo, eficiente, y fire entre browsing contexts (iframe ↔ parent) sin polling |
+| `postMessage` para tema/FX | Shared localStorage key | postMessage es más limpio para comunicación directa parent→iframe, evita side effects en localStorage |
+| Debounce 1200ms | 500ms / 2000ms | Balance entre responsividad y no spamear API en edición rápida |
+| `?native=1` query param toggle | Env var / localStorage flag | Query param es fácil de probar, no persiste entre navegaciones, ideal para preview |
+| Ocultar toggle con CSS class | Remover botón del HTML | CSS class es reversible y no rompe el módulo standalone |
+
+### Cómo Validar
+
+**Build:**
+```bash
+npm run build   # 0 errores
+npx tsc --noEmit   # 0 errores
+```
+
+**C1a — Auto-sync:**
+1. `npm run dev`, abrir `/finanzas-express`
+2. Editar algo (agregar tarjeta, cambiar monto)
+3. Observar en toolbar: "Guardando…" → "Guardado" (requiere VITE_ARGFOLIO_REMOTE_SYNC=1 y token)
+4. Sin token/sin remote sync: no aparece status (silencioso)
+
+**C1b — Tema:**
+1. Abrir `/finanzas-express`, cambiar tema en Argfolio (click icono sol/luna en header)
+2. El módulo dentro del iframe cambia inmediatamente
+3. El toggle de tema propio del módulo NO aparece cuando está embebido
+4. Abrir `/apps/finanzas-express/index.html` directo: el toggle SÍ aparece (standalone)
+
+**C1c — FX:**
+1. Argfolio carga FX rates al inicio
+2. Abrir `/finanzas-express`: la pill "OFICIAL C/V" muestra los valores de Argfolio
+3. Si se abre standalone, el módulo fetches su propia rate (fallback funciona)
+
+**C2 — Native:**
+1. Navegar a `/finanzas-express?native=1`
+2. Se muestra la vista nativa con resumen y listados
+3. Banner "Vista nativa (preview)" visible
+
+### Pendientes
+1. **C2 paridad completa**: edición CRUD inline, payments, undo, fee, money inputs, responsive grid, bottom dock
+2. **Conflict resolution**: mostrar aviso si remote tiene datos más nuevos que local
+3. **Botón "Forzar sync ahora"**: nice-to-have para trigger manual
+4. **Code-split**: lazy import de `FinanzasExpressNative` para no sumar al bundle principal cuando no se usa
 

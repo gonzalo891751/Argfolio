@@ -1038,6 +1038,8 @@
                 opacity: 1;
             }
         }
+        /* When embedded inside Argfolio, hide the theme toggle (parent controls theme) */
+        html.from-argfolio .btn-theme-toggle { display: none !important; }
     </style>
 </head>
 
@@ -1583,7 +1585,7 @@
                         
                         <div style="width:1px; height:20px; background:var(--glass-border); margin:0 4px;"></div>
                         ${(this.state.events && this.state.events.length > 0) ? `<button class="btn-icon" onclick="app.undoLastEvent()" style="color:var(--c-success)">${Icons.refresh}</button>` : ''}
-                        <button class="btn-icon" onclick="app.toggleTheme()">${Icons.moon}</button>
+                        <button class="btn-icon btn-theme-toggle" onclick="app.toggleTheme()">${Icons.moon}</button>
                         <button class="btn-icon btn-danger-icon" onclick="app.openModal('¿Borrar todo? Se perderán los datos.', () => app.confirmClear())">${Icons.trash}</button>
                     </div>
                 </header>
@@ -1731,6 +1733,56 @@
 
         // Inicializar
         window.app = new BudgetApp();
+
+        // === ARGFOLIO BRIDGE ===
+        // When embedded in Argfolio iframe, receive theme/FX/data messages from parent.
+        window.addEventListener('message', function(e) {
+            if (!e.data || typeof e.data.type !== 'string') return;
+            var type = e.data.type;
+
+            if (type === 'argfolio:init') {
+                document.documentElement.classList.add('from-argfolio');
+            }
+
+            if (type === 'argfolio:theme') {
+                var resolved = e.data.resolved; // 'dark' | 'light'
+                if (resolved === 'dark' || resolved === 'light') {
+                    document.documentElement.setAttribute('data-theme', resolved);
+                }
+            }
+
+            if (type === 'argfolio:fx') {
+                var compra = parseFloat(e.data.compra);
+                var venta = parseFloat(e.data.venta);
+                if (!isNaN(compra) && !isNaN(venta) && compra > 0 && venta > 0) {
+                    window.app.updateFxState(compra, venta);
+                }
+            }
+
+            if (type === 'argfolio:data-updated') {
+                // Parent wrote new data to localStorage (e.g. from bootstrap).
+                // Reload state from localStorage.
+                var raw = localStorage.getItem('budget_fintech');
+                if (raw) {
+                    try {
+                        window.app.state = JSON.parse(raw);
+                        window.app.state.fxLoading = false;
+                        window.app.render();
+                    } catch(err) { console.warn('Failed to reload state from localStorage', err); }
+                }
+            }
+        });
+
+        // Also listen for storage events (from parent writing to localStorage)
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'budget_fintech' && e.newValue) {
+                try {
+                    window.app.state = JSON.parse(e.newValue);
+                    window.app.state.fxLoading = false;
+                    window.app.render();
+                } catch(err) { console.warn('Failed to reload state from storage event', err); }
+            }
+        });
     </script>
 </body>
 
