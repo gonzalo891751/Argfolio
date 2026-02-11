@@ -1573,9 +1573,14 @@ Agregar en el wizard CEDEAR (compra/venta) un modo de fecha `Auto` (hoy) y `Manu
 
 ---
 
-### 2026-02-09  Antigravity  Audit: Dashboard V2 Diagnostic
+### 2026-02-11 Antigravity Audit: Mobile Checkpoint
 
-**Goal:** Perform Phase 0 diagnostic for Dashboard V2, mapping data sources, identifying gaps in snapshot logic, and creating a migration plan.
+- **Mobile Audit Complete (Code-Only)**:
+    - Identified Critical Bug (P0): `MobileNav` component is disjointed from `AppLayout`, causing the mobile menu to fail.
+    - Verified `Dashboard`, `Assets`, `Market`, and `Movements` for code-level responsiveness (grids, hidden columns, scroll containers).
+    - **Next Step**: Fix `MobileNav` implementation immediately.
+
+### 2026-02-09 Antigravity Audit: Dashboard V2 Diagnostic
 
 **Files Created:**
 - \docs/AUDIT_DASHBOARD_V2.md\ (NEW) - Technical audit and implementation plan.
@@ -2391,3 +2396,54 @@ Agregar el FCI "IOL Cash Management" (ticker IOLCAMA, BCBA) al listado de FCI en
 - Si IOL cambia el HTML drasticamente, `parseIolCamaQuote` podria fallar silenciosamente (IOLCAMA desaparece del listado pero no rompe nada).
 - No hay cache persistente separado para IOLCAMA — si IOL esta caido y el edge cache expira, IOLCAMA no aparece hasta que IOL vuelva. Solucion futura: cache en KV o D1.
 - No hay test unitario del parser (vitest 4.x tiene issue conocido con deteccion de suites).
+
+---
+
+## CHECKPOINT - Fix P0 Mobile Nav + iOS Safe-Area (2026-02-10)
+
+### Branch
+`fix/mobile-nav` (desde `main`)
+
+### Problema
+El componente `MobileNav` (drawer/Sheet con navegacion) estaba implementado y exportado en `sidebar.tsx`, pero **nunca se renderizaba** en el arbol de componentes. El boton hamburguesa del header llamaba a `setIsMobileOpen(true)` correctamente, pero no habia Sheet montado para responder al estado. Resultado: menu movil inaccesible, usuario bloqueado en la pagina activa.
+
+### Archivos tocados
+| Archivo | Cambio |
+|---------|--------|
+| `index.html` | Agregado `viewport-fit=cover` al meta viewport (requerido para `env(safe-area-inset-*)` en iOS) |
+| `src/components/layout/app-layout.tsx` | Importado y renderizado `<MobileNav />` dentro de `LayoutContent` (dentro de `SidebarProvider` context) |
+| `src/components/layout/sidebar.tsx` | Removido `SheetTrigger` duplicado de `MobileNav` (el header ya tiene el boton hamburguesa); removido import no usado de `Menu` y `SheetTrigger`; agregado safe-area padding al `SheetContent` |
+| `src/components/layout/ArgfolioHeader.tsx` | Agregado `paddingTop: env(safe-area-inset-top)` al header sticky; hamburguesa de `w-9 h-9` (36px) a `w-11 h-11` (44px) para touch target iOS |
+
+### Decisiones y rationale
+- **MobileNav sin SheetTrigger propio**: el header ya renderiza un boton hamburguesa que controla `isMobileOpen` via context. Tener dos triggers crearia dos hamburguesas visibles en mobile. Se dejo solo el del header.
+- **Safe-area via inline style**: `env(safe-area-inset-top)` no es un valor Tailwind nativo. Se uso `style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}` en el header y Tailwind arbitrary values `pt-[env(safe-area-inset-top)]` en el Sheet content (Tailwind los pasa tal cual a CSS).
+- **viewport-fit=cover**: sin esto, iOS ignora `env(safe-area-inset-*)` y los valores son siempre 0. Es inocuo en navegadores que no lo soportan.
+- **Touch target 44px**: Apple HIG recomienda minimo 44pt para botones tactiles. El hamburguesa estaba en 36px.
+
+### Validacion ejecutada
+- [x] `npx tsc --noEmit` -> PASS (0 errors)
+- [x] `npm run build` -> PASS (built in ~12s)
+
+### Validacion manual recomendada
+1. `npm run dev` -> abrir en Chrome DevTools
+2. Viewport iPhone 14 (390x844):
+   - Tap hamburguesa (arriba izq) -> debe abrir drawer con navegacion
+   - Tap 3-4 rutas distintas (Dashboard, Mis Activos, Mercado, Movimientos) -> debe navegar y cerrar drawer
+   - Tap overlay/X -> debe cerrar drawer
+   - Verificar que header y drawer no queden debajo del notch
+3. Viewport 360x800 (Android):
+   - Misma verificacion
+4. Desktop (1280+):
+   - Sidebar visible, hamburguesa oculta (lg:hidden)
+   - Navegacion desktop intacta
+
+### Pendientes (fuera de scope)
+- M-2: Verificar layout responsive de FinanzasPersonales (P2)
+- M-3: Verificar scroll horizontal en tablas (P3)
+- Micro-ajuste blur en mobile si hay lag real (no evidenciado)
+
+### Rollback
+```bash
+git checkout main -- index.html src/components/layout/app-layout.tsx src/components/layout/sidebar.tsx src/components/layout/ArgfolioHeader.tsx
+```

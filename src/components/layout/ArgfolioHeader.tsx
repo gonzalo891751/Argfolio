@@ -135,6 +135,7 @@ export function ArgfolioHeader({ condensed = false }: ArgfolioHeaderProps) {
                     condensed && 'is-condensed',
                     scrolled && 'scrolled'
                 )}
+                style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
             >
                 <div className={cn(
                     "h-full flex items-center justify-between gap-4",
@@ -144,7 +145,7 @@ export function ArgfolioHeader({ condensed = false }: ArgfolioHeaderProps) {
                     <div className="lg:hidden flex items-center gap-2">
                         <button
                             onClick={() => setIsMobileOpen(true)}
-                            className="glass-button w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-white"
+                            className="glass-button w-11 h-11 rounded-full flex items-center justify-center text-slate-400 hover:text-white"
                             aria-label="Abrir menú"
                         >
                             <Menu className="w-5 h-5" />

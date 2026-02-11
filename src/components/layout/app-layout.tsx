@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { Sidebar, SidebarProvider, useSidebar } from '@/components/layout/sidebar'
+import { Sidebar, SidebarProvider, useSidebar, MobileNav } from '@/components/layout/sidebar'
 import { ArgfolioHeader } from '@/components/layout/ArgfolioHeader'
 import { usePFSettlement } from '@/hooks/use-pf-settlement'
 import { usePFModelMigration } from '@/hooks/use-pf-model-migration'
@@ -17,6 +17,9 @@ function LayoutContent() {
         <div className="min-h-screen bg-background flex">
             {/* Sidebar (fixed, always visible on lg+) - collapses ONLY via manual button */}
             <Sidebar />
+
+            {/* Mobile nav drawer (Sheet) - triggered by header hamburger button */}
+            <MobileNav />
 
             {/* Main content area (flex-1, to the right of sidebar) */}
             <div className={cn(
