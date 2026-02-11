@@ -2480,3 +2480,138 @@ git checkout main -- index.html src/components/layout/app-layout.tsx src/compone
 ```bash
 git checkout main -- src/components/ui/sheet.tsx src/pages/debts.tsx
 ```
+
+---
+
+## CHECKPOINT - Audit Integration Presupuesto Express (2026-02-11)
+
+### Objetivo
+Diseñar plan de integración para módulo "Presupuesto personal Express" (app externa HTML/JS) dentro de Argfolio con soporte mobile y sincronización.
+
+### Hallazgos Principales
+- **Integración UI:** La app externa es compatible con `iframe` y puede servirse desde `/public/apps/finanzas-express`.
+- **Menú:** Se debe agregar entrada en `src/components/layout/sidebar.tsx` (`navItems`).
+- **Sync Cross-Device:** La app usa `localStorage` (key `et_fintech`). Al servirse desde el mismo origen (`/public`), comparte almacenamiento con Argfolio.
+- **Estrategia Sync:** Argfolio leerá `localStorage.getItem('et_fintech')` durante el backup/sync y lo enviará a una nueva tabla en D1 (`finance_express_data`) via `functions/api/sync/push.ts`.
+
+### Entregables
+- **Reporte Completo:** `docs/audits/AUDIT_INTEGRACION_FINANZAS_EXPRESS.md` (Creado).
+- **Plan:** Fase A (UI Iframe) y Fase B (Data Sync).
+
+### Próximos Pasos
+1. ~~Ejecutar Fase A: Copiar archivos a `/public`, crear `src/pages/finanzas-express.tsx`, agregar a menú.~~ DONE
+2. ~~Validar en Mobile (viewport).~~ DONE
+
+---
+
+## CHECKPOINT - Finanzas Express: Integración Completa Fase A + B (2026-02-11)
+
+### Objetivo
+Integrar "Presupuesto Express" (módulo HTML estático) dentro de Argfolio como sección navegable con sincronización cross-device (PC↔celu) via D1.
+
+### Fase A — Integración UI (iframe)
+
+**A1) Módulo estático publicado:**
+- `public/apps/finanzas-express/index.html` — copiado desde `docs/Presupuesto_personal_express/index.html`
+- Self-contained: todo CSS/JS inline, no requiere assets externos
+- Accesible en dev: `/apps/finanzas-express/index.html`
+
+**A2) Página wrapper React:**
+- `src/pages/finanzas-express.tsx` — iframe full-height dentro del layout de Argfolio
+- Toolbar con título + botón "Abrir en pestaña nueva"
+- Height: `calc(100dvh - 4rem)` con negative margins para usar todo el content area
+- Sin doble scroll: iframe es `flex-1` dentro de un flex column
+
+**A3) Ruta y menú:**
+- Ruta `/finanzas-express` registrada en `src/App.tsx` dentro del `<AppLayout />` wrapper
+- Nav item "Presupuesto" con icono `Calculator` agregado en `sidebar.tsx` `navItems[]`
+- Funciona en desktop sidebar Y mobile drawer (comparten el mismo array)
+
+### Fase B — Sync Cross-Device
+
+**B1) D1 migration:**
+- `migrations/0003_finance_express.sql` — tabla `finance_express_data` (id PK, data TEXT, updated_at TEXT)
+- Singleton row con `id = 'default'` (modelo single-user)
+- También agregada a `ensureSyncSchema()` en `functions/api/_lib/sync.ts` para auto-creación
+
+**B2) Server endpoints extendidos:**
+- `functions/api/sync/push.ts`:
+  - Acepta campo opcional `data.financeExpress` (string) en el payload
+  - Upsert a `finance_express_data` con `ON CONFLICT(id) DO UPDATE`
+  - Backward compatible: si no viene, no hace nada
+- `functions/api/sync/bootstrap.ts`:
+  - Query `finance_express_data WHERE id = 'default'`
+  - Incluye `financeExpress` (string|null) en response payload
+  - Try/catch tolerante: si la tabla no existe, devuelve null
+
+**B3) Client sync:**
+- `src/domain/sync/local-backup.ts`:
+  - `exportLocalBackup()`: lee `localStorage.getItem('budget_fintech')` → campo `financeExpress`
+  - `importLocalBackup()`: si `financeExpress` es string no vacío → `localStorage.setItem('budget_fintech', ...)`
+  - `parseBackupJson()`: preserva `financeExpress` de backups existentes (backward compatible)
+  - `LocalBackupPayload` interface: campo `financeExpress?: string | null`
+- `src/sync/remote-sync.ts`:
+  - `BootstrapResponse` interface: campo `financeExpress?: string | null`
+  - `bootstrapRemoteSync()`: si remote tiene `financeExpress`, lo restaura a localStorage
+
+**Nota:** La key real de localStorage es `budget_fintech` (no `et_fintech` como indicaba la auditoría previa).
+
+### Archivos Tocados
+
+| Archivo | Cambio |
+|---------|--------|
+| `public/apps/finanzas-express/index.html` | NUEVO — módulo estático copiado |
+| `src/pages/finanzas-express.tsx` | NUEVO — página wrapper con iframe |
+| `src/App.tsx` | Ruta `/finanzas-express` + import |
+| `src/components/layout/sidebar.tsx` | Nav item "Presupuesto" con Calculator icon |
+| `migrations/0003_finance_express.sql` | NUEVO — tabla finance_express_data |
+| `functions/api/_lib/sync.ts` | ensureSyncSchema: CREATE TABLE finance_express_data |
+| `functions/api/sync/push.ts` | PushPayload.data.financeExpress + upsert logic |
+| `functions/api/sync/bootstrap.ts` | Query finance_express_data + include en response |
+| `src/domain/sync/local-backup.ts` | Export/import/parse: campo financeExpress ↔ localStorage budget_fintech |
+| `src/sync/remote-sync.ts` | BootstrapResponse + restore financeExpress en bootstrap |
+
+### Cómo Validar
+
+**Build:**
+```bash
+npm run build   # debe compilar sin errores
+```
+
+**Dev local (Fase A):**
+1. `npm run dev`
+2. Navegar a `/finanzas-express` desde sidebar (desktop) o hamburger menu (mobile)
+3. Verificar que carga el módulo dentro del layout de Argfolio
+4. Verificar que no hay doble scroll en mobile
+5. Botón "Abrir en pestaña nueva" funciona
+
+**Sync (Fase B):**
+1. Crear datos en Presupuesto Express (agrega una tarjeta/servicio)
+2. Ir a Settings → "Subir todo a D1" — confirmar que payload incluye `financeExpress`
+3. En otro dispositivo/browser: bootstrap trae `financeExpress` y lo restaura
+4. Export JSON backup: verificar que incluye campo `data.financeExpress`
+
+**D1 migration (Cloudflare):**
+```bash
+npx wrangler d1 migrations apply argfolio-prod --remote
+```
+
+### Checklist QA
+
+- [ ] Desktop: sidebar muestra "Presupuesto" con icono Calculator
+- [ ] Desktop: click navega a `/finanzas-express`, carga iframe
+- [ ] Desktop: sidebar collapsed muestra tooltip "Presupuesto"
+- [ ] Mobile: hamburger menu muestra "Presupuesto"
+- [ ] Mobile: iframe ocupa todo el viewport sin doble scroll
+- [ ] Mobile: safe-area no tapa contenido
+- [ ] Sync push: payload incluye `financeExpress` string
+- [ ] Sync bootstrap: response incluye `financeExpress`
+- [ ] Import backup: restaura `budget_fintech` a localStorage
+- [ ] Backward compat: backup sin `financeExpress` importa sin error
+
+### Pendientes para Fase C
+1. **Migración a React nativo** — portar el módulo HTML a componentes React para eliminar el iframe y unificar estilos/tema
+2. **Sync bidireccional en tiempo real** — actualmente es last-write-wins manual; podría usar postMessage para detectar cambios dentro del iframe y trigger auto-sync
+3. **Conflicto de temas** — el módulo tiene su propio toggle dark/light independiente del tema de Argfolio; unificar via postMessage o CSS injection
+4. **FX rate sharing** — el módulo fetches dolar oficial por su cuenta; podría usar el FX de Argfolio via postMessage
+

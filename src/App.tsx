@@ -19,6 +19,7 @@ import { PersonalFinancesPage } from '@/features/personal-finances'
 import { SettingsPage } from '@/pages/settings'
 import { ImportPage } from '@/pages/import'
 import { MarketPage } from '@/pages/market'
+import { FinanzasExpressPage } from '@/pages/finanzas-express'
 import { ToastProvider } from '@/components/ui/toast'
 import { GlobalDataHandler } from '@/components/GlobalDataHandler'
 import { seedDatabase } from '@/db'
@@ -163,6 +164,15 @@ function App() {
                                                 element={
                                                     <ErrorBoundary>
                                                         <PersonalFinancesPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* Finanzas Express - Embedded Budget Tool */}
+                                            <Route
+                                                path="/finanzas-express"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <FinanzasExpressPage />
                                                     </ErrorBoundary>
                                                 }
                                             />

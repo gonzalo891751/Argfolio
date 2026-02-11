@@ -38,6 +38,7 @@ function createBootstrapPayload({
     movements,
     instruments,
     snapshots,
+    financeExpress,
     durationMs,
     degraded = false,
 }: {
@@ -46,6 +47,7 @@ function createBootstrapPayload({
     movements: unknown[]
     instruments: unknown[]
     snapshots?: unknown[]
+    financeExpress?: string | null
     durationMs: number
     degraded?: boolean
 }) {
@@ -60,6 +62,7 @@ function createBootstrapPayload({
         movements,
         instruments,
         snapshots: Array.isArray(snapshots) ? snapshots : [],
+        financeExpress: typeof financeExpress === 'string' ? financeExpress : null,
     }
 }
 
@@ -144,6 +147,19 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             safeQueryRows(db, snapshotsSql, 'snapshots', snapshotsBindings),
         ])
 
+        // Finance Express data (singleton row)
+        let financeExpress: string | null = null
+        try {
+            const feRow = await db.prepare(
+                "SELECT data FROM finance_express_data WHERE id = 'default'"
+            ).first<{ data?: string }>()
+            if (typeof feRow?.data === 'string') {
+                financeExpress = feRow.data
+            }
+        } catch {
+            // Table may not exist yet — ignore
+        }
+
         const durationMs = toDurationMs(startedAtMs)
         console.log('[sync/bootstrap] done', {
             durationMs,
@@ -151,6 +167,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             movements: movements.length,
             instruments: instruments.length,
             snapshots: snapshots.length,
+            financeExpress: financeExpress != null,
             degraded: false,
         })
         console.info('[sync/bootstrap] snapshot served', {
@@ -168,6 +185,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             movements,
             instruments,
             snapshots,
+            financeExpress,
             durationMs,
         })), {
             headers: {

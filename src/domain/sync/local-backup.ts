@@ -22,6 +22,7 @@ export interface LocalBackupPayload {
         snapshots: Snapshot[]
         manualPrices: ManualPrice[]
         preferences: Partial<Record<typeof PREFERENCE_KEYS[number], string>>
+        financeExpress?: string | null
     }
 }
 
@@ -52,6 +53,8 @@ export async function exportLocalBackup(): Promise<LocalBackupPayload> {
         if (value != null) preferences[key] = value
     }
 
+    const financeExpress = localStorage.getItem('budget_fintech')
+
     return {
         version: BACKUP_VERSION,
         exportedAtISO: new Date().toISOString(),
@@ -62,6 +65,7 @@ export async function exportLocalBackup(): Promise<LocalBackupPayload> {
             snapshots,
             manualPrices,
             preferences,
+            financeExpress,
         },
     }
 }
@@ -105,6 +109,7 @@ export function parseBackupJson(raw: string): LocalBackupPayload {
             preferences: (data.preferences && typeof data.preferences === 'object')
                 ? data.preferences as Partial<Record<typeof PREFERENCE_KEYS[number], string>>
                 : {},
+            financeExpress: typeof data.financeExpress === 'string' ? data.financeExpress : null,
         },
     }
 }
@@ -131,6 +136,11 @@ export async function importLocalBackup(payload: LocalBackupPayload): Promise<{
         if (typeof value === 'string') {
             localStorage.setItem(key, value)
         }
+    }
+
+    // Restore Finance Express data if present
+    if (typeof payload.data.financeExpress === 'string' && payload.data.financeExpress.length > 0) {
+        localStorage.setItem('budget_fintech', payload.data.financeExpress)
     }
 
     return {
