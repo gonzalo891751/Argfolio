@@ -1581,7 +1581,7 @@ Agregar en el wizard CEDEAR (compra/venta) un modo de fecha `Auto` (hoy) y `Manu
 - \docs/AUDIT_DASHBOARD_V2.md\ (NEW) - Technical audit and implementation plan.
 
 **Key Findings:**
-- **Snapshot Divergence:** Existing \useSnapshots\ uses legacy logic (\useComputedPortfolio\) which only stores totals. Dashboard v2 requires granular breakdown by rubro/asset for 'Drivers' and 'Evolución'.
+- **Snapshot Divergence:** Existing \useSnapshots\ uses legacy logic (\useComputedPortfolio\) which only stores totals. Dashboard v2 requires granular breakdown by rubro/asset for 'Drivers' and 'Evoluciï¿½n'.
 - **Database Schema Update Required:** The \snapshots\ table in Dexie needs to be updated to store a \reakdown\ JSON field.
 - **Price Infrastructure:** Confirmed \dolar-api\ source and \localStorage\ caching.
 - **Prototype:** \dash1.html\ structure mapped to React components.
@@ -1732,7 +1732,7 @@ Corregir KPIs vacios del dashboard, agregar calculo real de Ingresos Netos por r
 ## CHECKPOINT - Drivers Historico/Proyeccion + Ganancia proyectada por rubro (2026-02-09)
 
 ### Objetivo
-Agregar modo `PROYECCION` en `Drivers del Periodo` para mostrar ganancia proyectada por rubro en horizontes `HOY/MAÑ/7D/30D/90D/1A`, manteniendo el modo historico intacto y sin depender de snapshots para el calculo proyectado.
+Agregar modo `PROYECCION` en `Drivers del Periodo` para mostrar ganancia proyectada por rubro en horizontes `HOY/MAï¿½/7D/30D/90D/1A`, manteniendo el modo historico intacto y sin depender de snapshots para el calculo proyectado.
 
 ### Archivos tocados
 1. `src/features/dashboardV2/projected-earnings.ts` (nuevo)
@@ -1750,7 +1750,7 @@ Agregar modo `PROYECCION` en `Drivers del Periodo` para mostrar ganancia proyect
   - `resultArsProjected = pnlArsNow + carryArsProjected`.
 - Se agrego toggle visual `Historico | Proyeccion` dentro de `Drivers del Periodo` (sin tocar motor de snapshots/costeo).
 - En `PROYECCION`:
-  - el selector de rangos existente cambia labels a `HOY/MAÑ/7D/30D/90D/1A`,
+  - el selector de rangos existente cambia labels a `HOY/MAï¿½/7D/30D/90D/1A`,
   - la columna principal pasa a `Ganancia (ARS)`,
   - se muestra subtexto `carry +$X` cuando corresponde,
   - se muestra nota visible: `CEDEAR/Cripto/FCI: precio constante (incremental 0)`.
@@ -1896,10 +1896,10 @@ Corregir Drivers del dashboard para separar proyeccion real vs PnL actual, mostr
 
 ---
 
-## CHECKPOINT - FASE 3 Infra de precios + eliminación de mocks (2026-02-09)
+## CHECKPOINT - FASE 3 Infra de precios + eliminaciï¿½n de mocks (2026-02-09)
 
 ### Objetivo
-Eliminar hardcoding de precios (`mockPrices`), evitar fallback silencioso `price ?? 1` en valuación y exponer estado de precio uniforme (`ok/missing/estimated/stale`) con cache de último precio válido.
+Eliminar hardcoding de precios (`mockPrices`), evitar fallback silencioso `price ?? 1` en valuaciï¿½n y exponer estado de precio uniforme (`ok/missing/estimated/stale`) con cache de ï¿½ltimo precio vï¿½lido.
 
 ### Archivos tocados
 1. `src/domain/prices/price-result.ts` (nuevo)
@@ -1915,33 +1915,33 @@ Eliminar hardcoding de precios (`mockPrices`), evitar fallback silencioso `price
 11. `src/pages/assets-v2.tsx`
 
 ### Cambios concretos
-- Se eliminó `mockPrices` de `use-computed-portfolio.ts` y su hook `useMockPrices`.
-- Se agregó `PriceResult` uniforme (`price`, `status`, `source`, `asOf`, `confidence`).
-- Se agregó cache cliente de último precio (`localStorage`) con TTL por rubro y resolución automática a `estimated`/`stale`.
+- Se eliminï¿½ `mockPrices` de `use-computed-portfolio.ts` y su hook `useMockPrices`.
+- Se agregï¿½ `PriceResult` uniforme (`price`, `status`, `source`, `asOf`, `confidence`).
+- Se agregï¿½ cache cliente de ï¿½ltimo precio (`localStorage`) con TTL por rubro y resoluciï¿½n automï¿½tica a `estimated`/`stale`.
 - `useAssetsRows` ahora construye `PriceResult` por activo (manual/PPI/coingecko/fci_latest) y aplica cache last-known.
-- Se removió fallback silencioso de precio `?? 1` en ramas genéricas de valuación (`domain/assets/valuation.ts` y `domain/portfolio/valuation.ts`).
+- Se removiï¿½ fallback silencioso de precio `?? 1` en ramas genï¿½ricas de valuaciï¿½n (`domain/assets/valuation.ts` y `domain/portfolio/valuation.ts`).
 - `portfolioV2` ahora propaga `priceResult` a items, manteniendo `priceMeta` legacy para compatibilidad.
-- UI de `/mis-activos-v2` muestra badges explícitos:
+- UI de `/mis-activos-v2` muestra badges explï¿½citos:
   - `Sin precio` (missing)
   - `Estimado` (estimated)
   - `Desactualizado` (stale)
-- Se mantiene cálculo sin inflar totales artificialmente cuando falta precio (valuación nula -> no suma valor ficticio).
+- Se mantiene cï¿½lculo sin inflar totales artificialmente cuando falta precio (valuaciï¿½n nula -> no suma valor ficticio).
 
 ### Pendientes
 - QA manual dirigido en `/mis-activos-v2` con casos reales de precio faltante/stale por activo.
-- Persistir `asOf` más preciso para coingecko en todos los escenarios (hoy puede venir `null` según fuente).
+- Persistir `asOf` mï¿½s preciso para coingecko en todos los escenarios (hoy puede venir `null` segï¿½n fuente).
 
-### Validación
+### Validaciï¿½n
 - [x] `npm run build` OK
 - [x] `npm test` OK (13 files, 91 tests)
-- [x] `rg -n "mockPrices|\?\? 1" src functions` -> sin `mockPrices`; quedan `?? 1` en defaults de FX/u otros módulos no de fallback de precio crítico.
+- [x] `rg -n "mockPrices|\?\? 1" src functions` -> sin `mockPrices`; quedan `?? 1` en defaults de FX/u otros mï¿½dulos no de fallback de precio crï¿½tico.
 
 ---
 
 ## CHECKPOINT - FASE 4 MVP persistencia/sync multi-dispositivo (2026-02-09)
 
 ### Objetivo
-Agregar puente local Export/Import y sync remoto mínimo con Cloudflare Pages Functions + D1 para `accounts` y `movements`, manteniendo Dexie como cache local/offline.
+Agregar puente local Export/Import y sync remoto mï¿½nimo con Cloudflare Pages Functions + D1 para `accounts` y `movements`, manteniendo Dexie como cache local/offline.
 
 ### Archivos tocados
 1. `src/domain/sync/local-backup.ts` (nuevo)
@@ -1963,29 +1963,29 @@ Agregar puente local Export/Import y sync remoto mínimo con Cloudflare Pages Fun
 - Export/Import local:
   - Nuevo backup JSON de Dexie (`accounts`, `instruments`, `movements`, `manualPrices`) + preferencias clave de `localStorage`.
   - Import en modo merge/upsert por `id` (sin duplicados).
-  - UI añadida en `Settings` con botones `Exportar JSON` / `Importar JSON`.
+  - UI aï¿½adida en `Settings` con botones `Exportar JSON` / `Importar JSON`.
 - Sync remoto cliente:
   - Flag build-time: `VITE_ARGFOLIO_REMOTE_SYNC=1`.
   - Bootstrap desde `/api/sync/bootstrap` y bulk upsert a Dexie.
-  - Aviso por evento/toast en fallback offline: “usando datos locales”.
+  - Aviso por evento/toast en fallback offline: ï¿½usando datos localesï¿½.
 - Escrituras remotas (con fallback local):
   - `movementsRepo` y `accountsRepo` intentan POST/PUT/DELETE remoto y luego mantienen cache Dexie.
   - Si falla red o write gate, no rompe flujo local.
-- Backend D1 mínimo:
+- Backend D1 mï¿½nimo:
   - Endpoints: `GET /api/sync/bootstrap`, `GET|POST|PUT|DELETE /api/movements`, `GET|POST|PUT|DELETE /api/accounts`.
-  - Esquema D1 + migración inicial (`accounts`, `movements`, `instruments` auxiliar).
-  - Seguridad mínima: escritura bloqueada por default salvo `ARGFOLIO_SYNC_WRITE_ENABLED=1`.
+  - Esquema D1 + migraciï¿½n inicial (`accounts`, `movements`, `instruments` auxiliar).
+  - Seguridad mï¿½nima: escritura bloqueada por default salvo `ARGFOLIO_SYNC_WRITE_ENABLED=1`.
 
 ### Pendientes
 - QA manual cross-device real con dos navegadores/dispositivos y D1 remoto.
-- Endpoints de instrumentos no incluidos en este MVP (si se crean instrumentos custom en A, su replicación en B depende de backup/import o extensión futura).
+- Endpoints de instrumentos no incluidos en este MVP (si se crean instrumentos custom en A, su replicaciï¿½n en B depende de backup/import o extensiï¿½n futura).
 - Endurecer auth de escritura con Cloudflare Access antes de habilitar `ARGFOLIO_SYNC_WRITE_ENABLED=1`.
 
-### Validación
+### Validaciï¿½n
 - [x] `npm install` OK
 - [x] `npm run build` OK
 - [x] `npm test` OK
-- [x] Functions + migración + wrangler listos en repo para deploy.
+- [x] Functions + migraciï¿½n + wrangler listos en repo para deploy.
 
 ---
 
@@ -2338,3 +2338,56 @@ Extender sync remoto para incluir `snapshots` (v2) con cambios minimos: tabla D1
 4. Verificar en D1 Studio tabla `snapshots` (filas por `date`).
 5. Dispositivo B: configurar mismo token, recargar -> historial de snapshots sin duplicados por dia.
 6. Sin token o token invalido -> endpoints `/api/sync/*` deben devolver `401`.
+
+---
+
+## CHECKPOINT - FCI IOLCAMA Custom Fund (2026-02-10)
+
+### Objetivo
+Agregar el FCI "IOL Cash Management" (ticker IOLCAMA, BCBA) al listado de FCI en /market, con precio actualizado server-side desde la pagina publica de IOL, sin CORS, con cache via Cloudflare edge headers.
+
+### Archivos tocados
+| Accion | Archivo |
+|--------|---------|
+| NEW    | `src/domain/fci/providers/IolCamaProvider.ts` |
+| MODIFY | `src/server/market/fciProvider.ts` |
+
+### Cambios realizados
+
+- **IolCamaProvider.ts** (nuevo):
+  - `parseArgNumber(raw)`: parsea numeros en formato argentino (`,` decimal, `.` miles) a float.
+  - `parseIolCamaQuote(html)`: extrae precio y variacion diaria del HTML de IOL con regex tolerantes (estrategia 1: `<strong>$ X</strong>`, estrategia 2: texto "Ãšltimo" + precio).
+  - `buildIolCamaFund()`: fetch server-side a IOL con timeout 8s + AbortController, retorna `FciFund | null`.
+  - Retorna `null` en cualquier fallo (red, timeout, parse) â€” nunca rompe.
+  - Fund data: `id: "custom-iolcama"`, `name: "IOL Cash Management (IOLCAMA)"`, `category: "Money Market"`, `currency: "ARS"`, `term: "T+0"`.
+
+- **fciProvider.ts** (modificado):
+  - `fetchFci()` ahora usa `Promise.allSettled([ArgentinaDatos, buildIolCamaFund()])`.
+  - Si ArgentinaDatos falla, re-throws (es la fuente primaria).
+  - Si IOLCAMA falla, simplemente no se incluye en los resultados.
+  - Si ambos OK, IOLCAMA se appendea al array de items.
+
+### Decisiones y rationale
+- **No se modifico ningun componente frontend**: el listado FCI ya renderiza cualquier `FciFund[]` y la busqueda ya filtra por `name` y `manager` (ambos matchean "IOLCAMA" y "IOL Cash").
+- **No se agrego campo `ticker` al tipo**: se incluyo "(IOLCAMA)" en el name para mantener la searchability sin cambiar tipos.
+- **Cache**: se reutiliza el mecanismo existente de edge cache (`s-maxage=600, stale-while-revalidate=900`). No se agrego capa de cache adicional.
+- **Timeout**: 8 segundos (generoso para evitar falsos timeouts, pero acotado para no bloquear indefinidamente).
+- **Sin dependencias nuevas**: 0 npm deps agregadas.
+
+### Validacion ejecutada
+- [x] `npx tsc --noEmit` -> PASS (0 errors)
+- [x] `npm run build` -> PASS
+- [x] `npx eslint` sobre archivos tocados -> 0 errors, 0 warnings
+
+### Validacion manual recomendada
+1. `npm run dev` -> abrir `/market` -> tab "FCI"
+2. Buscar "IOLCAMA" -> debe aparecer "IOL Cash Management (IOLCAMA)"
+3. Buscar "IOL Cash" -> mismo resultado
+4. Verificar precio coincida (Â± redondeo) con IOL pagina publica
+5. Click en "Actualizar" -> refresca sin romper
+6. Simular fallo de IOL (ej: bloquear URL en hosts) -> FCI sigue funcionando sin IOLCAMA
+
+### Riesgos / pendientes
+- Si IOL cambia el HTML drasticamente, `parseIolCamaQuote` podria fallar silenciosamente (IOLCAMA desaparece del listado pero no rompe nada).
+- No hay cache persistente separado para IOLCAMA â€” si IOL esta caido y el edge cache expira, IOLCAMA no aparece hasta que IOL vuelva. Solucion futura: cache en KV o D1.
+- No hay test unitario del parser (vitest 4.x tiene issue conocido con deteccion de suites).
