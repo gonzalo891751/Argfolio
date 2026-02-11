@@ -3,7 +3,9 @@ import type { Account, Instrument, Movement, Snapshot } from '@/domain/types'
 
 const REMOTE_SYNC_FLAG = 'VITE_ARGFOLIO_REMOTE_SYNC'
 const REMOTE_SYNC_STATUS_EVENT = 'argfolio:remote-sync-status'
-const SYNC_TOKEN_STORAGE_KEY = 'argfolio-sync-token'
+export const SYNC_TOKEN_STORAGE_KEY = 'argfolio-sync-token'
+export const FINANCE_EXPRESS_STORAGE_KEY = 'budget_fintech'
+export const FINANCE_EXPRESS_UPDATED_AT_STORAGE_KEY = 'budget_fintech_updated_at'
 
 interface RemoteSyncStatusDetail {
     title: string
@@ -18,6 +20,7 @@ interface BootstrapResponse {
     instruments?: Instrument[]
     snapshots?: Snapshot[]
     financeExpress?: string | null
+    financeExpressUpdatedAt?: string | null
 }
 
 class HttpError extends Error {
@@ -52,6 +55,12 @@ function emitSyncStatus(detail: RemoteSyncStatusDetail): void {
 
 function toJsonBody(value: unknown): BodyInit {
     return JSON.stringify(value)
+}
+
+function toTimestampMs(value: string | null | undefined): number | null {
+    if (typeof value !== 'string' || value.trim().length === 0) return null
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : null
 }
 
 function readSyncToken(): string {
@@ -177,9 +186,27 @@ export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean;
                 }
             })
 
-            // Restore Finance Express data if remote has it and local is empty
+            // Last-write-wins restore for Finance Express data.
             if (typeof payload.financeExpress === 'string' && payload.financeExpress.length > 0) {
-                localStorage.setItem('budget_fintech', payload.financeExpress)
+                const localFinanceExpress = localStorage.getItem(FINANCE_EXPRESS_STORAGE_KEY)
+                const localUpdatedAt = localStorage.getItem(FINANCE_EXPRESS_UPDATED_AT_STORAGE_KEY)
+                const remoteUpdatedAt = typeof payload.financeExpressUpdatedAt === 'string'
+                    ? payload.financeExpressUpdatedAt
+                    : null
+                const localUpdatedAtMs = toTimestampMs(localUpdatedAt)
+                const remoteUpdatedAtMs = toTimestampMs(remoteUpdatedAt)
+                const shouldRestore =
+                    typeof localFinanceExpress !== 'string' ||
+                    localFinanceExpress.length === 0 ||
+                    localUpdatedAtMs == null ||
+                    (remoteUpdatedAtMs != null && remoteUpdatedAtMs > localUpdatedAtMs)
+
+                if (shouldRestore) {
+                    localStorage.setItem(FINANCE_EXPRESS_STORAGE_KEY, payload.financeExpress)
+                    if (remoteUpdatedAt && remoteUpdatedAtMs != null) {
+                        localStorage.setItem(FINANCE_EXPRESS_UPDATED_AT_STORAGE_KEY, remoteUpdatedAt)
+                    }
+                }
             }
 
             return { ok: true, offline: false }

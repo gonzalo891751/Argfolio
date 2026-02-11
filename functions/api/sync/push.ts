@@ -68,6 +68,12 @@ interface PushCounts {
     snapshots: number
 }
 
+interface FinanceExpressSaveResult {
+    saved: boolean
+    updated_at: string | null
+    size: number
+}
+
 function toIsoNow(): string {
     return new Date().toISOString()
 }
@@ -333,6 +339,10 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         const instruments = toArray<InstrumentPayload>(payload.data.instruments, 'data.instruments')
         const snapshots = toArray<SnapshotPayload>(payload.data.snapshots, 'data.snapshots')
         const manualPrices = toArray<unknown>(payload.data.manualPrices, 'data.manualPrices')
+        const financeExpress = typeof payload.data.financeExpress === 'string'
+            ? payload.data.financeExpress
+            : null
+        const hasFinanceExpress = typeof financeExpress === 'string' && financeExpress.length > 0
         const hasPreferences =
             payload.data.preferences != null &&
             typeof payload.data.preferences === 'object' &&
@@ -346,7 +356,13 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             ignored.push('preferences')
         }
 
-        if (accounts.length === 0 && movements.length === 0 && instruments.length === 0 && snapshots.length === 0) {
+        if (
+            accounts.length === 0 &&
+            movements.length === 0 &&
+            instruments.length === 0 &&
+            snapshots.length === 0 &&
+            !hasFinanceExpress
+        ) {
             const durationMs = toDurationMs(startedAtMs)
             console.log('[sync][push] no-op payload', {
                 durationMs,
@@ -354,6 +370,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
                 movements: 0,
                 instruments: 0,
                 snapshots: 0,
+                financeExpress: false,
             })
             return jsonResponse({
                 ok: true,
@@ -364,6 +381,9 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
                     snapshots: 0,
                 },
                 ignored,
+                saved: false,
+                updated_at: null,
+                size: 0,
                 durationMs,
             })
         }
@@ -389,6 +409,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             movements: movements.length,
             instruments: instruments.length,
             snapshots: snapshots.length,
+            financeExpress: hasFinanceExpress,
         })
 
         const db = getDatabase(context.env)
@@ -428,15 +449,24 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         }
 
         // Finance Express (budget_fintech localStorage data)
-        if (typeof payload.data.financeExpress === 'string' && payload.data.financeExpress.length > 0) {
+        const financeExpressResult: FinanceExpressSaveResult = {
+            saved: false,
+            updated_at: null,
+            size: 0,
+        }
+        if (hasFinanceExpress && financeExpress != null) {
             try {
+                const updatedAt = toIsoNow()
                 await db.prepare(`
 INSERT INTO finance_express_data (id, data, updated_at)
 VALUES ('default', ?1, ?2)
 ON CONFLICT(id) DO UPDATE SET
   data = excluded.data,
   updated_at = excluded.updated_at
-`).bind(payload.data.financeExpress, toIsoNow()).run()
+`).bind(financeExpress, updatedAt).run()
+                financeExpressResult.saved = true
+                financeExpressResult.updated_at = updatedAt
+                financeExpressResult.size = financeExpress.length
             } catch (error: any) {
                 ignored.push(`financeExpress (${error?.message || 'table missing or unavailable'})`)
             }
@@ -453,12 +483,17 @@ ON CONFLICT(id) DO UPDATE SET
             durationMs,
             ...counts,
             ignored: ignored.length,
+            financeExpressSaved: financeExpressResult.saved,
+            financeExpressSize: financeExpressResult.size,
         })
 
         return jsonResponse({
             ok: true,
             counts,
             ignored,
+            saved: financeExpressResult.saved,
+            updated_at: financeExpressResult.updated_at,
+            size: financeExpressResult.size,
             durationMs,
         })
     } catch (error) {

@@ -39,6 +39,7 @@ function createBootstrapPayload({
     instruments,
     snapshots,
     financeExpress,
+    financeExpressUpdatedAt,
     durationMs,
     degraded = false,
 }: {
@@ -48,6 +49,7 @@ function createBootstrapPayload({
     instruments: unknown[]
     snapshots?: unknown[]
     financeExpress?: string | null
+    financeExpressUpdatedAt?: string | null
     durationMs: number
     degraded?: boolean
 }) {
@@ -63,6 +65,7 @@ function createBootstrapPayload({
         instruments,
         snapshots: Array.isArray(snapshots) ? snapshots : [],
         financeExpress: typeof financeExpress === 'string' ? financeExpress : null,
+        financeExpressUpdatedAt: typeof financeExpressUpdatedAt === 'string' ? financeExpressUpdatedAt : null,
     }
 }
 
@@ -147,14 +150,18 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             safeQueryRows(db, snapshotsSql, 'snapshots', snapshotsBindings),
         ])
 
-        // Finance Express data (singleton row)
+        // Finance Express data
         let financeExpress: string | null = null
+        let financeExpressUpdatedAt: string | null = null
         try {
             const feRow = await db.prepare(
-                "SELECT data FROM finance_express_data WHERE id = 'default'"
-            ).first<{ data?: string }>()
+                'SELECT data, updated_at FROM finance_express_data ORDER BY updated_at DESC LIMIT 1'
+            ).first<{ data?: string; updated_at?: string }>()
             if (typeof feRow?.data === 'string') {
                 financeExpress = feRow.data
+            }
+            if (typeof feRow?.updated_at === 'string') {
+                financeExpressUpdatedAt = feRow.updated_at
             }
         } catch {
             // Table may not exist yet — ignore
@@ -168,6 +175,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             instruments: instruments.length,
             snapshots: snapshots.length,
             financeExpress: financeExpress != null,
+            financeExpressUpdatedAt,
             degraded: false,
         })
         console.info('[sync/bootstrap] snapshot served', {
@@ -186,6 +194,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             instruments,
             snapshots,
             financeExpress,
+            financeExpressUpdatedAt,
             durationMs,
         })), {
             headers: {
@@ -220,3 +229,4 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         })
     }
 }
+

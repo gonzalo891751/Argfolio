@@ -1218,7 +1218,26 @@
 
             save() {
                 localStorage.setItem('budget_fintech', JSON.stringify(this.state));
+                this.notifyHostBudgetUpdated();
                 this.render();
+            }
+
+            notifyHostBudgetUpdated() {
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type: 'argfolio:finance-express-data-updated',
+                            key: 'budget_fintech',
+                            timestamp: new Date().toISOString()
+                        }, window.location.origin);
+                        window.parent.postMessage({
+                            type: 'data-updated',
+                            key: 'budget_fintech'
+                        }, window.location.origin);
+                    }
+                } catch (error) {
+                    console.debug('Unable to notify host budget update', error);
+                }
             }
 
             updateVal(path, val) {

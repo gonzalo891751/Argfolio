@@ -2615,3 +2615,56 @@ npx wrangler d1 migrations apply argfolio-prod --remote
 3. **Conflicto de temas** — el módulo tiene su propio toggle dark/light independiente del tema de Argfolio; unificar via postMessage o CSS injection
 4. **FX rate sharing** — el módulo fetches dolar oficial por su cuenta; podría usar el FX de Argfolio via postMessage
 
+
+---
+
+## CHECKPOINT - Fix Autosync Finanzas Express PC<->Celu (2026-02-11)
+
+### Objetivo
+Corregir el autosync de Finanzas Express para que budget_fintech se suba automaticamente a D1 al cambiar en el iframe, y que bootstrap restaure con regla last-write-wins por updated_at.
+
+### Archivos tocados
+1. src/pages/finanzas-express.tsx
+2. public/apps/finanzas-express/index.html
+3. src/sync/remote-sync.ts
+4. functions/api/sync/push.ts
+5. functions/api/sync/bootstrap.ts
+
+### Causa raiz encontrada
+- No habia bridge autosync real para budget_fintech en el wrapper React de /finanzas-express; solo existia sync manual por Settings.
+- En POST /api/sync/push, un retorno temprano "no-op" devolvia ok:true cuando no habia accounts/movements/instruments/snapshots, por lo que un payload solo con financeExpress podia terminar en falso positivo de guardado sin persistir nada.
+
+### Cambios aplicados
+- Cliente (src/pages/finanzas-express.tsx):
+  - Bridge de autosync con deteccion por storage + fallback postMessage.
+  - Debounce de push a /api/sync/push.
+  - Estado UI robusto: Guardando, Guardado, Error, Sin token / No sincroniza.
+  - Guardado solo se marca si response.ok y body.saved === true.
+  - Si falta argfolio-sync-token, no se intenta push y se muestra CTA a Settings.
+  - Instrumentacion de logs solo en dev o con flag localStorage['argfolio-finance-sync-debug']='1'.
+- Iframe (public/apps/finanzas-express/index.html):
+  - En cada save(), envio de postMessage al parent (argfolio:finance-express-data-updated y compat data-updated).
+- Server push (functions/api/sync/push.ts):
+  - Se procesa data.financeExpress aunque el resto del payload este vacio.
+  - Persistencia en finance_express_data (upsert singleton) con updated_at server-side.
+  - Respuesta explicita para confirmacion cliente: saved, updated_at, size (manteniendo counts por compatibilidad).
+- Server bootstrap (functions/api/sync/bootstrap.ts):
+  - Devuelve financeExpress + financeExpressUpdatedAt.
+  - Lectura robusta del ultimo registro por updated_at.
+- Last-write-wins (src/sync/remote-sync.ts):
+  - Bootstrap compara financeExpressUpdatedAt remoto contra budget_fintech_updated_at local.
+  - Restaura remoto solo si local no tiene metadata o si remoto es mas nuevo.
+
+### Pasos para probar (PC + celu)
+1. En ambos dispositivos, configurar el mismo token en Settings (argfolio-sync-token).
+2. Dispositivo A (PC): abrir /finanzas-express, editar un dato.
+3. Verificar en Network: POST /api/sync/push con 200 y body con saved:true + updated_at.
+4. Dispositivo B (celu): recargar la app para forzar bootstrap.
+5. Verificar en Network: GET /api/sync/bootstrap devuelve financeExpress y financeExpressUpdatedAt.
+6. Confirmar que Finanzas Express muestra el cambio al recargar.
+7. Repetir invertido: editar en B, recargar en A.
+
+### Notas operativas
+- El token es por dispositivo/browser: sin token local no hay push automatico.
+- No hay tiempo real: el dispositivo receptor necesita refresh para bootstrap.
+- Este ticket no avanza Fase C2 (migracion nativa); solo corrige autosync cross-device del iframe.
