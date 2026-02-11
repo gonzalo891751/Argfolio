@@ -15,8 +15,7 @@
       "Bash(npx vitest:*)",
       "Bash(node -e:*)",
       "Bash(git log:*)",
-      "WebFetch(domain:iol.invertironline.com)",
-      "Bash(find:*)"
+      "WebFetch(domain:iol.invertironline.com)"
     ]
   }
 }

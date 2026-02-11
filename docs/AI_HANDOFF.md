@@ -2796,3 +2796,89 @@ Corregir el autosync de Finanzas Express para que budget_fintech se suba automat
 - El token es por dispositivo/browser: sin token local no hay push automatico.
 - No hay tiempo real: el dispositivo receptor necesita refresh para bootstrap.
 - Este ticket no avanza Fase C2 (migracion nativa); solo corrige autosync cross-device del iframe.
+
+## CHECKPOINT - Fix Pull-on-Mount Finanzas Express Cross-Device (2026-02-11)
+
+### Objetivo
+Corregir que los cambios en Finanzas Express hechos en un dispositivo aparezcan en el otro al recargar. El push (local→D1) ya funcionaba; faltaba el pull (D1→localStorage→iframe) al cargar la pagina.
+
+### Archivos tocados
+1. src/pages/finanzas-express.tsx
+
+### Causa raiz encontrada
+- **No habia pull en /finanzas-express**: La pagina solo tenia logica de push (detectar cambios del iframe → enviar a D1). No tenia logica de pull.
+- **Race condition bootstrap vs iframe**: `bootstrapRemoteSync()` corre globalmente en `GlobalDataHandler` (async). El iframe carga en paralelo y lee `localStorage.getItem('budget_fintech')` en su constructor. En la mayoria de los casos, el iframe gana la carrera y muestra datos stale. Aun cuando bootstrap escribe datos frescos a localStorage, el iframe ya esta inicializado y nadie lo notifica.
+- **El push SI funcionaba**: El badge "Guardado" era real (verificado: solo se muestra si `response.ok && body.saved === true`). El problema era exclusivamente del lado del pull/restore en el dispositivo receptor.
+
+### Cambios aplicados
+- **Pull on mount** (`pullRemoteData`):
+  - Al montar la pagina, si hay token, se llama `bootstrapRemoteSync()` (reutiliza la promise in-flight del global bootstrap; no duplica requests).
+  - Se compara localStorage antes/despues del pull.
+  - Si los datos cambiaron, se recarga el iframe via `iframeRef.current.contentWindow.location.reload()`.
+- **Anti-loop robusto** (`isRestoringFromRemoteRef`):
+  - Flag que bloquea `schedulePush`, `flushPush`, `onStorage`, y `onMessage` mientras se aplican datos remotos.
+  - Se limpia automaticamente despues de `DEBOUNCE_MS + 500ms` para prevenir que el `save()` del iframe post-reload re-pushee datos recien pulleados.
+  - `lastPushedPayloadRef` y `pendingPayloadRef` se actualizan al valor remoto para doble proteccion.
+- **Boton "Traer ultimo"**:
+  - Pull manual desde la toolbar para debugging y uso explicito.
+  - Deshabilitado durante pull/push activo.
+- **Estado UI ampliado**:
+  - Nuevo estado `pulling` con mensaje "Descargando...".
+  - "Datos remotos aplicados" cuando pull exitoso cambio datos.
+  - "Sin conexion al descargar" cuando bootstrap fallo por red.
+- **Hardening 401/403**:
+  - 401: "Token invalido (401). Revisa en Settings."
+  - 403: "Sync deshabilitado en servidor (403)"
+
+### Archivos NO tocados (ya correctos)
+- `functions/api/sync/push.ts` — Push server-side funciona correctamente
+- `functions/api/sync/bootstrap.ts` — Bootstrap devuelve financeExpress + updated_at
+- `src/sync/remote-sync.ts` — Last-write-wins logic correcta
+- `public/apps/finanzas-express/index.html` — postMessage bridge correcto
+
+### Flujo end-to-end post-fix
+1. **Device A edita** → iframe `save()` → postMessage → parent `schedulePush` → debounce → `flushPush` → `POST /api/sync/push` → D1 upsert → response `saved:true` → badge "Guardado"
+2. **Device B recarga** → React monta → `GlobalDataHandler` dispara `bootstrapRemoteSync()` (async) → `FinanzasExpressPage` monta → `pullRemoteData('mount')` llama `bootstrapRemoteSync()` (reutiliza promise in-flight) → bootstrap completa → escribe localStorage → compara antes/despues → datos cambiaron → recarga iframe → iframe lee datos frescos de localStorage → badge "Datos remotos aplicados"
+
+### Pasos para probar (PC + celu)
+1. En ambos dispositivos, configurar el mismo token en Settings (argfolio-sync-token).
+2. Dispositivo A: abrir /finanzas-express, editar un valor (ej: cambiar monto de ingreso).
+3. Esperar 2-3s, verificar badge "Guardado" (o en Network: POST /api/sync/push → 200 con saved:true).
+4. Dispositivo B: recargar /finanzas-express.
+5. Verificar que el cambio aparece (o en Network: GET /api/sync/bootstrap con financeExpress no null).
+6. Repetir invertido: editar en B, recargar en A.
+7. Verificar boton "Traer ultimo" hace pull manual y recarga iframe si hay datos nuevos.
+
+### Verificacion build
+- `npx tsc --noEmit` → 0 errores
+- `npm run build` → OK (12.8s)
+
+### Decisiones clave
+- **Pull en pagina, no global**: Se hizo el pull en `FinanzasExpressPage` (no en `App.tsx` ni `GlobalDataHandler`) para scope tight. `bootstrapRemoteSync()` deduplica con el global; no hay request extra.
+- **Iframe reload, no postMessage**: Se eligio recargar el iframe completo en vez de agregar un listener de postMessage al standalone module. Mas simple, sin tocar `index.html`, y el iframe carga rapido (archivo estatico).
+- **Flag temporal vs key de iframe**: Se uso `isRestoringFromRemoteRef` + timeout en vez de cambiar el `key` del iframe para evitar flicker y mantener el UX limpio.
+
+## CHECKPOINT - Merge Conflict Resolution finanzas-express.tsx (2026-02-11)
+
+### Objetivo
+Resolver conflicto de merge entre rama `Probable` (autosync push+pull) y `origin/main` (skeleton basico) para que el PR sea mergeable.
+
+### Archivos tocados
+1. src/pages/finanzas-express.tsx (conflicto resuelto)
+
+### Conflicto encontrado
+- **Conflict 1** (imports + toda la logica): HEAD tenia la implementacion completa de autosync (push + pull on mount + anti-loop + status UI); main tenia un skeleton de 4 lineas sin funcionalidad.
+- **Conflict 2** (toolbar): HEAD tenia toolbar con sync status badge, CTA "Configurar token", boton "Traer ultimo", y boton "Abrir en pestana nueva"; main tenia toolbar plano con solo titulo y boton externo.
+- **Codigo roto en main** (no-conflict zone): `onLoad={handleIframeLoad}` referenciaba una funcion inexistente en ambas ramas. Eliminado.
+
+### Resolucion
+- Se mantuvo la version completa de HEAD (rama Probable) con toda la funcionalidad de autosync.
+- Se elimino `onLoad={handleIframeLoad}` que era codigo roto introducido en main.
+- Funcionalidad integrada: push (debounce → D1), pull on mount (bootstrap → localStorage → iframe reload), anti-loop flag, manual pull button, status UI robusto (401/403/offline/saved), boton "Traer ultimo".
+
+### Verificacion build
+- `npx tsc --noEmit` → 0 errores
+- `npm run build` → OK (12s)
+
+### Nota sobre theme/FX y ?native=1
+- Estas features no estaban en ninguna de las dos ramas del conflicto. Si existian en commits previos, fueron perdidas antes del merge. No se agregaron en esta resolucion para mantener scope minimo.
