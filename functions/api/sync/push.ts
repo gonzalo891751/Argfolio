@@ -51,6 +51,7 @@ interface PushPayload {
         snapshots?: SnapshotPayload[]
         manualPrices?: unknown[]
         preferences?: Record<string, unknown>
+        financeExpress?: string | null
     }
 }
 
@@ -423,6 +424,21 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
                 snapshotsUpserted = snapshots.length
             } catch (error: any) {
                 ignored.push(`snapshots (${error?.message || 'table missing or unavailable'})`)
+            }
+        }
+
+        // Finance Express (budget_fintech localStorage data)
+        if (typeof payload.data.financeExpress === 'string' && payload.data.financeExpress.length > 0) {
+            try {
+                await db.prepare(`
+INSERT INTO finance_express_data (id, data, updated_at)
+VALUES ('default', ?1, ?2)
+ON CONFLICT(id) DO UPDATE SET
+  data = excluded.data,
+  updated_at = excluded.updated_at
+`).bind(payload.data.financeExpress, toIsoNow()).run()
+            } catch (error: any) {
+                ignored.push(`financeExpress (${error?.message || 'table missing or unavailable'})`)
             }
         }
 

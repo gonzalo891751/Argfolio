@@ -85,7 +85,8 @@ function SheetContent({
                 <div className="flex-1 overflow-y-auto">
                     <button
                         onClick={() => context.onOpenChange(false)}
-                        className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 z-50"
+                        className="absolute right-2 top-2 w-11 h-11 flex items-center justify-center rounded-full opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 z-50"
+                        style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
                     >
                         <X className="h-4 w-4" />
                         <span className="sr-only">Cerrar</span>

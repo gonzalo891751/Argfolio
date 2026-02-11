@@ -89,6 +89,12 @@ CREATE TABLE IF NOT EXISTS snapshots (
   payload_json TEXT NOT NULL,
   updated_at INTEGER
 )`),
+        db.prepare(`
+CREATE TABLE IF NOT EXISTS finance_express_data (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  data TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)`),
     ]
 
     await safeBatch(db, statements, 50)

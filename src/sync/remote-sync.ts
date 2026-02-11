@@ -17,6 +17,7 @@ interface BootstrapResponse {
     movements: Movement[]
     instruments?: Instrument[]
     snapshots?: Snapshot[]
+    financeExpress?: string | null
 }
 
 class HttpError extends Error {
@@ -175,6 +176,11 @@ export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean;
                     await db.snapshots.bulkPut(snapshotsToPersist)
                 }
             })
+
+            // Restore Finance Express data if remote has it and local is empty
+            if (typeof payload.financeExpress === 'string' && payload.financeExpress.length > 0) {
+                localStorage.setItem('budget_fintech', payload.financeExpress)
+            }
 
             return { ok: true, offline: false }
         } catch (error) {

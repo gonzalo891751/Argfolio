@@ -6,6 +6,7 @@ import {
     ArrowLeftRight,
     History,
     CreditCard,
+    Calculator,
     Settings,
     ChevronLeft,
 
@@ -45,6 +46,7 @@ const navItems = [
     { path: '/movements', label: 'Movimientos', icon: ArrowLeftRight },
     { path: '/history', label: 'Historial', icon: History },
     { path: '/personal-finances', label: 'Finanzas', icon: CreditCard },
+    { path: '/finanzas-express', label: 'Presupuesto', icon: Calculator },
     { path: '/settings', label: 'Configurar', icon: Settings },
 ]
 
