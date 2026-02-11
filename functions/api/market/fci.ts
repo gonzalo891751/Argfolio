@@ -1,12 +1,11 @@
-/**
- * Cloudflare Pages Function: /api/fci/latest (legacy)
- *
- * Backward-compatible alias of /api/market/fci.
- */
-
 import { fetchFci } from '../../../src/server/market/fciProvider'
 
-export const onRequest: PagesFunction = async () => {
+/**
+ * Cloudflare Pages Function: /api/market/fci
+ *
+ * Keeps parity with Vite dev middleware and returns the shape consumed by the UI.
+ */
+export const onRequestGet: PagesFunction = async () => {
     try {
         const data = await fetchFci()
 
@@ -26,7 +25,7 @@ export const onRequest: PagesFunction = async () => {
         })
     } catch (err: unknown) {
         const details = err instanceof Error ? err.message : String(err)
-        console.error('FCI API error:', err)
+        console.error('FCI market API error:', err)
 
         return new Response(JSON.stringify({
             error: 'Failed to fetch FCI data',

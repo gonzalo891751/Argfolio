@@ -18,6 +18,14 @@ import type { FciFund, FciCategory, FciCurrency } from '@/domain/fci/types'
 
 const DEFAULT_PAGE_SIZE = 25
 
+function normalizeText(value: string): string {
+    return value
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+}
+
 export function FciMarketTab() {
     // Data fetching
     const { items, asOf, isLoading, isFetching, isError, error, refetch } = useMarketFci()
@@ -66,11 +74,11 @@ export function FciMarketTab() {
 
         // Filter by search
         if (searchText) {
-            const query = searchText.toLowerCase()
+            const query = normalizeText(searchText)
             result = result.filter(
                 (f) =>
-                    f.name.toLowerCase().includes(query) ||
-                    f.manager.toLowerCase().includes(query)
+                    normalizeText(f.name).includes(query) ||
+                    normalizeText(f.manager).includes(query)
             )
         }
 
@@ -171,7 +179,7 @@ export function FciMarketTab() {
                 </div>
                 <h3 className="text-foreground font-medium mb-1">No pudimos cargar los datos</h3>
                 <p className="text-muted-foreground text-sm mb-4 max-w-xs">
-                    {error?.message || 'Hubo un error al conectar con el servidor. Por favor intentá de nuevo.'}
+                    {error?.message || 'Hubo un error al conectar con el servidor. Por favor intenta de nuevo.'}
                 </p>
                 <button
                     onClick={handleRefresh}
@@ -216,7 +224,7 @@ export function FciMarketTab() {
                             Fondos Comunes
                         </h1>
                         <p className="text-muted-foreground text-lg max-w-2xl">
-                            Explorá y compará el rendimiento de los principales FCI de Argentina.
+                            Explora y compara el rendimiento de los principales FCI de Argentina.
                             Valores de cuotaparte al cierre anterior.
                         </p>
                     </div>
@@ -271,7 +279,9 @@ export function FciMarketTab() {
                     </div>
                     <h3 className="text-foreground font-medium mb-1">No encontramos resultados</h3>
                     <p className="text-muted-foreground text-sm mb-4">
-                        Probá cambiando los filtros o la búsqueda.
+                        {favOnly
+                            ? 'Mis Favoritos esta activo. Desactivalo para ver todos los fondos.'
+                            : 'Proba cambiando los filtros o la busqueda.'}
                     </p>
                     <button
                         onClick={() => {
@@ -325,3 +335,4 @@ export function FciMarketTab() {
         </div>
     )
 }
+

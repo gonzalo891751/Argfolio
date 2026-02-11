@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:cedears": "tsx scripts/generate-cedear-master.ts",
+    "smoke:iolcama": "node --import tsx scripts/smoke-iolcama.mjs",
     "predev": "npm run generate:cedears",
     "prebuild": "npm run generate:cedears"
   },

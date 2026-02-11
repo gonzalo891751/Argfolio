@@ -142,8 +142,8 @@ function devApiMiddleware(): Plugin {
                         return
                     }
 
-                    // /api/fci/latest
-                    if (req.url && req.url.startsWith('/api/fci/latest')) {
+                    // /api/market/fci and /api/fci/latest (legacy alias)
+                    if (req.url && (req.url.startsWith('/api/market/fci') || req.url.startsWith('/api/fci/latest'))) {
                         console.log('[DEV] FCI API request received')
                         try {
                             const { fetchFci } = await import('./src/server/market/fciProvider')
@@ -153,8 +153,15 @@ function devApiMiddleware(): Plugin {
 
                             res.setHeader('Content-Type', 'application/json')
                             res.setHeader('Access-Control-Allow-Origin', '*')
-                            res.setHeader('Cache-Control', 'public, max-age=60')
-                            res.end(JSON.stringify(data))
+                            res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=900')
+                            res.end(JSON.stringify({
+                                source: 'argentinaDatos+iol',
+                                updatedAt: data.asOf,
+                                total: data.items.length,
+                                asOf: data.asOf,
+                                items: data.items,
+                                data: data.items,
+                            }))
                             return
                         } catch (fciError: any) {
                             console.error('[DEV] FCI fetch error:', fciError.message)

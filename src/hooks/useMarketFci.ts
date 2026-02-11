@@ -1,8 +1,8 @@
 /**
  * useMarketFci Hook
- * 
- * Fetches FCI (Fondos Comunes de Inversión) data from /api/fci/latest
- * Following the pattern of useMarketCedears.
+ *
+ * Fetches FCI (Fondos Comunes de Inversion) data from /api/market/fci
+ * following the same server-side pattern used by market endpoints.
  */
 
 import { useQuery } from '@tanstack/react-query'
@@ -16,13 +16,22 @@ export interface UseMarketFciOptions {
 }
 
 async function fetchFciData(): Promise<FciFundResponse> {
-    const response = await fetch('/api/fci/latest')
+    const response = await fetch('/api/market/fci')
 
     if (!response.ok) {
         throw new Error(`FCI fetch failed: ${response.status}`)
     }
 
-    return response.json()
+    const payload = await response.json()
+
+    return {
+        asOf: payload.asOf ?? payload.updatedAt ?? new Date().toISOString(),
+        items: Array.isArray(payload.items)
+            ? payload.items
+            : Array.isArray(payload.data)
+                ? payload.data
+                : [],
+    }
 }
 
 export function useMarketFci(options: UseMarketFciOptions = {}) {

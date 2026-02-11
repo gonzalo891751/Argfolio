@@ -15,26 +15,41 @@ import type { FciFundResponse } from '../../domain/fci/types'
 export { fetchFciData }
 export type { FciFundResponse, FciFund, FciCategory, FciCurrency, FciTerm } from '../../domain/fci/types'
 
+function normalizeName(value: string): string {
+    return value
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+}
+
 /**
  * Fetch FCI data with error handling for API layer.
  * Merges ArgentinaDatos + custom IOLCAMA fund in parallel.
  */
 export async function fetchFci(): Promise<FciFundResponse> {
-    const [adResult, iolResult] = await Promise.allSettled([
+    const [argentinaDatosResult, iolResult] = await Promise.allSettled([
         fetchFciData('argentinaDatos'),
         buildIolCamaFund(),
     ])
 
-    // ArgentinaDatos is the primary source — if it fails, re-throw
-    if (adResult.status === 'rejected') {
-        throw adResult.reason
+    // ArgentinaDatos is the primary source: if it fails, the API must fail.
+    if (argentinaDatosResult.status === 'rejected') {
+        throw argentinaDatosResult.reason
     }
 
-    const response = adResult.value
+    const response = argentinaDatosResult.value
 
-    // Append IOLCAMA if the scrape succeeded
+    // IOLCAMA is best-effort: append when available and avoid duplicates.
     if (iolResult.status === 'fulfilled' && iolResult.value != null) {
-        response.items.push(iolResult.value)
+        const iolFund = iolResult.value
+        const alreadyExists = response.items.some((item) => (
+            item.id === iolFund.id || normalizeName(item.name) === normalizeName(iolFund.name)
+        ))
+
+        if (!alreadyExists) {
+            response.items.push(iolFund)
+        }
     }
 
     return response
