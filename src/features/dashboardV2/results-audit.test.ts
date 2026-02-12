@@ -198,4 +198,166 @@ describe('Results Audit - Logic Verification', () => {
         expect(item?.pnl.ars).toBeNull()
         expect(item?.subtitle).toContain('Faltan fechas')
     })
+
+    it('should set walletEmptyStateHint when TOTAL=0 but yield accounts exist', () => {
+        const walletItem: Partial<ItemV2> = {
+            id: 'wallet-yield-no-interest',
+            kind: 'wallet_yield',
+            accountId: 'acc-2',
+            valArs: 500000,
+            valUsd: 500,
+            label: 'Ualá',
+            yieldMeta: { tna: 40 }
+        }
+
+        // No interestTotalArs — simulating no INTEREST movements
+        const walletDetail: Partial<WalletDetail> = {
+            accountId: 'acc-2',
+            interestTotalArs: 0,
+            tna: 40
+        }
+
+        const walletDetailsMap = new Map<string, WalletDetail>()
+        walletDetailsMap.set('acc-2', walletDetail as WalletDetail)
+
+        const walletsRubro: Partial<RubroV2> = {
+            id: 'wallets',
+            providers: [{
+                id: 'prov-2',
+                name: 'Ualá',
+                items: [walletItem as ItemV2],
+                totals: { ars: 500000, usd: 500 },
+                pnl: { ars: 0, usd: 0 }
+            }],
+            totals: { ars: 500000, usd: 500 },
+            pnl: { ars: 0, usd: 0 }
+        }
+
+        const portfolio: Partial<PortfolioV2> = {
+            rubros: [walletsRubro as RubroV2],
+            walletDetails: walletDetailsMap,
+            fx: mockFx,
+            asOfISO: '2025-01-01T10:00:00Z'
+        }
+
+        const result = computeResultsCardModel({
+            portfolio: portfolio as PortfolioV2,
+            snapshots: [mockSnapshot],
+            periodKey: 'TOTAL',
+            now: new Date('2025-01-01T12:00:00Z')
+        })
+
+        const walletCategory = result.categories.find(c => c.key === 'wallets')
+        expect(walletCategory).toBeDefined()
+        expect(walletCategory?.pnl.ars).toBe(0)
+        expect(walletCategory?.walletEmptyStateHint).toBe(true)
+    })
+
+    it('should NOT set walletEmptyStateHint when interest exists', () => {
+        const walletItem: Partial<ItemV2> = {
+            id: 'wallet-with-interest',
+            kind: 'wallet_yield',
+            accountId: 'acc-3',
+            valArs: 100000,
+            valUsd: 100,
+            label: 'Mercado Pago',
+            yieldMeta: { tna: 45 }
+        }
+
+        const walletDetail: Partial<WalletDetail> = {
+            accountId: 'acc-3',
+            interestTotalArs: 1200,
+            tna: 45
+        }
+
+        const walletDetailsMap = new Map<string, WalletDetail>()
+        walletDetailsMap.set('acc-3', walletDetail as WalletDetail)
+
+        const walletsRubro: Partial<RubroV2> = {
+            id: 'wallets',
+            providers: [{
+                id: 'prov-3',
+                name: 'Mercado Pago',
+                items: [walletItem as ItemV2],
+                totals: { ars: 100000, usd: 100 },
+                pnl: { ars: 0, usd: 0 }
+            }],
+            totals: { ars: 100000, usd: 100 },
+            pnl: { ars: 0, usd: 0 }
+        }
+
+        const portfolio: Partial<PortfolioV2> = {
+            rubros: [walletsRubro as RubroV2],
+            walletDetails: walletDetailsMap,
+            fx: mockFx,
+            asOfISO: '2025-01-01T10:00:00Z'
+        }
+
+        const result = computeResultsCardModel({
+            portfolio: portfolio as PortfolioV2,
+            snapshots: [mockSnapshot],
+            periodKey: 'TOTAL',
+            now: new Date('2025-01-01T12:00:00Z')
+        })
+
+        const walletCategory = result.categories.find(c => c.key === 'wallets')
+        expect(walletCategory).toBeDefined()
+        expect(walletCategory?.pnl.ars).toBe(1200)
+        expect(walletCategory?.walletEmptyStateHint).toBe(false)
+    })
+
+    it('should mark period wallet results as isEstimated', () => {
+        const walletItem: Partial<ItemV2> = {
+            id: 'wallet-period',
+            kind: 'wallet_yield',
+            accountId: 'acc-4',
+            valArs: 200000,
+            valUsd: 200,
+            label: 'Naranja X',
+            yieldMeta: { tna: 38 }
+        }
+
+        const walletsRubro: Partial<RubroV2> = {
+            id: 'wallets',
+            providers: [{
+                id: 'prov-4',
+                name: 'Naranja X',
+                items: [walletItem as ItemV2],
+                totals: { ars: 200000, usd: 200 },
+                pnl: { ars: 0, usd: 0 }
+            }],
+            totals: { ars: 200000, usd: 200 },
+            pnl: { ars: 0, usd: 0 }
+        }
+
+        const portfolio: Partial<PortfolioV2> = {
+            rubros: [walletsRubro as RubroV2],
+            walletDetails: new Map(),
+            fx: mockFx,
+            asOfISO: '2025-02-01T10:00:00Z',
+            kpis: { totalArs: 200000, totalUsd: 200, totalUsdEq: 200, pnlUnrealizedArs: 0, pnlUnrealizedUsd: 0, pnlUnrealizedUsdEq: 0 } as PortfolioV2['kpis'],
+        }
+
+        const snapshotWithBreakdown: Snapshot = {
+            ...mockSnapshot,
+            dateLocal: '2025-01-01',
+            breakdownRubros: { wallets: { ars: 200000, usd: 200 } },
+            breakdownItems: {},
+        }
+
+        const result = computeResultsCardModel({
+            portfolio: portfolio as PortfolioV2,
+            snapshots: [snapshotWithBreakdown],
+            periodKey: '30D',
+            now: new Date('2025-02-01T12:00:00Z')
+        })
+
+        const walletCategory = result.categories.find(c => c.key === 'wallets')
+        expect(walletCategory).toBeDefined()
+        expect(walletCategory?.isEstimated).toBe(true)
+
+        const item = walletCategory?.items.find(i => i.id === 'wallet-period')
+        expect(item?.subtitle).toContain('Estimado')
+        expect(item?.pnl.ars).toBeGreaterThan(0)
+    })
 })
