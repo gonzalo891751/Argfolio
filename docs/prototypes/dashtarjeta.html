@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Resultados Dashboard</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Configuration & Custom Styles -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                            primary: '#6366f1',
+                            accent: '#0ea5e9',
+                        },
+                        semantic: {
+                            up: '#10b981',
+                            down: '#f43f5e',
+                            warn: '#f59e0b',
+                            info: '#3b82f6',
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-sm': '0 0 10px -2px rgba(99, 102, 241, 0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+            --bg-surface: #151E32;
+            --bg-surface-2: #1E293B;
+            --border-subtle: rgba(255,255,255,0.08);
+            
+            --text-primary: #F8FAFC;
+            --text-secondary: #94A3B8;
+            
+            --col-primary: #6366f1;
+            --col-success: #10b981;
+            --col-danger: #f43f5e;
+            --col-warning: #f59e0b;
+        }
+
+        body {
+            background-color: var(--bg-app);
+            color: var(--text-primary);
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-subtle);
+        }
+
+        /* Scrollbar styling para los tabs en mobile */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Utility for smooth number transitions */
+        .value-transition {
+            transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+        }
+        .value-updating {
+            opacity: 0.5;
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-12">
+
+    <!-- Navbar / Header (Mock) -->
+    <header class="sticky top-0 z-40 glass-panel border-b border-white/5 px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <svg class="w-6 h-6 text-brand-primary" viewBox="0 0 40 40" fill="none">
+                <path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/>
+                <circle cx="20" cy="14" r="3" class="text-white" fill="currentColor"/>
+            </svg>
+            <span class="font-display font-bold text-xl tracking-wide">Argfolio</span>
+            <span class="px-2 py-0.5 ml-2 rounded text-[10px] font-mono font-medium bg-brand-primary/20 text-indigo-300 border border-indigo-500/30">
+                PROTOTIPO
+            </span>
+        </div>
+
+        <!-- Modo Debug Switch -->
+        <div class="flex items-center gap-3 bg-slate-900/50 p-1.5 rounded-lg border border-white/10">
+            <label for="debug-mode" class="text-xs font-mono text-slate-400 pl-2">DEBUG:</label>
+            <select id="debug-mode" class="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer pr-2 appearance-none">
+                <option value="normal" class="bg-brand-900">Snapshot OK</option>
+                <option value="estimado" class="bg-brand-900">Falta Billetera (Estimado)</option>
+                <option value="bug" class="bg-brand-900">Snapshot en cero (Bug)</option>
+            </select>
+            <svg class="w-3 h-3 text-slate-400 mr-2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Layout -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Columna Principal (Izquierda) -->
+        <div class="lg:col-span-8 space-y-6">
+            
+            <!-- TARJETA RESULTADOS (NUEVA) -->
+            <section class="glass-panel rounded-2xl p-6 shadow-lg relative overflow-hidden">
+                <!-- Decorative glow -->
+                <div class="absolute top-0 right-0 w-64 h-64 bg-brand-primary/10 rounded-full blur-[80px] pointer-events-none -translate-y-1/2 translate-x-1/2"></div>
+                
+                <!-- Header Card -->
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 relative z-10">
+                    <div>
+                        <h2 class="font-display text-2xl font-bold text-white flex items-center gap-2">
+                            Resultados
+                            <span id="badge-status" class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase transition-colors">
+                                Snapshot OK
+                            </span>
+                        </h2>
+                        <p class="text-sm text-slate-400 mt-1">Basado en snapshot 00:00. P&L excluyendo movimientos.</p>
+                    </div>
+                    
+                    <!-- Time Toggles -->
+                    <div class="flex bg-slate-950/50 p-1 rounded-lg border border-white/10 w-full sm:w-auto overflow-x-auto hide-scrollbar">
+                        <button class="period-btn active px-3 py-1.5 rounded-md text-xs font-bold transition-all w-full sm:w-auto shrink-0" data-period="TOTAL">TOTAL</button>
+                        <button class="period-btn text-slate-400 hover:text-white px-3 py-1.5 rounded-md text-xs font-medium transition-all w-full sm:w-auto shrink-0" data-period="1D">1D</button>
+                        <button class="period-btn text-slate-400 hover:text-white px-3 py-1.5 rounded-md text-xs font-medium transition-all w-full sm:w-auto shrink-0" data-period="7D">7D</button>
+                        <button class="period-btn text-slate-400 hover:text-white px-3 py-1.5 rounded-md text-xs font-medium transition-all w-full sm:w-auto shrink-0" data-period="30D">30D</button>
+                        <button class="period-btn text-slate-400 hover:text-white px-3 py-1.5 rounded-md text-xs font-medium transition-all w-full sm:w-auto shrink-0" data-period="90D">90D</button>
+                        <button class="period-btn text-slate-400 hover:text-white px-3 py-1.5 rounded-md text-xs font-medium transition-all w-full sm:w-auto shrink-0" data-period="1Y">1Y</button>
+                    </div>
+                </div>
+
+                <!-- Main Metric -->
+                <div class="mb-8 relative z-10">
+                    <div class="text-xs font-mono text-slate-500 mb-2 uppercase tracking-widest">P&L Neto</div>
+                    
+                    <div class="flex flex-col gap-1">
+                        <!-- ARS Metric -->
+                        <div class="flex items-baseline gap-3">
+                            <h3 id="main-pnl-ars" class="font-mono text-4xl sm:text-5xl font-bold tracking-tight value-transition text-emerald-400">
+                                +$ 0,00
+                            </h3>
+                        </div>
+                        <!-- USD Metric -->
+                        <div class="flex items-baseline gap-2">
+                            <h4 id="main-pnl-usd" class="font-mono text-xl sm:text-2xl font-semibold tracking-tight value-transition text-emerald-400/80">
+                                +US$ 0,00
+                            </h4>
+                        </div>
+                    </div>
+
+                    <div class="text-xs text-slate-500 mt-3 flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Último snapshot: <span class="font-mono text-slate-400">2026-02-12 00:00</span>
+                    </div>
+                </div>
+
+                <!-- Breakdown List -->
+                <div class="space-y-1 relative z-10">
+                    <div class="flex justify-between items-end mb-3 px-2">
+                        <h4 class="text-xs font-display font-semibold text-slate-400 uppercase tracking-wider">Desglose por rubro</h4>
+                        <span class="text-[10px] text-slate-500 font-mono">Seleccioná un rubro para ver detalle</span>
+                    </div>
+                    
+                    <div id="breakdown-list" class="bg-slate-900/30 rounded-xl border border-white/5 overflow-hidden flex flex-col divide-y divide-white/5">
+                        <!-- Rows injected via JS -->
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Columna Secundaria (Derecha - Placeholders) -->
+        <div class="lg:col-span-4 space-y-6">
+            <!-- Placeholder Distribución -->
+            <div class="glass-panel rounded-2xl p-6 opacity-60">
+                <h3 class="font-display text-lg font-medium text-white mb-4">Distribución</h3>
+                <div class="flex items-center gap-6">
+                    <div class="relative w-24 h-24 rounded-full border-[6px] border-slate-700 border-l-brand-primary border-t-emerald-500 border-r-brand-accent">
+                         <div class="absolute inset-0 flex items-center justify-center font-mono text-xs text-white">100%</div>
+                    </div>
+                    <div class="space-y-3 w-full">
+                        <div class="h-2 w-full bg-slate-800 rounded"></div>
+                        <div class="h-2 w-3/4 bg-slate-800 rounded"></div>
+                        <div class="h-2 w-1/2 bg-slate-800 rounded"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Placeholder Riesgo -->
+            <div class="glass-panel rounded-2xl p-6 opacity-60">
+                <h3 class="font-display text-lg font-medium text-white mb-4">Riesgo & Métricas</h3>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <div class="h-3 w-20 bg-slate-800 rounded"></div>
+                        <div class="h-3 w-12 bg-slate-800 rounded"></div>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                        <div class="h-3 w-24 bg-slate-800 rounded"></div>
+                        <div class="h-3 w-16 bg-slate-800 rounded"></div>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div class="h-3 w-16 bg-slate-800 rounded"></div>
+                        <div class="h-3 w-14 bg-slate-800 rounded"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Detalle Rubro -->
+    <div id="modal-rubro" class="fixed inset-0 z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeModal()"></div>
+        
+        <!-- Modal Content -->
+        <div class="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col transform scale-95 transition-transform duration-300" id="modal-rubro-content">
+            
+            <!-- Modal Header -->
+            <div class="px-6 py-5 border-b border-white/10 flex justify-between items-center bg-slate-800/50 shrink-0">
+                <div>
+                    <h3 class="font-display font-bold text-lg text-white" id="modal-title">Detalle: Rubro</h3>
+                    <p class="text-xs text-slate-400 mt-1" id="modal-subtitle">P&L = Valor Actual - Invertido</p>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white p-2 rounded-md hover:bg-white/10 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <!-- Modal Body (Scrollable) -->
+            <div class="p-0 overflow-y-auto custom-scrollbar flex-1 bg-[#0B1121]/50">
+                <table class="w-full text-left text-sm whitespace-nowrap md:whitespace-normal">
+                    <thead class="sticky top-0 bg-slate-900/95 backdrop-blur-md z-10 border-b border-white/10 shadow-sm">
+                        <tr class="text-xs font-mono text-slate-400 uppercase tracking-wider">
+                            <th class="py-4 px-6 font-medium">Activo</th>
+                            <th class="py-4 px-6 font-medium text-right">Invertido</th>
+                            <th class="py-4 px-6 font-medium text-right">Actual</th>
+                            <th class="py-4 px-6 font-medium text-right">Resultado (P&L)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5 text-slate-300" id="modal-table-body">
+                        <!-- Activos injectados via JS -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="px-6 py-4 bg-slate-900 border-t border-white/10 shrink-0">
+                <div class="flex justify-between items-center">
+                    <div class="text-sm font-display text-slate-400 uppercase tracking-widest font-semibold">Subtotal Rubro</div>
+                    <div class="text-right">
+                        <div class="font-mono text-lg font-bold text-white" id="modal-total-ars">+$ 0,00</div>
+                        <div class="font-mono text-sm font-medium text-slate-400" id="modal-total-usd">+US$ 0,00</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA LAYER (Mocked Snapshots based on Invertido vs Actual) ---
+        // Data structure: period -> category -> { invARS, valARS, invUSD, valUSD }
+        // The total P&L is derived: P&L = val - inv
+        
+        const baseData = {
+            '1D': {
+                cedears:     { invARS: 3000000, valARS: 3015000, invUSD: 3000, valUSD: 3010, count: 3 },
+                crypto:      { invARS: 1000000, valARS:  990000, invUSD: 1000, valUSD:  995, count: 3 },
+                fci:         { invARS:  800000, valARS:  802000, invUSD:  800, valUSD:  801, count: 2 },
+                wallets:     { invARS:  300000, valARS:  301500, invUSD:  300, valUSD:  301, count: 2 },
+                plazosFijos: { invARS: 1000000, valARS: 1002000, invUSD: 1000, valUSD:  998, count: 1 }
+            },
+            '7D': {
+                cedears:     { invARS: 3000000, valARS: 3100000, invUSD: 3000, valUSD: 3050, count: 3 },
+                crypto:      { invARS: 1000000, valARS: 1050000, invUSD: 1000, valUSD: 1020, count: 3 },
+                fci:         { invARS:  800000, valARS:  815000, invUSD:  800, valUSD:  805, count: 2 },
+                wallets:     { invARS:  300000, valARS:  308000, invUSD:  300, valUSD:  305, count: 2 },
+                plazosFijos: { invARS: 1000000, valARS: 1014000, invUSD: 1000, valUSD:  990, count: 1 }
+            },
+            '30D': {
+                cedears:     { invARS: 3000000, valARS: 3400000, invUSD: 3000, valUSD: 3200, count: 3 },
+                crypto:      { invARS: 1000000, valARS: 1150000, invUSD: 1000, valUSD: 1100, count: 3 },
+                fci:         { invARS:  800000, valARS:  860000, invUSD:  800, valUSD:  820, count: 2 },
+                wallets:     { invARS:  300000, valARS:  335000, invUSD:  300, valUSD:  320, count: 2 },
+                plazosFijos: { invARS: 1000000, valARS: 1060000, invUSD: 1000, valUSD:  980, count: 1 }
+            },
+            '90D': {
+                cedears:     { invARS: 2500000, valARS: 3500000, invUSD: 2500, valUSD: 3300, count: 3 },
+                crypto:      { invARS: 1000000, valARS: 1400000, invUSD: 1000, valUSD: 1250, count: 3 },
+                fci:         { invARS:  700000, valARS:  850000, invUSD:  700, valUSD:  800, count: 2 },
+                wallets:     { invARS:  300000, valARS:  380000, invUSD:  300, valUSD:  350, count: 2 },
+                plazosFijos: { invARS: 1000000, valARS: 1180000, invUSD: 1000, valUSD:  950, count: 1 }
+            },
+            '1Y': {
+                cedears:     { invARS: 1500000, valARS: 4200000, invUSD: 1500, valUSD: 3500, count: 3 },
+                crypto:      { invARS:  500000, valARS: 1800000, invUSD:  500, valUSD: 1400, count: 3 },
+                fci:         { invARS:  400000, valARS:  900000, invUSD:  400, valUSD:  750, count: 2 },
+                wallets:     { invARS:  150000, valARS:  320000, invUSD:  150, valUSD:  280, count: 2 },
+                plazosFijos: { invARS:  500000, valARS: 1200000, invUSD:  500, valUSD:  900, count: 1 }
+            },
+            'TOTAL': {
+                cedears:     { invARS: 1000000, valARS: 4500000, invUSD: 1000, valUSD: 3800, count: 3 },
+                crypto:      { invARS:  300000, valARS: 2100000, invUSD:  300, valUSD: 1500, count: 3 },
+                fci:         { invARS:  200000, valARS:  850000, invUSD:  200, valUSD:  780, count: 2 },
+                wallets:     { invARS:  100000, valARS:  340000, invUSD:  100, valUSD:  280, count: 2 },
+                plazosFijos: { invARS:  400000, valARS: 1200000, invUSD:  400, valUSD:  950, count: 1 }
+            }
+        };
+
+        const categoriesConfig = [
+            { id: 'cedears', label: 'CEDEARs', sub: 'activos', tag: 'precio' },
+            { id: 'crypto', label: 'Cripto', sub: 'activos', tag: 'precio' },
+            { id: 'fci', label: 'Fondos (FCI)', sub: 'fondos', tag: 'cuotaparte' },
+            { id: 'wallets', label: 'Billeteras', sub: 'cuentas', tag: 'acreditado', tagEstimado: 'estimado' },
+            { id: 'plazosFijos', label: 'Plazos fijos', sub: 'activos', tag: 'devengado' },
+        ];
+
+        // Pesos para distribuir el monto total en activos individuales dinámicamente
+        const assetWeights = {
+            cedears: [ { name: 'SPY', w: 0.5 }, { name: 'QQQ', w: 0.3 }, { name: 'AAPL', w: 0.2 } ],
+            crypto: [ { name: 'BTC', w: 0.6 }, { name: 'ETH', w: 0.3 }, { name: 'USDT', w: 0.1 } ],
+            fci: [ { name: 'IOLCAMA', w: 0.7 }, { name: 'Premier Renta', w: 0.3 } ],
+            wallets: [ { name: 'Mercado Pago', w: 0.6 }, { name: 'Fiwind', w: 0.4 } ],
+            plazosFijos: [ { name: 'PF-BancoNación', w: 1.0 } ]
+        };
+
+        // --- STATE ---
+        let currentPeriod = 'TOTAL';
+        let currentMode = 'normal';
+
+        // --- FORMATTERS ---
+        const formatCurrency = (num, currency = 'ARS') => {
+            const sign = num > 0 ? '+' : num < 0 ? '-' : '';
+            const absNum = Math.abs(num);
+            const formatted = new Intl.NumberFormat('es-AR', {
+                style: 'decimal',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(absNum);
+            
+            const prefix = currency === 'ARS' ? '$' : 'US$';
+            return `${sign}${prefix} ${formatted}`;
+        };
+
+        const getColorClass = (num) => {
+            if (num > 0.01) return 'text-semantic-up'; // Tolerance for float precision
+            if (num < -0.01) return 'text-semantic-down';
+            return 'text-slate-400';
+        };
+
+        // --- DATA PROCESSING ---
+        function getProcessedData() {
+            const raw = baseData[currentPeriod];
+            let data = { totalPnlARS: 0, totalPnlUSD: 0, items: {} };
+
+            categoriesConfig.forEach(cat => {
+                let d = raw[cat.id];
+                let valARS = d.valARS;
+                let valUSD = d.valUSD;
+                
+                let tag = cat.tag;
+                let tagColor = 'bg-slate-800 text-slate-300 border-white/5'; 
+                
+                // --- Debug Mode Modifiers ---
+                if (currentMode === 'bug') {
+                    // Forzamos que actual = invertido para que P&L sea 0
+                    valARS = d.invARS;
+                    valUSD = d.invUSD;
+                } else if (currentMode === 'estimado' && cat.id === 'wallets') {
+                    // Simular cálculo de P&L al 95% para "estimado"
+                    const realPnlARS = d.valARS - d.invARS;
+                    const realPnlUSD = d.valUSD - d.invUSD;
+                    valARS = d.invARS + (realPnlARS * 0.95);
+                    valUSD = d.invUSD + (realPnlUSD * 0.95);
+                    
+                    tag = cat.tagEstimado;
+                    tagColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                } else if (cat.id === 'wallets') {
+                    tagColor = 'bg-blue-500/10 text-blue-400 border-blue-500/20'; 
+                }
+
+                // Calculate P&L
+                const pnlARS = valARS - d.invARS;
+                const pnlUSD = valUSD - d.invUSD;
+
+                data.items[cat.id] = {
+                    invARS: d.invARS, valARS: valARS, pnlARS: pnlARS,
+                    invUSD: d.invUSD, valUSD: valUSD, pnlUSD: pnlUSD,
+                    count: d.count,
+                    tag: tag,
+                    tagColor: tagColor
+                };
+                
+                data.totalPnlARS += pnlARS;
+                data.totalPnlUSD += pnlUSD;
+            });
+
+            return data;
+        }
+
+        // --- RENDER MAIN UI ---
+        function renderUI() {
+            const data = getProcessedData();
+            
+            // 1. Update Main Totals with transition
+            const elARS = document.getElementById('main-pnl-ars');
+            const elUSD = document.getElementById('main-pnl-usd');
+            
+            elARS.classList.add('value-updating');
+            elUSD.classList.add('value-updating');
+            
+            setTimeout(() => {
+                elARS.textContent = formatCurrency(data.totalPnlARS, 'ARS');
+                elARS.className = `font-mono text-4xl sm:text-5xl font-bold tracking-tight value-transition ${currentMode === 'bug' ? 'text-slate-500' : getColorClass(data.totalPnlARS)}`;
+                
+                elUSD.textContent = formatCurrency(data.totalPnlUSD, 'USD');
+                elUSD.className = `font-mono text-xl sm:text-2xl font-semibold tracking-tight value-transition ${currentMode === 'bug' ? 'text-slate-600' : getColorClass(data.totalPnlUSD).replace('text-semantic', 'text-semantic').concat('/80')}`;
+                
+                elARS.classList.remove('value-updating');
+                elUSD.classList.remove('value-updating');
+            }, 150);
+
+            // 2. Update Breakdown List
+            const listEl = document.getElementById('breakdown-list');
+            listEl.innerHTML = '';
+            
+            categoriesConfig.forEach(cat => {
+                const item = data.items[cat.id];
+                
+                const arsStr = formatCurrency(item.pnlARS, 'ARS');
+                const usdStr = formatCurrency(item.pnlUSD, 'USD');
+                const colorClsARS = getColorClass(item.pnlARS);
+                const colorClsUSD = getColorClass(item.pnlUSD);
+                
+                const row = document.createElement('button');
+                row.className = 'w-full text-left flex items-center justify-between p-3 sm:px-4 hover:bg-white/[0.04] transition-colors focus:outline-none focus:bg-white/[0.06] group';
+                row.onclick = () => openModal(cat.id, cat.label);
+                
+                row.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-white/5 group-hover:border-white/20 transition-colors">
+                            <span class="font-display font-medium text-xs">${cat.label.charAt(0)}</span>
+                        </div>
+                        <div>
+                            <div class="text-sm font-medium text-white flex items-center gap-2">
+                                ${cat.label}
+                                <span class="hidden sm:inline-block px-1.5 py-0.5 rounded text-[9px] font-mono border ${item.tagColor} uppercase tracking-wider">
+                                    ${item.tag}
+                                </span>
+                            </div>
+                            <div class="text-xs text-slate-500">${item.count} ${cat.sub}</div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-mono text-sm sm:text-base font-medium ${colorClsARS}">${arsStr}</div>
+                        <div class="font-mono text-[10px] sm:text-xs mt-0.5 opacity-80 ${colorClsUSD}">${usdStr}</div>
+                        
+                        <!-- Mini sparkline mock visual indicator -->
+                        <div class="h-1 w-full bg-slate-800 mt-1.5 rounded overflow-hidden flex justify-end">
+                            <div class="h-full ${item.pnlARS > 0 ? 'bg-semantic-up/50' : item.pnlARS < 0 ? 'bg-semantic-down/50' : 'bg-transparent'}" style="width: ${item.pnlARS === 0 ? '0%' : '100%'}"></div>
+                        </div>
+                    </div>
+                `;
+                listEl.appendChild(row);
+            });
+
+            // 3. Update Badges
+            const badge = document.getElementById('badge-status');
+            if (currentMode === 'normal') {
+                badge.textContent = 'Snapshot OK';
+                badge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase transition-colors';
+            } else if (currentMode === 'estimado') {
+                badge.textContent = 'Datos Estimados';
+                badge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase transition-colors';
+            } else if (currentMode === 'bug') {
+                badge.textContent = 'Snapshot = 0';
+                badge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase transition-colors';
+            }
+        }
+
+        // --- RENDER MODAL ---
+        function openModal(catId, catLabel) {
+            const data = getProcessedData().items[catId];
+            const weights = assetWeights[catId];
+            
+            document.getElementById('modal-title').textContent = `Detalle: ${catLabel}`;
+            
+            const tbody = document.getElementById('modal-table-body');
+            tbody.innerHTML = '';
+            
+            // Generate rows dynamically matching exact totals
+            weights.forEach(asset => {
+                const w = asset.w;
+                // Distribute proportionally
+                const invARS = data.invARS * w;
+                const valARS = data.valARS * w;
+                const pnlARS = data.pnlARS * w;
+                
+                const invUSD = data.invUSD * w;
+                const valUSD = data.valUSD * w;
+                const pnlUSD = data.pnlUSD * w;
+                
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-white/[0.02] transition-colors group';
+                
+                tr.innerHTML = `
+                    <td class="py-4 px-6">
+                        <div class="font-medium text-white">${asset.name}</div>
+                        <div class="text-xs text-slate-500 mt-1 font-mono">${(w*100).toFixed(0)}% del rubro</div>
+                    </td>
+                    <td class="py-4 px-6 text-right">
+                        <div class="font-mono text-sm text-slate-300">${formatCurrency(invARS, 'ARS')}</div>
+                        <div class="font-mono text-xs text-slate-500 mt-1">${formatCurrency(invUSD, 'USD')}</div>
+                    </td>
+                    <td class="py-4 px-6 text-right">
+                        <div class="font-mono text-sm text-slate-300">${formatCurrency(valARS, 'ARS')}</div>
+                        <div class="font-mono text-xs text-slate-500 mt-1">${formatCurrency(valUSD, 'USD')}</div>
+                    </td>
+                    <td class="py-4 px-6 text-right">
+                        <div class="font-mono text-sm font-medium ${getColorClass(pnlARS)} group-hover:scale-105 transition-transform origin-right inline-block">${formatCurrency(pnlARS, 'ARS')}</div>
+                        <div class="font-mono text-xs mt-1 ${getColorClass(pnlUSD)}">${formatCurrency(pnlUSD, 'USD')}</div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            
+            // Set footer totals
+            const footARS = document.getElementById('modal-total-ars');
+            const footUSD = document.getElementById('modal-total-usd');
+            
+            footARS.textContent = formatCurrency(data.pnlARS, 'ARS');
+            footARS.className = `font-mono text-lg font-bold ${getColorClass(data.pnlARS)}`;
+            
+            footUSD.textContent = formatCurrency(data.pnlUSD, 'USD');
+            footUSD.className = `font-mono text-sm font-medium mt-1 ${getColorClass(data.pnlUSD)}`;
+
+            // Display modal
+            const modal = document.getElementById('modal-rubro');
+            const modalContent = document.getElementById('modal-rubro-content');
+            
+            modal.classList.remove('hidden');
+            void modal.offsetWidth; // trigger reflow
+            modal.classList.remove('opacity-0');
+            modalContent.classList.remove('scale-95');
+        }
+
+        window.closeModal = function() {
+            const modal = document.getElementById('modal-rubro');
+            const modalContent = document.getElementById('modal-rubro-content');
+            
+            modal.classList.add('opacity-0');
+            modalContent.classList.add('scale-95');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        };
+
+        // --- EVENT LISTENERS ---
+        // Toggles
+        document.querySelectorAll('.period-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.period-btn').forEach(b => {
+                    b.classList.remove('active', 'bg-white/10', 'text-white', 'shadow-sm');
+                    b.classList.add('text-slate-400');
+                });
+                
+                const target = e.target;
+                target.classList.remove('text-slate-400');
+                target.classList.add('active', 'bg-white/10', 'text-white', 'shadow-sm');
+                
+                currentPeriod = target.getAttribute('data-period');
+                renderUI();
+            });
+        });
+
+        // Setup initial active button styles
+        const initialActiveBtn = document.querySelector('.period-btn.active');
+        initialActiveBtn.classList.remove('text-slate-400');
+        initialActiveBtn.classList.add('bg-white/10', 'text-white', 'shadow-sm');
+
+        // Debug Select
+        document.getElementById('debug-mode').addEventListener('change', (e) => {
+            currentMode = e.target.value;
+            renderUI();
+        });
+
+        // Initialize
+        renderUI();
+
+    </script>
+</body>
+</html>
