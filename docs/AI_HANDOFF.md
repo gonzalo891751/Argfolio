@@ -2943,3 +2943,21 @@ El `buildWalletItemsTotal()` anterior calculaba `currentBalance - snapshotBalanc
 - Si no hay INTEREST movements (scheduler nunca corrió), wallet TOTAL mostrará 0. Se necesita correr el accrual scheduler al menos una vez.
 - Para períodos wallet, la estimación usa balance actual (no histórico del snapshot). Si hubo depósitos grandes recientes, el período puede sobreestimar ligeramente.
 - Snapshot V2 (`breakdownItems`) sigue guardando balances de wallet, no intereses. Un futuro enhancement podría agregar campo `pnl` a los snapshots para comparación exacta histórica.
+
+---
+
+## CHECKPOINT - Fix Resultados: Bugfix Fechas PF (2026-02-12)
+
+### Objetivo
+Corregir un bug introducido en la implementación de resultados PF donde fechas válidas se marcaban como "Faltan fechas".
+
+### Hallazgo
+La función `computePfAccrued` agregaba `T00:00:00Z` a fechas que ya eran ISO strings completos, resultando en `Invalid Date`.
+
+### Fix
+- `src/features/dashboardV2/results-service.ts`: Detectar si el string ya tiene tiempo antes de concatenar.
+- `src/features/dashboardV2/results-audit.test.ts`: Test unitario para verificar accrual con fechas ISO.
+
+### Estado
+- Billeteras: OK (0 por default es correcto).
+- PF: OK (devengado visible).
