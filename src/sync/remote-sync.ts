@@ -225,6 +225,74 @@ export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean;
     return task
 }
 
+// ---------------------------------------------------------------------------
+// Snapshot-only push — used by auto/manual snapshot save to sync to D1
+// without requiring the user to click "Subir todo a D1".
+// ---------------------------------------------------------------------------
+
+const SNAPSHOT_PUSH_DEBOUNCE_MS = 2000
+let snapshotPushTimeout: ReturnType<typeof setTimeout> | null = null
+let snapshotPushInFlight = false
+
+export async function syncPushSnapshots(snapshots: Snapshot[]): Promise<void> {
+    if (!isRemoteSyncEnabled()) return
+    if (snapshots.length === 0) return
+
+    const token = readSyncToken()
+    if (token.length === 0) {
+        console.log('[snapshots-sync] skip push: no sync token')
+        return
+    }
+
+    // Anti-loop: if already pushing, skip
+    if (snapshotPushInFlight) {
+        console.log('[snapshots-sync] skip push: already in flight')
+        return
+    }
+
+    // Debounce: clear any pending push and schedule a new one
+    if (snapshotPushTimeout != null) {
+        clearTimeout(snapshotPushTimeout)
+    }
+
+    return new Promise<void>((resolve, reject) => {
+        snapshotPushTimeout = setTimeout(async () => {
+            snapshotPushInFlight = true
+            try {
+                console.log('[snapshots-sync] pushing', { count: snapshots.length })
+                await requestJson('/api/sync/push', {
+                    method: 'POST',
+                    body: toJsonBody({
+                        version: 1,
+                        exportedAtISO: new Date().toISOString(),
+                        data: {
+                            accounts: [],
+                            instruments: [],
+                            movements: [],
+                            snapshots,
+                            manualPrices: [],
+                            preferences: {},
+                        },
+                    }),
+                })
+                console.log('[snapshots-sync] push done')
+                emitSyncStatus({
+                    title: 'Snapshot sincronizado',
+                    variant: 'success',
+                })
+                resolve()
+            } catch (error) {
+                console.warn('[snapshots-sync] push failed', error)
+                handleRemoteSyncError(error)
+                reject(error)
+            } finally {
+                snapshotPushInFlight = false
+                snapshotPushTimeout = null
+            }
+        }, SNAPSHOT_PUSH_DEBOUNCE_MS)
+    })
+}
+
 export async function syncRemoteMovementCreate(movement: Movement): Promise<void> {
     if (!isRemoteSyncEnabled()) return
     try {

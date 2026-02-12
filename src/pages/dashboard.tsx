@@ -1,6 +1,5 @@
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
     AreaChart,
@@ -27,7 +26,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD } from '@/lib/format'
-import { usePortfolioV2, type ItemV2 } from '@/features/portfolioV2'
+import { usePortfolioV2 } from '@/features/portfolioV2'
 import { useMovements } from '@/hooks/use-movements'
 import {
     useAutoSnapshotsSetting,
@@ -44,48 +43,22 @@ import {
     getSnapshotForPeriod,
     type SnapshotPeriod,
 } from '@/features/dashboardV2/snapshot-helpers'
-import { buildSnapshotAssetKey } from '@/features/dashboardV2/snapshot-v2'
 import {
     computeDashboardMetrics,
     type DashboardRange,
-    type DriverMetricRow,
 } from '@/features/dashboardV2/dashboard-metrics'
-import {
-    computeProjectedEarningsByRubro,
-    type HorizonKey,
-    type ProjectedEarningsByRubroRow,
-} from '@/features/dashboardV2/projected-earnings'
 import { computeCurrencyExposureSummary } from '@/features/dashboardV2/currency-exposure'
+import { ResultsCard } from '@/components/dashboard/ResultsCard'
 
 type ChartCurrency = 'ARS' | 'USD'
 type ChartRange = '1D' | '7D' | '30D' | '90D' | '1Y' | 'MAX'
 type ChartMode = 'HIST' | 'PROJ'
 type DriversRange = DashboardRange
 type IncomeRange = DashboardRange
-type DriversMode = 'historico' | 'proyeccion'
-
 const GLASS_PANEL = 'glass-panel rounded-xl border border-white/10'
 
 const CHART_RANGES: ChartRange[] = ['1D', '7D', '30D', '90D', '1Y', 'MAX']
-const DRIVERS_RANGES: DriversRange[] = ['TOTAL', '1D', '7D', '30D', '90D', '1Y']
 const INCOME_RANGES: IncomeRange[] = ['1D', '7D', '30D', '90D', '1Y', 'TOTAL']
-const DRIVERS_PROJECTION_LABELS: Record<DriversRange, string> = {
-    TOTAL: 'HOY',
-    '1D': 'MAN',
-    '7D': '7D',
-    '30D': '30D',
-    '90D': '90D',
-    '1Y': '1A',
-}
-const DRIVERS_PROJECTION_HORIZONS: Record<DriversRange, HorizonKey> = {
-    TOTAL: 'HOY',
-    '1D': 'MAN',
-    '7D': '7D',
-    '30D': '30D',
-    '90D': '90D',
-    '1Y': '1A',
-}
-
 const RUBRO_LABELS: Record<string, string> = {
     wallets: 'Billeteras',
     frascos: 'Frascos',
@@ -111,12 +84,6 @@ interface DisplayDelta {
     deltaPct: number | null
 }
 
-interface AssetLookup {
-    label: string
-    symbol: string
-    route: string | null
-}
-
 function formatCompactMoney(value: number): string {
     const abs = Math.abs(value)
     if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`
@@ -140,19 +107,6 @@ function formatShortDate(dateKey: string): string {
     return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
 }
 
-function getFxRefUsdArs(portfolio: ReturnType<typeof usePortfolioV2> | null): number | null {
-    if (!portfolio || portfolio.isLoading) return null
-    const fx = portfolio.fx.mepSell || portfolio.fx.officialSell || portfolio.fx.mepBuy || portfolio.fx.officialBuy || 0
-    return fx > 0 ? fx : null
-}
-
-function resolveUsdValue(valueUsd: number, valueArs: number, fxRef: number | null): number | null {
-    if (Number.isFinite(valueUsd)) return valueUsd
-    if (fxRef === null || fxRef <= 0) return null
-    if (!Number.isFinite(valueArs)) return null
-    return valueArs / fxRef
-}
-
 function average(values: number[]): number {
     if (values.length === 0) return 0
     return values.reduce((sum, value) => sum + value, 0) / values.length
@@ -164,26 +118,6 @@ function clamp(value: number, min: number, max: number): number {
 
 function toDateKey(date: Date): string {
     return date.toISOString().slice(0, 10)
-}
-
-function mapItemToRoute(item: ItemV2): string | null {
-    switch (item.kind) {
-        case 'wallet_yield':
-        case 'cash_ars':
-        case 'cash_usd':
-            return `/mis-activos-v2/billeteras/${item.accountId}?kind=${item.kind}`
-        case 'plazo_fijo':
-            return `/mis-activos-v2/plazos-fijos/${item.id}`
-        case 'crypto':
-        case 'stable':
-            return `/mis-activos-v2/cripto/${item.accountId}/${item.symbol}`
-        case 'cedear':
-            return `/mis-activos-v2/cedears/${item.accountId}/${item.symbol}`
-        case 'fci':
-            return `/mis-activos-v2/fondos/${item.accountId}/${encodeURIComponent(item.instrumentId ?? item.symbol)}`
-        default:
-            return null
-    }
 }
 
 export function DashboardPage() {
@@ -199,10 +133,8 @@ export function DashboardPage() {
     const [chartCurrency, setChartCurrency] = useState<ChartCurrency>('ARS')
     const [chartRange, setChartRange] = useState<ChartRange>('30D')
     const [chartMode, setChartMode] = useState<ChartMode>('HIST')
-    const [driversRange, setDriversRange] = useState<DriversRange>('TOTAL')
-    const [driversMode, setDriversMode] = useState<DriversMode>('historico')
+    const [driversRange] = useState<DriversRange>('TOTAL')
     const [netIncomeRange, setNetIncomeRange] = useState<IncomeRange>('30D')
-    const [selectedDriverRubro, setSelectedDriverRubro] = useState<string | null>(null)
     const [hoveredSlice, setHoveredSlice] = useState<string | null>(null)
 
     const userName = useMemo(() => {
@@ -218,26 +150,6 @@ export function DashboardPage() {
             .filter((snapshot) => snapshot.source === 'v2')
             .sort((a, b) => a.dateLocal.localeCompare(b.dateLocal))
     }, [snapshots])
-
-    const currentAssetLookup = useMemo(() => {
-        const lookup = new Map<string, AssetLookup>()
-        if (!portfolio || portfolio.isLoading) return lookup
-
-        for (const rubro of portfolio.rubros) {
-            for (const provider of rubro.providers) {
-                for (const item of provider.items) {
-                    const assetKey = buildSnapshotAssetKey(item)
-                    lookup.set(assetKey, {
-                        label: item.label || item.symbol,
-                        symbol: item.symbol,
-                        route: mapItemToRoute(item),
-                    })
-                }
-            }
-        }
-
-        return lookup
-    }, [portfolio])
 
     const chartSeries = useMemo(() => {
         if (!portfolio || portfolio.isLoading) return []
@@ -435,80 +347,6 @@ export function DashboardPage() {
             range: netIncomeRange,
         }).netIncome
     }, [portfolio, snapshots, movements, netIncomeRange, driversRange, dashboardMetricsForDrivers])
-
-    const driversComputation = useMemo(() => {
-        if (!dashboardMetricsForDrivers) {
-            return {
-                rows: [] as DriverMetricRow[],
-                label: '',
-                status: 'missing_history' as const,
-                missingHint: 'Falta historial para calcular drivers.',
-            }
-        }
-        return dashboardMetricsForDrivers.drivers
-    }, [dashboardMetricsForDrivers])
-
-    const driversFxRef = useMemo(() => getFxRefUsdArs(portfolio), [portfolio])
-
-    const projectedDriversHorizon = DRIVERS_PROJECTION_HORIZONS[driversRange]
-
-    const projectedDrivers = useMemo(() => {
-        if (!portfolio || portfolio.isLoading) {
-            return {
-                rows: [] as ProjectedEarningsByRubroRow[],
-                totals: {
-                    tenenciaArs: 0,
-                    tenenciaUsd: 0,
-                    projectedGainArs: 0,
-                    projectedGainUsd: 0,
-                    pnlNowArs: 0,
-                    pnlNowUsd: 0,
-                },
-                horizon: projectedDriversHorizon,
-                horizonDays: 0,
-                fxRef: null as number | null,
-            }
-        }
-
-        return computeProjectedEarningsByRubro({
-            portfolio,
-            horizon: projectedDriversHorizon,
-            now: new Date(),
-        })
-    }, [portfolio, projectedDriversHorizon])
-
-    const projectedDriversRows = projectedDrivers.rows
-
-    const historicalTotals = useMemo(() => {
-        return driversComputation.rows.reduce((acc, row) => {
-            const resultUsd = resolveUsdValue(row.resultUsd, row.resultArs, driversFxRef)
-            const currentUsd = resolveUsdValue(row.currentUsd, row.currentArs, driversFxRef)
-            acc.resultArs += row.resultArs
-            acc.resultUsd += resultUsd ?? 0
-            acc.tenenciaArs += row.currentArs
-            acc.tenenciaUsd += currentUsd ?? 0
-            return acc
-        }, {
-            resultArs: 0,
-            resultUsd: 0,
-            tenenciaArs: 0,
-            tenenciaUsd: 0,
-        })
-    }, [driversComputation.rows, driversFxRef])
-
-    const driversHeaderLabel = driversMode === 'historico'
-        ? driversComputation.label
-        : `Proyeccion ${DRIVERS_PROJECTION_LABELS[driversRange]}`
-
-    const selectedHistoricalDriverCategory = useMemo(() => {
-        if (!selectedDriverRubro) return null
-        return driversComputation.rows.find((row) => row.rubroId === selectedDriverRubro) ?? null
-    }, [driversComputation.rows, selectedDriverRubro])
-
-    const selectedProjectedDriverCategory = useMemo(() => {
-        if (!selectedDriverRubro) return null
-        return projectedDriversRows.find((row) => row.rubroId === selectedDriverRubro) ?? null
-    }, [projectedDriversRows, selectedDriverRubro])
 
     const distributionSlices = useMemo(() => {
         if (!portfolio || portfolio.isLoading) return []
@@ -828,244 +666,10 @@ export function DashboardPage() {
                     </section>
 
                     <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                        <div className={cn(GLASS_PANEL, 'col-span-1 xl:col-span-2 overflow-hidden')}>
-                            <div className="p-4 border-b border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white/[0.01]">
-                                <div>
-                                    <h3 className="font-display text-lg">Drivers del Periodo</h3>
-                                    <p className="text-[10px] text-slate-500 font-mono uppercase">{driversHeaderLabel}</p>
-                                    {driversMode === 'historico' && driversComputation.status !== 'ok' && driversComputation.missingHint && (
-                                        <p className="text-[10px] text-amber-300 mt-1">{driversComputation.missingHint}</p>
-                                    )}
-                                    {driversMode === 'proyeccion' && (
-                                        <>
-                                            <p className="text-[10px] text-slate-400 mt-1">
-                                                Escenario sin cambio de precio para CEDEAR/Cripto/FCI (incremental=0).
-                                            </p>
-                                            <p className="text-[10px] text-slate-500 mt-1">
-                                                HOY y MAN usan proyeccion de 1 dia.
-                                            </p>
-                                        </>
-                                    )}
-                                </div>
-                                <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto">
-                                    <div className="flex bg-slate-900 p-0.5 rounded-lg border border-white/10">
-                                        <button
-                                            onClick={() => {
-                                                setDriversMode('historico')
-                                                setSelectedDriverRubro(null)
-                                            }}
-                                            className={cn(
-                                                'px-3 py-1 text-[10px] uppercase rounded-md transition-all',
-                                                driversMode === 'historico'
-                                                    ? 'font-bold bg-white/10 text-white shadow'
-                                                    : 'font-medium text-slate-400 hover:text-white'
-                                            )}
-                                        >
-                                            Historico
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setDriversMode('proyeccion')
-                                                setSelectedDriverRubro(null)
-                                            }}
-                                            className={cn(
-                                                'px-3 py-1 text-[10px] uppercase rounded-md transition-all',
-                                                driversMode === 'proyeccion'
-                                                    ? 'font-bold bg-white/10 text-white shadow'
-                                                    : 'font-medium text-slate-400 hover:text-white'
-                                            )}
-                                        >
-                                            Proyeccion
-                                        </button>
-                                    </div>
-                                    <div className="flex bg-slate-900/50 p-0.5 rounded-lg border border-white/5 overflow-x-auto">
-                                        {DRIVERS_RANGES.map((range) => (
-                                            <button
-                                                key={range}
-                                                onClick={() => setDriversRange(range)}
-                                                className={cn(
-                                                    'px-3 py-1 text-[10px] rounded transition',
-                                                    driversRange === range ? 'font-bold bg-white/10 text-white' : 'font-medium text-slate-400 hover:text-white'
-                                                )}
-                                            >
-                                                {driversMode === 'historico' ? range : DRIVERS_PROJECTION_LABELS[range]}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="text-xs font-mono text-slate-400 border-b border-white/5 bg-slate-900/40">
-                                            <th className="p-4 font-medium uppercase">Categoria</th>
-                                            <th className="p-4 font-medium uppercase text-right">
-                                                {driversMode === 'historico' ? 'Resultado' : 'Ganancia (ARS)'}
-                                            </th>
-                                            <th className="p-4 font-medium uppercase text-right">Tenencia</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="text-sm divide-y divide-white/5">
-                                        {driversMode === 'historico' ? (
-                                            <>
-                                                {driversComputation.rows.length === 0 && (
-                                                    <tr>
-                                                        <td className="p-6 text-center text-slate-500" colSpan={3}>
-                                                            {driversComputation.missingHint ?? 'Sin datos de drivers para el periodo seleccionado.'}
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                                {driversComputation.rows.map((row) => {
-                                                    const positive = row.resultArs >= 0
-                                                    const rubroName = RUBRO_LABELS[row.rubroId] ?? row.rubroId
-                                                    const showResult = driversComputation.status !== 'missing_history'
-                                                    const resultUsd = resolveUsdValue(row.resultUsd, row.resultArs, driversFxRef)
-                                                    const currentUsd = resolveUsdValue(row.currentUsd, row.currentArs, driversFxRef)
-                                                    return (
-                                                        <tr
-                                                            key={row.rubroId}
-                                                            className="hover:bg-white/[0.04] transition cursor-pointer"
-                                                            onClick={() => setSelectedDriverRubro(row.rubroId)}
-                                                        >
-                                                            <td className="p-4">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div
-                                                                        className="w-1.5 h-8 rounded-full"
-                                                                        style={{ backgroundColor: RUBRO_COLORS[row.rubroId] ?? RUBRO_COLORS.unknown }}
-                                                                    />
-                                                                    <div>
-                                                                        <span className="text-white font-medium block">{rubroName}</span>
-                                                                        <span className="text-xs text-slate-500">{row.items.length} activos</span>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-4 text-right">
-                                                                {showResult ? (
-                                                                    <>
-                                                                        <div className={cn('font-mono text-sm', positive ? 'text-emerald-400' : 'text-rose-400')}>
-                                                                            {positive ? '+' : ''}{formatMoneyARS(row.resultArs)}
-                                                                        </div>
-                                                                        <div className="text-[10px] text-slate-400">
-                                                                            {resultUsd === null
-                                                                                ? 'N/A'
-                                                                                : `${resultUsd >= 0 ? '+' : ''}${formatMoneyUSD(resultUsd)}`}
-                                                                        </div>
-                                                                        <div className="text-[10px] text-slate-500">
-                                                                            {formatSignedPercent(row.resultPct)}
-                                                                        </div>
-                                                                    </>
-                                                                ) : (
-                                                                    <div className="font-mono text-sm text-slate-500">N/A</div>
-                                                                )}
-                                                            </td>
-                                                            <td className="p-4 text-right">
-                                                                <div className="font-mono text-slate-300">{formatMoneyARS(row.currentArs)}</div>
-                                                                <div className="text-[10px] text-slate-500">
-                                                                    {currentUsd === null ? 'N/A' : `≈ ${formatMoneyUSD(currentUsd)}`}
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    )
-                                                })}
-                                                <tr className="bg-slate-900/50 font-mono">
-                                                    <td className="p-4 text-xs uppercase text-slate-300 font-semibold">Totales</td>
-                                                    <td className="p-4 text-right">
-                                                        <div className={cn(
-                                                            'text-sm font-semibold',
-                                                            historicalTotals.resultArs >= 0 ? 'text-emerald-300' : 'text-rose-300'
-                                                        )}>
-                                                            {historicalTotals.resultArs >= 0 ? '+' : ''}{formatMoneyARS(historicalTotals.resultArs)}
-                                                        </div>
-                                                        <div className="text-[10px] text-slate-400">
-                                                            {historicalTotals.resultUsd >= 0 ? '+' : ''}{formatMoneyUSD(historicalTotals.resultUsd)}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-4 text-right">
-                                                        <div className="text-slate-200 font-semibold">{formatMoneyARS(historicalTotals.tenenciaArs)}</div>
-                                                        <div className="text-[10px] text-slate-500">≈ {formatMoneyUSD(historicalTotals.tenenciaUsd)}</div>
-                                                    </td>
-                                                </tr>
-                                            </>
-                                        ) : (
-                                            <>
-                                                {projectedDriversRows.length === 0 && (
-                                                    <tr>
-                                                        <td className="p-6 text-center text-slate-500" colSpan={3}>
-                                                            Sin rubros para proyectar con el portfolio actual.
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                                {projectedDriversRows.map((row) => {
-                                                    const positive = row.projectedGainArs >= 0
-                                                    const showPnlNow = row.rubroId === 'cedears' || row.rubroId === 'crypto' || row.rubroId === 'fci'
-                                                    return (
-                                                        <tr
-                                                            key={row.rubroId}
-                                                            className="hover:bg-white/[0.04] transition cursor-pointer"
-                                                            onClick={() => setSelectedDriverRubro(row.rubroId)}
-                                                        >
-                                                            <td className="p-4">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div
-                                                                        className="w-1.5 h-8 rounded-full"
-                                                                        style={{ backgroundColor: RUBRO_COLORS[row.rubroId] ?? RUBRO_COLORS.unknown }}
-                                                                    />
-                                                                    <div>
-                                                                        <span className="text-white font-medium block">{row.label}</span>
-                                                                        <span className="text-xs text-slate-500">{row.items.length} activos</span>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-4 text-right">
-                                                                <div className={cn('font-mono text-sm', positive ? 'text-emerald-400' : 'text-rose-400')}>
-                                                                    {positive ? '+' : ''}{formatMoneyARS(row.projectedGainArs)}
-                                                                </div>
-                                                                <div className="text-[10px] text-slate-400">
-                                                                    {row.projectedGainUsd >= 0 ? '+' : ''}{formatMoneyUSD(row.projectedGainUsd)}
-                                                                </div>
-                                                                {showPnlNow && (
-                                                                    <div className="text-[10px] text-amber-300">
-                                                                        PnL actual: {row.pnlNowArs >= 0 ? '+' : ''}{formatMoneyARS(row.pnlNowArs)} ({row.pnlNowUsd >= 0 ? '+' : ''}{formatMoneyUSD(row.pnlNowUsd)})
-                                                                    </div>
-                                                                )}
-                                                                {row.status === 'missing_data' && row.notes[0] && (
-                                                                    <div className="text-[10px] text-amber-300">{row.notes[0]}</div>
-                                                                )}
-                                                            </td>
-                                                            <td className="p-4 text-right">
-                                                                <div className="font-mono text-xs text-slate-300">{formatMoneyARS(row.tenenciaArs)}</div>
-                                                                <div className="text-[10px] text-slate-500">≈ {formatMoneyUSD(row.tenenciaUsd)}</div>
-                                                            </td>
-                                                        </tr>
-                                                    )
-                                                })}
-                                                <tr className="bg-slate-900/50 font-mono">
-                                                    <td className="p-4 text-xs uppercase text-slate-300 font-semibold">Totales</td>
-                                                    <td className="p-4 text-right">
-                                                        <div className={cn(
-                                                            'text-sm font-semibold',
-                                                            projectedDrivers.totals.projectedGainArs >= 0 ? 'text-emerald-300' : 'text-rose-300'
-                                                        )}>
-                                                            {projectedDrivers.totals.projectedGainArs >= 0 ? '+' : ''}{formatMoneyARS(projectedDrivers.totals.projectedGainArs)}
-                                                        </div>
-                                                        <div className="text-[10px] text-slate-400">
-                                                            {projectedDrivers.totals.projectedGainUsd >= 0 ? '+' : ''}{formatMoneyUSD(projectedDrivers.totals.projectedGainUsd)}
-                                                        </div>
-                                                        <div className="text-[10px] text-amber-300">
-                                                            PnL actual: {projectedDrivers.totals.pnlNowArs >= 0 ? '+' : ''}{formatMoneyARS(projectedDrivers.totals.pnlNowArs)} ({projectedDrivers.totals.pnlNowUsd >= 0 ? '+' : ''}{formatMoneyUSD(projectedDrivers.totals.pnlNowUsd)})
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-4 text-right">
-                                                        <div className="text-slate-200 font-semibold">{formatMoneyARS(projectedDrivers.totals.tenenciaArs)}</div>
-                                                        <div className="text-[10px] text-slate-500">≈ {formatMoneyUSD(projectedDrivers.totals.tenenciaUsd)}</div>
-                                                    </td>
-                                                </tr>
-                                            </>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
+                        <div className="col-span-1 xl:col-span-2">
+                            {portfolio && !portfolio.isLoading && (
+                                <ResultsCard portfolio={portfolio} snapshots={snapshots} />
+                            )}
                         </div>
 
                         <div className="flex flex-col gap-4">
@@ -1218,20 +822,6 @@ export function DashboardPage() {
                 </>
             )}
 
-            <DriversModal
-                open={selectedDriverRubro !== null}
-                onClose={() => setSelectedDriverRubro(null)}
-                mode={driversMode}
-                historicalCategory={selectedHistoricalDriverCategory}
-                projectedCategory={selectedProjectedDriverCategory}
-                period={driversRange}
-                assetLookup={currentAssetLookup}
-                onAssetClick={(route) => {
-                    setSelectedDriverRubro(null)
-                    navigate(route)
-                }}
-            />
-
             <MovementWizard
                 open={movementWizardOpen}
                 onOpenChange={setMovementWizardOpen}
@@ -1350,255 +940,6 @@ function MetricRow({
     )
 }
 
-function DriversModal({
-    open,
-    onClose,
-    mode,
-    historicalCategory,
-    projectedCategory,
-    period,
-    assetLookup,
-    onAssetClick,
-}: {
-    open: boolean
-    onClose: () => void
-    mode: DriversMode
-    historicalCategory: DriverMetricRow | null
-    projectedCategory: ProjectedEarningsByRubroRow | null
-    period: DriversRange
-    assetLookup: Map<string, AssetLookup>
-    onAssetClick: (route: string) => void
-}) {
-    const [mounted, setMounted] = useState(false)
-    const [active, setActive] = useState(false)
-    const [renderedMode, setRenderedMode] = useState<DriversMode>(mode)
-    const [renderedHistorical, setRenderedHistorical] = useState<DriverMetricRow | null>(historicalCategory)
-    const [renderedProjected, setRenderedProjected] = useState<ProjectedEarningsByRubroRow | null>(projectedCategory)
-
-    useEffect(() => {
-        if (open) {
-            setMounted(true)
-            setRenderedMode(mode)
-            setRenderedHistorical(historicalCategory)
-            setRenderedProjected(projectedCategory)
-            const raf = window.requestAnimationFrame(() => setActive(true))
-            return () => window.cancelAnimationFrame(raf)
-        }
-        if (!mounted) return
-        setActive(false)
-        const timeout = window.setTimeout(() => {
-            setMounted(false)
-        }, 220)
-        return () => window.clearTimeout(timeout)
-    }, [open, mode, historicalCategory, projectedCategory, mounted])
-
-    useEffect(() => {
-        if (!mounted) return
-        const originalOverflow = document.body.style.overflow
-        document.body.style.overflow = 'hidden'
-
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') onClose()
-        }
-
-        window.addEventListener('keydown', onKeyDown)
-        return () => {
-            document.body.style.overflow = originalOverflow
-            window.removeEventListener('keydown', onKeyDown)
-        }
-    }, [mounted, onClose])
-
-    const historical = renderedMode === 'historico' ? renderedHistorical : null
-    const projected = renderedMode === 'proyeccion' ? renderedProjected : null
-    const title = historical
-        ? (RUBRO_LABELS[historical.rubroId] ?? historical.rubroId)
-        : (projected ? (RUBRO_LABELS[projected.rubroId] ?? projected.rubroId) : null)
-
-    if (!mounted || !title) return null
-
-    return createPortal(
-        <div className="fixed inset-0 z-[120]">
-            <div
-                className={cn(
-                    'absolute inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity duration-200',
-                    active ? 'opacity-100' : 'opacity-0'
-                )}
-                onClick={onClose}
-            />
-
-            <div className="absolute inset-0 p-4 sm:p-6 flex items-center justify-center">
-                <div
-                    className={cn(
-                        'w-full max-w-5xl bg-[#151E32] border border-white/10 rounded-2xl shadow-2xl p-6 flex flex-col max-h-[90vh]',
-                        'transition-all duration-200 ease-out',
-                        active ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-2'
-                    )}
-                >
-                    <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-4">
-                        <div>
-                            <h3 className="font-display text-xl text-white">
-                                Detalle de Drivers: <span className="text-primary">{title}</span>
-                            </h3>
-                            <p className="text-xs text-slate-400">Rango seleccionado: {period}</p>
-                            {renderedMode === 'proyeccion' && (
-                                <p className="text-xs text-slate-500 mt-1">
-                                    Proyeccion incremental; PnL actual mostrado aparte.
-                                </p>
-                            )}
-                        </div>
-                        <button onClick={onClose} className="text-slate-400 hover:text-white">Cerrar</button>
-                    </div>
-
-                    <div className="overflow-y-auto flex-1 rounded-lg border border-white/5 bg-slate-900/50 mb-4">
-                        {historical && (
-                            <table className="w-full text-sm text-left border-collapse">
-                                <thead className="text-xs text-slate-500 uppercase bg-white/5 sticky top-0 z-10 backdrop-blur-md">
-                                    <tr>
-                                        <th className="px-4 py-3">Activo</th>
-                                        <th className="px-4 py-3 text-right">Tenencia</th>
-                                        <th className="px-4 py-3 text-right">Resultado ARS</th>
-                                        <th className="px-4 py-3 text-right">Resultado USD</th>
-                                        <th className="px-4 py-3 text-right">Resultado %</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5 font-mono text-slate-300">
-                                    {historical.items.length === 0 && (
-                                        <tr>
-                                            <td className="p-6 text-center text-slate-500" colSpan={5}>Sin datos para este periodo.</td>
-                                        </tr>
-                                    )}
-                                    {historical.items.map((item) => {
-                                        const lookup = assetLookup.get(item.assetKey)
-                                        const route = lookup?.route
-                                        const positive = item.deltaArs >= 0
-                                        const symbol = lookup?.symbol ?? item.assetKey.split(':').pop() ?? item.assetKey
-
-                                        return (
-                                            <tr
-                                                key={item.assetKey}
-                                                className={cn('hover:bg-white/[0.04] transition', route && 'cursor-pointer')}
-                                                onClick={() => {
-                                                    if (route) onAssetClick(route)
-                                                }}
-                                            >
-                                                <td className="px-4 py-3">
-                                                    <div className="font-medium text-white">{symbol}</div>
-                                                    <div className="text-xs text-slate-500 truncate max-w-[260px]">{lookup?.label ?? item.assetKey}</div>
-                                                </td>
-                                                <td className="px-4 py-3 text-right text-slate-300">{formatMoneyARS(item.currentArs)}</td>
-                                                <td className={cn('px-4 py-3 text-right', positive ? 'text-emerald-300' : 'text-rose-300')}>
-                                                    {positive ? '+' : ''}{formatMoneyARS(item.deltaArs)}
-                                                </td>
-                                                <td className={cn('px-4 py-3 text-right', item.deltaUsd >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
-                                                    {item.deltaUsd >= 0 ? '+' : ''}{formatMoneyUSD(item.deltaUsd)}
-                                                </td>
-                                                <td className="px-4 py-3 text-right text-slate-400">{formatSignedPercent(item.deltaPct)}</td>
-                                            </tr>
-                                        )
-                                    })}
-                                    {historical.items.length > 0 && (
-                                        <tr className="bg-slate-900/40">
-                                            <td className="px-4 py-3 text-xs uppercase text-slate-300 font-semibold">Totales</td>
-                                            <td className="px-4 py-3 text-right text-slate-200">
-                                                {formatMoneyARS(historical.items.reduce((sum, item) => sum + item.currentArs, 0))}
-                                            </td>
-                                            <td className="px-4 py-3 text-right text-slate-200">
-                                                {formatMoneyARS(historical.items.reduce((sum, item) => sum + item.deltaArs, 0))}
-                                            </td>
-                                            <td className="px-4 py-3 text-right text-slate-200">
-                                                {formatMoneyUSD(historical.items.reduce((sum, item) => sum + item.deltaUsd, 0))}
-                                            </td>
-                                            <td className="px-4 py-3 text-right text-slate-500">-</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        )}
-
-                        {projected && (
-                            <table className="w-full text-sm text-left border-collapse">
-                                <thead className="text-xs text-slate-500 uppercase bg-white/5 sticky top-0 z-10 backdrop-blur-md">
-                                    <tr>
-                                        <th className="px-4 py-3">Activo</th>
-                                        <th className="px-4 py-3 text-right">Tenencia</th>
-                                        <th className="px-4 py-3 text-right">Ganancia proyectada</th>
-                                        <th className="px-4 py-3 text-right">PnL actual</th>
-                                        <th className="px-4 py-3 text-right">Estado</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5 font-mono text-slate-300">
-                                    {projected.items.length === 0 && (
-                                        <tr>
-                                            <td className="p-6 text-center text-slate-500" colSpan={5}>Sin datos para este periodo.</td>
-                                        </tr>
-                                    )}
-                                    {projected.items.map((item) => {
-                                        const lookup = assetLookup.get(item.assetKey)
-                                        const route = lookup?.route
-                                        const symbol = lookup?.symbol ?? item.symbol ?? item.assetKey
-                                        const hasMissingModel = item.status === 'missing_data'
-
-                                        return (
-                                            <tr
-                                                key={item.assetKey}
-                                                className={cn('hover:bg-white/[0.04] transition', route && 'cursor-pointer')}
-                                                onClick={() => {
-                                                    if (route) onAssetClick(route)
-                                                }}
-                                            >
-                                                <td className="px-4 py-3">
-                                                    <div className="font-medium text-white">{symbol}</div>
-                                                    <div className="text-xs text-slate-500 truncate max-w-[260px]">{lookup?.label ?? item.label}</div>
-                                                </td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <div>{formatMoneyARS(item.tenenciaArs)}</div>
-                                                    <div className="text-[10px] text-slate-500">≈ {formatMoneyUSD(item.tenenciaUsd)}</div>
-                                                </td>
-                                                <td className={cn('px-4 py-3 text-right', item.projectedGainArs >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
-                                                    <div>{item.projectedGainArs >= 0 ? '+' : ''}{formatMoneyARS(item.projectedGainArs)}</div>
-                                                    <div className="text-[10px] text-slate-400">{item.projectedGainUsd >= 0 ? '+' : ''}{formatMoneyUSD(item.projectedGainUsd)}</div>
-                                                </td>
-                                                <td className={cn('px-4 py-3 text-right', item.pnlNowArs >= 0 ? 'text-amber-200' : 'text-rose-300')}>
-                                                    <div>{item.pnlNowArs >= 0 ? '+' : ''}{formatMoneyARS(item.pnlNowArs)}</div>
-                                                    <div className="text-[10px] text-slate-400">{item.pnlNowUsd >= 0 ? '+' : ''}{formatMoneyUSD(item.pnlNowUsd)}</div>
-                                                </td>
-                                                <td className="px-4 py-3 text-right text-xs">
-                                                    {hasMissingModel ? (
-                                                        <span className="px-2 py-1 rounded border border-amber-400/40 text-amber-300">
-                                                            sin modelo
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-slate-500">{item.notes[0] ?? 'ok'}</span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        )
-                                    })}
-                                    {projected.items.length > 0 && (
-                                        <tr className="bg-slate-900/40">
-                                            <td className="px-4 py-3 text-xs uppercase text-slate-300 font-semibold">Totales</td>
-                                            <td className="px-4 py-3 text-right text-slate-200">
-                                                {formatMoneyARS(projected.items.reduce((sum, item) => sum + item.tenenciaArs, 0))}
-                                            </td>
-                                            <td className="px-4 py-3 text-right text-slate-200">
-                                                {formatMoneyARS(projected.items.reduce((sum, item) => sum + item.projectedGainArs, 0))}
-                                            </td>
-                                            <td className="px-4 py-3 text-right text-slate-200">
-                                                {formatMoneyARS(projected.items.reduce((sum, item) => sum + item.pnlNowArs, 0))}
-                                            </td>
-                                            <td className="px-4 py-3 text-right text-slate-500">-</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>,
-        document.body
-    )
-}
 
 
 
