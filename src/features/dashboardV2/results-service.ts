@@ -10,9 +10,14 @@
  *   rubros, with PF and Wallet overrides using interest calculations.
  */
 
-import type { Snapshot } from '@/domain/types'
+import type { Movement, Snapshot } from '@/domain/types'
 import type { PortfolioV2, ItemV2 } from '@/features/portfolioV2'
 import { buildSnapshotFromPortfolioV2 } from './snapshot-v2'
+import {
+    computeNetFlowsByRubro,
+    convertMovementAmountToArsUsdEq,
+    type ResultsFlowFxContext,
+} from './results-flows'
 import {
     RESULTS_CATEGORY_CONFIG,
     type Money,
@@ -67,6 +72,27 @@ function normalizeSnapshots(snapshots: Snapshot[]): Snapshot[] {
 
 function money(ars: number | null, usd: number | null): Money {
     return { ars, usd }
+}
+
+function buildFlowFxContext(portfolio: PortfolioV2): ResultsFlowFxContext {
+    return {
+        officialSell: portfolio.fx.officialSell || 0,
+        mepSell: portfolio.fx.mepSell || 0,
+        cryptoSell: portfolio.fx.cryptoSell || 0,
+    }
+}
+
+function movementDateKey(datetimeISO: string): string | null {
+    if (!datetimeISO) return null
+    const date = new Date(datetimeISO)
+    if (!Number.isFinite(date.getTime())) return null
+    return date.toISOString().slice(0, 10)
+}
+
+function isMovementInRange(datetimeISO: string, startISO: string, endISO: string): boolean {
+    const dateKey = movementDateKey(datetimeISO)
+    if (!dateKey) return false
+    return dateKey > startISO && dateKey <= endISO
 }
 
 // ---------------------------------------------------------------------------
@@ -335,32 +361,64 @@ function buildWalletItemsTotal(
 function buildWalletItemsPeriod(
     portfolio: PortfolioV2,
     periodDays: number,
+    startISO: string,
+    endISO: string,
+    movements: Movement[],
+    fxContext: ResultsFlowFxContext,
 ): {
     items: ResultsCategoryItem[]
     catPnlArs: number
     catPnlUsd: number
+    isEstimated: boolean
 } | null {
     const rubro = portfolio.rubros.find((r) => r.id === 'wallets')
     if (!rubro) return null
 
-    const fx = portfolio.fx.officialSell > 0 ? portfolio.fx.officialSell : 1
+    const fx = portfolio.fx.officialSell > 0 ? portfolio.fx.officialSell : (portfolio.fx.mepSell > 0 ? portfolio.fx.mepSell : 1)
     const items: ResultsCategoryItem[] = []
     let catPnlArs = 0
     let catPnlUsd = 0
+    let isEstimated = false
+
+    const interestByAccount = new Map<string, { ars: number; usd: number }>()
+    for (const movement of movements) {
+        if (movement.type !== 'INTEREST') continue
+        if (!isMovementInRange(movement.datetimeISO, startISO, endISO)) continue
+
+        const converted = convertMovementAmountToArsUsdEq(movement, fxContext)
+        const current = interestByAccount.get(movement.accountId) ?? { ars: 0, usd: 0 }
+        current.ars += converted.ars
+        current.usd += converted.usdEq
+        interestByAccount.set(movement.accountId, current)
+    }
+
+    const accountInterestClaimed = new Set<string>()
 
     for (const provider of rubro.providers) {
         for (const item of provider.items) {
             let interestArs = 0
+            let interestUsd = 0
             let tnaLabel: string | undefined
 
-            if (isYieldBearingWallet(item) && item.yieldMeta?.tna && item.yieldMeta.tna > 0) {
-                interestArs = estimateWalletInterestArs(item.valArs, item.yieldMeta.tna, periodDays)
-                tnaLabel = `TNA ${item.yieldMeta.tna}% (Estimado)`
-            } else if (isYieldBearingWallet(item)) {
-                tnaLabel = 'Sin TNA'
-            }
+            if (isYieldBearingWallet(item) && !accountInterestClaimed.has(item.accountId)) {
+                const realInterest = interestByAccount.get(item.accountId)
+                const hasRealInterest = interestByAccount.has(item.accountId)
 
-            const interestUsd = interestArs / fx
+                if (hasRealInterest) {
+                    interestArs = realInterest?.ars ?? 0
+                    interestUsd = realInterest?.usd ?? 0
+                    tnaLabel = 'Interés real'
+                } else if (item.yieldMeta?.tna && item.yieldMeta.tna > 0) {
+                    interestArs = estimateWalletInterestArs(item.valArs, item.yieldMeta.tna, periodDays)
+                    interestUsd = interestArs / fx
+                    tnaLabel = `TNA ${item.yieldMeta.tna}% (Estimado)`
+                    isEstimated = true
+                } else {
+                    tnaLabel = 'Sin TNA'
+                }
+
+                accountInterestClaimed.add(item.accountId)
+            }
 
             items.push({
                 id: item.id,
@@ -377,7 +435,7 @@ function buildWalletItemsPeriod(
     }
 
     items.sort((a, b) => Math.abs(b.pnl.ars ?? 0) - Math.abs(a.pnl.ars ?? 0))
-    return { items, catPnlArs, catPnlUsd }
+    return { items, catPnlArs, catPnlUsd, isEstimated }
 }
 
 // ---------------------------------------------------------------------------
@@ -505,6 +563,7 @@ function buildTotalFromPortfolio(
 function buildPeriodFromSnapshots(
     portfolio: PortfolioV2,
     snapshots: Snapshot[],
+    movements: Movement[],
     periodKey: Exclude<ResultsPeriodKey, 'TOTAL'>,
     now: Date = new Date(),
 ): ResultsCardModel {
@@ -540,6 +599,8 @@ function buildPeriodFromSnapshots(
     const pastRubros = baseline.breakdownRubros ?? {}
     const currentItems = currentSnapshot.breakdownItems ?? {}
     const pastItems = baseline.breakdownItems ?? {}
+    const fxContext = buildFlowFxContext(portfolio)
+    const netFlowsByRubro = computeNetFlowsByRubro(movements, fxContext, baseline.dateLocal, todayKey)
 
     // Build per-category data
     const categories: ResultsCategoryRow[] = []
@@ -570,7 +631,14 @@ function buildPeriodFromSnapshots(
 
         // ── WALLETS: override with TNA-based interest estimation ──
         if (cfg.key === 'wallets') {
-            const walletResult = buildWalletItemsPeriod(portfolio, PERIOD_DAYS[periodKey])
+            const walletResult = buildWalletItemsPeriod(
+                portfolio,
+                PERIOD_DAYS[periodKey],
+                baseline.dateLocal,
+                todayKey,
+                movements,
+                fxContext,
+            )
             if (walletResult && walletResult.items.length > 0) {
                 categories.push({
                     key: cfg.key,
@@ -580,7 +648,7 @@ function buildPeriodFromSnapshots(
                     pnl: money(walletResult.catPnlArs, walletResult.catPnlUsd),
                     items: walletResult.items,
                     tableLabels: WALLET_TABLE_LABELS,
-                    isEstimated: true,
+                    isEstimated: walletResult.isEstimated,
                 })
                 totalPnlArs += walletResult.catPnlArs
                 totalPnlUsd += walletResult.catPnlUsd
@@ -592,8 +660,11 @@ function buildPeriodFromSnapshots(
         // ── Default handling (CEDEARs, Crypto, FCI) ──
         const currentRubro = currentRubros[rubroId]
         const pastRubro = pastRubros[rubroId]
-        const catPnlArs = (currentRubro?.ars ?? 0) - (pastRubro?.ars ?? 0)
-        const catPnlUsd = (currentRubro?.usd ?? 0) - (pastRubro?.usd ?? 0)
+        const deltaArs = (currentRubro?.ars ?? 0) - (pastRubro?.ars ?? 0)
+        const deltaUsd = (currentRubro?.usd ?? 0) - (pastRubro?.usd ?? 0)
+        const netFlow = netFlowsByRubro.get(rubroId as 'wallets' | 'plazos' | 'cedears' | 'crypto' | 'fci')
+        const catPnlArs = deltaArs - (netFlow?.ars ?? 0)
+        const catPnlUsd = deltaUsd - (netFlow?.usdEq ?? 0)
 
         // Build items from breakdownItems that belong to this rubro
         const items: ResultsCategoryItem[] = []
@@ -640,6 +711,7 @@ function buildPeriodFromSnapshots(
         startISO: baseline.dateLocal,
         endISO: todayKey,
         asOfISO: portfolio.asOfISO,
+        note: 'Resultado neto = Variación de valuación - Flujos netos del período.',
     }
 
     return {
@@ -679,6 +751,7 @@ function resolveItemLabel(portfolio: PortfolioV2, assetKey: string, rubroId: str
 export interface ComputeResultsInput {
     portfolio: PortfolioV2
     snapshots: Snapshot[]
+    movements?: Movement[]
     periodKey: ResultsPeriodKey
     now?: Date
 }
@@ -686,6 +759,7 @@ export interface ComputeResultsInput {
 export function computeResultsCardModel({
     portfolio,
     snapshots,
+    movements = [],
     periodKey,
     now = new Date(),
 }: ComputeResultsInput): ResultsCardModel {
@@ -693,5 +767,5 @@ export function computeResultsCardModel({
         return buildTotalFromPortfolio(portfolio, snapshots, now)
     }
 
-    return buildPeriodFromSnapshots(portfolio, snapshots, periodKey, now)
+    return buildPeriodFromSnapshots(portfolio, snapshots, movements, periodKey, now)
 }

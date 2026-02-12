@@ -147,28 +147,48 @@ export function buildSnapshotFromPortfolioV2(
 }
 
 // ---------------------------------------------------------------------------
-// Portfolio readiness guard — prevents saving snapshots with $0 totals
-// when the portfolio data hasn't fully loaded yet.
+// Portfolio readiness guard - prevents saving snapshots with $0 totals
+// when the portfolio data has not fully loaded yet.
 // ---------------------------------------------------------------------------
 
 export type SnapshotSkipReason =
-    | 'LOADING'              // portfolio.isLoading is still true
-    | 'NO_FX'               // FX rates are zero / not loaded
-    | 'TOTAL_ZERO_WITH_ASSETS' // has rubros/items but totals are 0 (race condition)
-    | null                  // ready to snapshot
+    | 'LOADING'
+    | 'NO_FX'
+    | 'TOTAL_ZERO_WITH_ASSETS'
+    | null
 
 export interface SnapshotReadinessResult {
     ready: boolean
     reason: SnapshotSkipReason
 }
 
+export interface SnapshotEvidence {
+    accountsCount?: number
+    movementsCount?: number
+    instrumentsCount?: number
+}
+
+function hasYieldEvidence(portfolio: PortfolioV2): boolean {
+    for (const rubro of portfolio.rubros) {
+        for (const provider of rubro.providers) {
+            for (const item of provider.items) {
+                if (item.kind === 'wallet_yield') return true
+                if (item.kind === 'cash_ars' && item.yieldMeta != null) return true
+            }
+        }
+    }
+    return false
+}
+
 /**
  * Determines whether the portfolio data is trustworthy enough to persist as a
- * snapshot.  The key insight is that a "truly empty portfolio" (no accounts /
- * no movements) is a valid 0-total snapshot, but 0 totals **when items exist**
- * signals a race condition where data hasn't propagated yet.
+ * snapshot. A truly empty portfolio (no items and no evidence) is a valid
+ * 0-total snapshot, but 0 totals with evidence usually indicate a race.
  */
-export function isPortfolioReadyForSnapshot(portfolio: PortfolioV2 | null): SnapshotReadinessResult {
+export function isPortfolioReadyForSnapshot(
+    portfolio: PortfolioV2 | null,
+    evidence?: SnapshotEvidence,
+): SnapshotReadinessResult {
     if (!portfolio) {
         return { ready: false, reason: 'LOADING' }
     }
@@ -177,13 +197,10 @@ export function isPortfolioReadyForSnapshot(portfolio: PortfolioV2 | null): Snap
         return { ready: false, reason: 'LOADING' }
     }
 
-    // FX rates must be available — mepSell is the primary rate used for
-    // valuation.  If it's 0 the snapshot would be worthless.
     if (portfolio.fx.mepSell === 0 && portfolio.fx.officialSell === 0) {
         return { ready: false, reason: 'NO_FX' }
     }
 
-    // Count how many items exist across all rubros
     let itemCount = 0
     for (const rubro of portfolio.rubros) {
         for (const provider of rubro.providers) {
@@ -191,13 +208,16 @@ export function isPortfolioReadyForSnapshot(portfolio: PortfolioV2 | null): Snap
         }
     }
 
-    // If there are items but both totals are zero → data not ready yet
     const hasZeroTotals = portfolio.kpis.totalArs === 0 && portfolio.kpis.totalUsd === 0
-    if (itemCount > 0 && hasZeroTotals) {
+    const hasExternalEvidence = (evidence?.accountsCount ?? 0) > 0
+        || (evidence?.movementsCount ?? 0) > 0
+        || (evidence?.instrumentsCount ?? 0) > 0
+        || hasYieldEvidence(portfolio)
+
+    if ((itemCount > 0 || hasExternalEvidence) && hasZeroTotals) {
         return { ready: false, reason: 'TOTAL_ZERO_WITH_ASSETS' }
     }
 
-    // Either genuinely empty (0 items → 0 totals is correct) or has real values
     return { ready: true, reason: null }
 }
 

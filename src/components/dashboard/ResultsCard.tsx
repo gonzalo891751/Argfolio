@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Clock, X, BarChart3, Info, Loader2, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDeltaMoneyARS, formatDeltaMoneyUSD, formatMoneyARS, formatMoneyUSD } from '@/lib/format'
-import type { Snapshot } from '@/domain/types'
+import type { Movement, Snapshot } from '@/domain/types'
 import type { PortfolioV2 } from '@/features/portfolioV2'
 import { computeResultsCardModel } from '@/features/dashboardV2/results-service'
 import {
@@ -68,16 +68,17 @@ function categoryInitial(title: string): string {
 interface ResultsCardProps {
     portfolio: PortfolioV2
     snapshots: Snapshot[]
+    movements: Movement[]
 }
 
-export function ResultsCard({ portfolio, snapshots }: ResultsCardProps) {
+export function ResultsCard({ portfolio, snapshots, movements }: ResultsCardProps) {
     const [periodKey, setPeriodKey] = useState<ResultsPeriodKey>('TOTAL')
     const [selectedCategory, setSelectedCategory] = useState<ResultsCategoryRow | null>(null)
 
     const model = useMemo(() => {
         if (portfolio.isLoading) return null
-        return computeResultsCardModel({ portfolio, snapshots, periodKey })
-    }, [portfolio, snapshots, periodKey])
+        return computeResultsCardModel({ portfolio, snapshots, movements, periodKey })
+    }, [portfolio, snapshots, movements, periodKey])
 
     if (!model) return null
 
@@ -292,18 +293,18 @@ function CategoryDetailModal({
         })
     }, [])
 
+    const handleClose = useCallback(() => {
+        setActive(false)
+        setTimeout(onClose, 300)
+    }, [onClose])
+
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
             if (e.key === 'Escape') handleClose()
         }
         window.addEventListener('keydown', handler)
         return () => window.removeEventListener('keydown', handler)
-    }, [])
-
-    const handleClose = useCallback(() => {
-        setActive(false)
-        setTimeout(onClose, 300)
-    }, [onClose])
+    }, [handleClose])
 
     const handleGenerateNow = useCallback(async () => {
         try {
@@ -322,8 +323,8 @@ function CategoryDetailModal({
 
     if (!mounted) return null
 
-    const subtotalPnlArs = category.items.reduce((sum, item) => sum + (item.pnl.ars ?? 0), 0)
-    const subtotalPnlUsd = category.items.reduce((sum, item) => sum + (item.pnl.usd ?? 0), 0)
+    const subtotalPnlArs = category.pnl.ars ?? category.items.reduce((sum, item) => sum + (item.pnl.ars ?? 0), 0)
+    const subtotalPnlUsd = category.pnl.usd ?? category.items.reduce((sum, item) => sum + (item.pnl.usd ?? 0), 0)
     const isCrypto = category.key === 'crypto'
     const isWallets = category.key === 'wallets'
     const showEmptyState = isWallets && category.walletEmptyStateHint && !accrualDone
@@ -363,6 +364,11 @@ function CategoryDetailModal({
                                     ? `${category.tableLabels.col3} = ${category.tableLabels.col2} - ${category.tableLabels.col1} | Periodo: ${periodKey}`
                                     : `P&L = Valor Actual - Invertido | Periodo: ${periodKey}`}
                         </p>
+                        {periodKey !== 'TOTAL' && (
+                            <p className="text-[11px] text-slate-500 mt-1">
+                                Resultado neto = Variación de valuación - Flujos netos del período.
+                            </p>
+                        )}
                     </div>
                     <button
                         onClick={handleClose}

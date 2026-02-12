@@ -3046,3 +3046,88 @@ git checkout -- src/features/dashboardV2/results-service.ts src/features/dashboa
 
 ### Pendientes
 - Ninguno. El fix es backwards-compatible: items `wallet_yield` (Frascos) siguen funcionando igual. No se toc√≥ builder.ts ni types.
+
+## CHECKPOINT - Resultados con flujos netos + blindaje snapshot $0 (2026-02-12)
+
+### Objetivo
+Corregir definitivamente "Resultados" para periodos (1D/7D/30D/90D/1Y) ajustando por flujos netos, y blindar snapshots diarios para evitar/repair snapshots en $0 por race de carga.
+
+### Causa raiz
+1. `results-service` calculaba periodos como delta puro de snapshots (`Vf - Vi`), por lo que depositos/retiros/compras/ventas aparecian como ganancia/perdida.
+2. Auto-snapshot guardaba con guard incompleto (solo `portfolio.isLoading` + FX basico), sin evidencia externa ni backoff/reintento, y sin reparacion explicita de snapshot diario en `0`.
+
+### Archivos tocados
+1. `src/features/dashboardV2/results-flows.ts` (NEW)
+2. `src/features/dashboardV2/results-service.ts`
+3. `src/components/dashboard/ResultsCard.tsx`
+4. `src/pages/dashboard.tsx`
+5. `src/features/dashboardV2/snapshot-v2.ts`
+6. `src/hooks/use-snapshots.ts`
+7. `src/features/dashboardV2/results-audit.test.ts`
+8. `src/features/dashboardV2/snapshot-v2-readiness.test.ts` (NEW)
+
+### Cambios aplicados
+- Nuevo modulo `results-flows.ts`:
+  - `computeNetFlowsByRubro(movements, fxContext, fromISO, toISO)`.
+  - Clasificacion de flujos netos por rubro (`wallets`, `plazos`, `cedears`, `crypto`, `fci`).
+  - Compras/ventas modeladas como flujo interno `wallets <-> rubro`.
+  - Depositos/retiros como flujo externo de `wallets`.
+  - `INTEREST/DIVIDEND/FEE` excluidos de net flows (son rendimiento/costo).
+  - Deteccion de transferencias internas `TRANSFER_IN/TRANSFER_OUT`:
+    - pairing por `meta.transferGroupId` / `groupId`.
+    - fallback heuristico por monto/moneda/tiempo (<= 5 min) y cuentas distintas.
+  - Helper de conversion consistente ARS/USD eq para movimientos.
+
+- `results-service.ts`:
+  - API extendida: `computeResultsCardModel` ahora acepta `movements?: Movement[]`.
+  - Para periodos: rubros default (CEDEAR/Crypto/FCI) usan:
+    - `pnl_rubro = (Vf_r - Vi_r) - netFlows_r`.
+  - Total del card sigue siendo suma de rubros.
+  - Billeteras por periodo:
+    - prioriza intereses reales (`INTEREST`) en rango.
+    - si no hay movimientos reales, estima por TNA y marca `isEstimated`.
+  - PF periodo se mantiene como devengado (`accrued(end)-accrued(start)`), con guards de NaN/fechas.
+  - Nota de periodo agregada: "Resultado neto = VariaciÛn de valuaciÛn - Flujos netos del perÌodo".
+
+- UI minima (`ResultsCard.tsx`):
+  - Modal detalle agrega linea informativa con la formula de resultado neto.
+  - Subtotal del modal usa `category.pnl` (consistente con card ajustado por flujos).
+  - Ajuste menor hook deps para evitar warning.
+
+- Integracion dashboard:
+  - `ResultsCard` ahora recibe `movements` desde `dashboard.tsx`.
+
+- Blindaje snapshots (`snapshot-v2.ts` + `use-snapshots.ts`):
+  - `isPortfolioReadyForSnapshot` ahora acepta evidencia externa (`accountsCount`, `movementsCount`, `instrumentsCount`) y detecta evidencia de yield (`cash_ars + yieldMeta` / `wallet_yield`).
+  - Bloquea snapshot en `0` si hay evidencia de portfolio real.
+  - `useAutoDailySnapshotCapture`:
+    - agrega chequeo de dependencias (`accounts/movements/instruments` loading).
+    - reintentos con backoff: `5s, 15s, 30s, 30s, 30s` (max 5).
+    - logging de reason/attempt/delay.
+    - repair/upsert del snapshot de hoy si existe `totalARS=0` y ahora hay total real > 0.
+    - evita upserts redundantes si ya existe snapshot del dia con mismos totales.
+
+### Tests agregados/actualizados
+- `results-audit.test.ts`:
+  - Caso 1: deposito grande sin cambio de precio -> resultado ~0.
+  - Caso 2: compra de CEDEAR con cash -> CEDEAR no muestra ganancia por compra, wallets no muestra perdida por compra.
+  - Caso 3: transferencia interna billetera-billetera -> wallets ~0 y net flow wallets ~0.
+  - Caso 4: `INTEREST` acreditado -> wallets > 0 (real, no estimado).
+  - Caso 5: snapshot base en 0 + deposito+compra -> resultado no explota.
+- `snapshot-v2-readiness.test.ts` (NEW):
+  - bloquea snapshot 0 con evidencia externa.
+  - permite portfolio genuinamente vacio.
+  - bloquea snapshot 0 si hay evidencia de billetera remunerada (yieldMeta).
+
+### Comandos de validacion ejecutados
+1. `npx tsc --noEmit` -> OK
+2. `npm run build` -> OK (con warnings preexistentes de chunk/css)
+3. `npx vitest run` -> OK (15 files, 109 tests)
+4. `npx eslint` sobre archivos tocados -> OK (0 errores, 0 warnings)
+
+### Rollback
+- Revertir solo este checkpoint (sin tocar otros cambios):
+```bash
+git checkout -- src/features/dashboardV2/results-flows.ts src/features/dashboardV2/results-service.ts src/components/dashboard/ResultsCard.tsx src/pages/dashboard.tsx src/features/dashboardV2/snapshot-v2.ts src/hooks/use-snapshots.ts src/features/dashboardV2/results-audit.test.ts src/features/dashboardV2/snapshot-v2-readiness.test.ts
+```
+- Si ya esta commiteado, usar `git revert <commit_sha>`.
