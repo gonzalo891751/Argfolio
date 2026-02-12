@@ -100,7 +100,7 @@ export function ResultsCard({ portfolio, snapshots }: ResultsCardProps) {
                         </h2>
                         <p className="text-sm text-slate-400 mt-1">
                             {model.meta.snapshotStatus === 'ok'
-                                ? 'P&L excluyendo movimientos.'
+                                ? (model.meta.note ?? 'Resultados por rubro.')
                                 : model.meta.note ?? 'Basado en snapshots disponibles.'}
                         </p>
                     </div>
@@ -293,6 +293,7 @@ function CategoryDetailModal({
     const subtotalPnlArs = category.items.reduce((sum, item) => sum + (item.pnl.ars ?? 0), 0)
     const subtotalPnlUsd = category.items.reduce((sum, item) => sum + (item.pnl.usd ?? 0), 0)
     const isCrypto = category.key === 'crypto'
+    const isWallets = category.key === 'wallets'
 
     return createPortal(
         <div
@@ -321,9 +322,11 @@ function CategoryDetailModal({
                             Detalle: {category.title}
                         </h3>
                         <p className="text-xs text-slate-400 mt-1">
-                            {category.tableLabels
-                                ? `${category.tableLabels.col3} = ${category.tableLabels.col2} - ${category.tableLabels.col1} | Periodo: ${periodKey}`
-                                : `P&L = Valor Actual - Invertido | Periodo: ${periodKey}`}
+                            {isWallets
+                                ? `Intereses devengados/acreditados | Periodo: ${periodKey}`
+                                : category.tableLabels
+                                    ? `${category.tableLabels.col3} = ${category.tableLabels.col2} - ${category.tableLabels.col1} | Periodo: ${periodKey}`
+                                    : `P&L = Valor Actual - Invertido | Periodo: ${periodKey}`}
                         </p>
                     </div>
                     <button
@@ -344,17 +347,50 @@ function CategoryDetailModal({
                     ) : (
                         <table className="w-full text-left text-sm whitespace-nowrap md:whitespace-normal">
                             <thead className="sticky top-0 bg-slate-900/95 backdrop-blur-md z-10 border-b border-white/10 shadow-sm">
-                                <tr className="text-xs font-mono text-slate-400 uppercase tracking-wider">
-                                    <th className="py-4 px-6 font-medium">Activo</th>
-                                    <th className="py-4 px-6 font-medium text-right">{category.tableLabels?.col1 ?? 'Invertido'}</th>
-                                    <th className="py-4 px-6 font-medium text-right">{category.tableLabels?.col2 ?? 'Actual'}</th>
-                                    <th className="py-4 px-6 font-medium text-right">{category.tableLabels?.col3 ?? 'Resultado (P&L)'}</th>
-                                </tr>
+                                {isWallets ? (
+                                    <tr className="text-xs font-mono text-slate-400 uppercase tracking-wider">
+                                        <th className="py-4 px-6 font-medium">Cuenta</th>
+                                        <th className="py-4 px-6 font-medium text-right">Saldo</th>
+                                        <th className="py-4 px-6 font-medium text-right">Intereses</th>
+                                    </tr>
+                                ) : (
+                                    <tr className="text-xs font-mono text-slate-400 uppercase tracking-wider">
+                                        <th className="py-4 px-6 font-medium">Activo</th>
+                                        <th className="py-4 px-6 font-medium text-right">{category.tableLabels?.col1 ?? 'Invertido'}</th>
+                                        <th className="py-4 px-6 font-medium text-right">{category.tableLabels?.col2 ?? 'Actual'}</th>
+                                        <th className="py-4 px-6 font-medium text-right">{category.tableLabels?.col3 ?? 'Resultado (P&L)'}</th>
+                                    </tr>
+                                )}
                             </thead>
                             <tbody className="divide-y divide-white/5 text-slate-300">
                                 {category.items.map((item) => {
                                     const color = pnlColor(item.pnl.ars)
                                     const colorUsd = pnlColor(item.pnl.usd)
+
+                                    if (isWallets) {
+                                        return (
+                                            <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
+                                                <td className="py-4 px-6">
+                                                    <div className="font-medium text-white">{item.title}</div>
+                                                    {item.subtitle && (
+                                                        <div className="text-xs text-slate-500 mt-1">{item.subtitle}</div>
+                                                    )}
+                                                </td>
+                                                <td className="py-4 px-6 text-right">
+                                                    <div className="font-mono text-sm text-slate-300">{formatMoneyARS(item.invested.ars)}</div>
+                                                    <div className="font-mono text-xs text-slate-500 mt-1">{formatMoneyUSD(item.invested.usd)}</div>
+                                                </td>
+                                                <td className="py-4 px-6 text-right">
+                                                    <div className={cn('font-mono text-sm font-medium', color)}>
+                                                        {formatPnlArs(item.pnl.ars)}
+                                                    </div>
+                                                    <div className={cn('font-mono text-xs mt-1', colorUsd)}>
+                                                        {formatPnlUsd(item.pnl.usd)}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    }
 
                                     return (
                                         <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
@@ -423,7 +459,7 @@ function CategoryDetailModal({
                 <div className="px-6 py-4 bg-[#0f172a] border-t border-white/10 shrink-0 rounded-b-2xl">
                     <div className="flex justify-between items-center">
                         <div className="text-sm font-display text-slate-400 uppercase tracking-widest font-semibold">
-                            Subtotal Rubro
+                            {isWallets ? 'Total Intereses' : 'Subtotal Rubro'}
                         </div>
                         <div className="text-right">
                             {isCrypto ? (
