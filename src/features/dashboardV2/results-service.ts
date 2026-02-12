@@ -231,6 +231,11 @@ function buildPfItemsPeriod(
 
 const WALLET_TABLE_LABELS = { col1: 'Saldo', col2: 'TNA', col3: 'Intereses' }
 
+/** Check if an item is a yield-bearing wallet (wallet_yield OR cash_ars with yieldMeta). */
+function isYieldBearingWallet(item: { kind: string; yieldMeta?: unknown }): boolean {
+    return item.kind === 'wallet_yield' || (item.kind === 'cash_ars' && item.yieldMeta != null)
+}
+
 /**
  * Estimate wallet interest for a given number of days using TNA compound formula.
  * Reuses the same math as projected-earnings.ts estimateWalletProjectedGainArs.
@@ -273,7 +278,7 @@ function buildWalletItemsTotal(
             let interestArs = 0
             let tnaLabel: string | undefined
 
-            if (item.kind === 'wallet_yield') {
+            if (isYieldBearingWallet(item)) {
                 // Yield-bearing wallet: get accumulated interest from walletDetails
                 const detail = portfolio.walletDetails.get(item.accountId)
                 if (detail && detail.interestTotalArs != null && !accountInterestClaimed.has(item.accountId)) {
@@ -285,14 +290,14 @@ function buildWalletItemsTotal(
                     tnaLabel = `TNA ${detail.tna}%`
                 }
             }
-            // cash_ars / cash_usd: interestArs stays 0 (no yield)
+            // non-yield cash_ars / cash_usd: interestArs stays 0
 
             const interestUsd = interestArs / fx
 
             items.push({
                 id: item.id,
                 title: item.label || item.symbol,
-                subtitle: tnaLabel ?? (item.kind === 'wallet_yield' ? 'Sin TNA' : provider.name),
+                subtitle: tnaLabel ?? (isYieldBearingWallet(item) ? 'Sin TNA' : provider.name),
                 invested: money(item.valArs, item.valUsd),
                 value: money(item.valArs, item.valUsd),
                 pnl: money(interestArs, interestUsd),
@@ -310,7 +315,7 @@ function buildWalletItemsTotal(
     if (catPnlArs === 0) {
         for (const provider of rubro.providers) {
             for (const item of provider.items) {
-                if (item.kind === 'wallet_yield' && item.valArs > 0 && item.yieldMeta?.tna && item.yieldMeta.tna > 0) {
+                if (isYieldBearingWallet(item) && item.valArs > 0 && item.yieldMeta?.tna && item.yieldMeta.tna > 0) {
                     walletEmptyStateHint = true
                     break
                 }
@@ -348,10 +353,10 @@ function buildWalletItemsPeriod(
             let interestArs = 0
             let tnaLabel: string | undefined
 
-            if (item.kind === 'wallet_yield' && item.yieldMeta?.tna && item.yieldMeta.tna > 0) {
+            if (isYieldBearingWallet(item) && item.yieldMeta?.tna && item.yieldMeta.tna > 0) {
                 interestArs = estimateWalletInterestArs(item.valArs, item.yieldMeta.tna, periodDays)
                 tnaLabel = `TNA ${item.yieldMeta.tna}% (Estimado)`
-            } else if (item.kind === 'wallet_yield') {
+            } else if (isYieldBearingWallet(item)) {
                 tnaLabel = 'Sin TNA'
             }
 

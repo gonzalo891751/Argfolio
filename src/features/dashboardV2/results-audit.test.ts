@@ -360,4 +360,222 @@ describe('Results Audit - Logic Verification', () => {
         expect(item?.subtitle).toContain('Estimado')
         expect(item?.pnl.ars).toBeGreaterThan(0)
     })
+
+    // ---------------------------------------------------------------
+    // BUG FIX: cash_ars items with yieldMeta (real wallet shape)
+    // ---------------------------------------------------------------
+
+    it('should calculate TOTAL interest for cash_ars items with yieldMeta (real wallet shape)', () => {
+        // This is the REAL shape produced by builder.ts for yield-bearing wallet accounts.
+        // kind = 'cash_ars' (NOT 'wallet_yield') with yieldMeta attached.
+        const walletItem: Partial<ItemV2> = {
+            id: 'carrefour-cash',
+            kind: 'cash_ars',
+            accountId: 'carrefour',
+            valArs: 250000,
+            valUsd: 250,
+            label: 'Pesos',
+            yieldMeta: { tna: 42 },
+        }
+
+        const walletDetail: Partial<WalletDetail> = {
+            accountId: 'carrefour',
+            interestTotalArs: 3150.75,
+            tna: 42,
+        }
+
+        const walletDetailsMap = new Map<string, WalletDetail>()
+        walletDetailsMap.set('carrefour', walletDetail as WalletDetail)
+
+        const walletsRubro: Partial<RubroV2> = {
+            id: 'wallets',
+            providers: [{
+                id: 'carrefour',
+                name: 'Carrefour',
+                items: [walletItem as ItemV2],
+                totals: { ars: 250000, usd: 250 },
+                pnl: { ars: 0, usd: 0 },
+            }],
+            totals: { ars: 250000, usd: 250 },
+            pnl: { ars: 0, usd: 0 },
+        }
+
+        const portfolio: Partial<PortfolioV2> = {
+            rubros: [walletsRubro as RubroV2],
+            walletDetails: walletDetailsMap,
+            fx: mockFx,
+            asOfISO: '2025-01-15T10:00:00Z',
+        }
+
+        const result = computeResultsCardModel({
+            portfolio: portfolio as PortfolioV2,
+            snapshots: [mockSnapshot],
+            periodKey: 'TOTAL',
+            now: new Date('2025-01-15T12:00:00Z'),
+        })
+
+        const walletCategory = result.categories.find(c => c.key === 'wallets')
+        expect(walletCategory).toBeDefined()
+        expect(walletCategory?.pnl.ars).toBe(3150.75)
+        expect(walletCategory?.walletEmptyStateHint).toBe(false)
+
+        const item = walletCategory?.items.find(i => i.id === 'carrefour-cash')
+        expect(item?.pnl.ars).toBe(3150.75)
+        expect(item?.subtitle).toContain('TNA 42%')
+    })
+
+    it('should NOT count deposits/withdrawals as PnL for wallets', () => {
+        // A non-yield wallet with deposits only should show $0 PnL.
+        const walletItem: Partial<ItemV2> = {
+            id: 'checking-cash',
+            kind: 'cash_ars',
+            accountId: 'checking',
+            valArs: 1000000,
+            valUsd: 1000,
+            label: 'Cuenta Corriente',
+            // No yieldMeta — not a yield-bearing account
+        }
+
+        const walletsRubro: Partial<RubroV2> = {
+            id: 'wallets',
+            providers: [{
+                id: 'checking',
+                name: 'Banco Nación',
+                items: [walletItem as ItemV2],
+                totals: { ars: 1000000, usd: 1000 },
+                pnl: { ars: 0, usd: 0 },
+            }],
+            totals: { ars: 1000000, usd: 1000 },
+            pnl: { ars: 0, usd: 0 },
+        }
+
+        const portfolio: Partial<PortfolioV2> = {
+            rubros: [walletsRubro as RubroV2],
+            walletDetails: new Map(),
+            fx: mockFx,
+            asOfISO: '2025-01-15T10:00:00Z',
+        }
+
+        const result = computeResultsCardModel({
+            portfolio: portfolio as PortfolioV2,
+            snapshots: [mockSnapshot],
+            periodKey: 'TOTAL',
+            now: new Date('2025-01-15T12:00:00Z'),
+        })
+
+        const walletCategory = result.categories.find(c => c.key === 'wallets')
+        expect(walletCategory).toBeDefined()
+        expect(walletCategory?.pnl.ars).toBe(0)
+
+        const item = walletCategory?.items.find(i => i.id === 'checking-cash')
+        expect(item?.pnl.ars).toBe(0)
+    })
+
+    it('should set walletEmptyStateHint for cash_ars with yieldMeta but no interest yet', () => {
+        const walletItem: Partial<ItemV2> = {
+            id: 'mp-cash',
+            kind: 'cash_ars',
+            accountId: 'mp-acc',
+            valArs: 300000,
+            valUsd: 300,
+            label: 'Pesos',
+            yieldMeta: { tna: 45 },
+        }
+
+        const walletDetail: Partial<WalletDetail> = {
+            accountId: 'mp-acc',
+            interestTotalArs: 0,
+            tna: 45,
+        }
+
+        const walletDetailsMap = new Map<string, WalletDetail>()
+        walletDetailsMap.set('mp-acc', walletDetail as WalletDetail)
+
+        const walletsRubro: Partial<RubroV2> = {
+            id: 'wallets',
+            providers: [{
+                id: 'mp-acc',
+                name: 'Mercado Pago',
+                items: [walletItem as ItemV2],
+                totals: { ars: 300000, usd: 300 },
+                pnl: { ars: 0, usd: 0 },
+            }],
+            totals: { ars: 300000, usd: 300 },
+            pnl: { ars: 0, usd: 0 },
+        }
+
+        const portfolio: Partial<PortfolioV2> = {
+            rubros: [walletsRubro as RubroV2],
+            walletDetails: walletDetailsMap,
+            fx: mockFx,
+            asOfISO: '2025-01-01T10:00:00Z',
+        }
+
+        const result = computeResultsCardModel({
+            portfolio: portfolio as PortfolioV2,
+            snapshots: [mockSnapshot],
+            periodKey: 'TOTAL',
+            now: new Date('2025-01-01T12:00:00Z'),
+        })
+
+        const walletCategory = result.categories.find(c => c.key === 'wallets')
+        expect(walletCategory).toBeDefined()
+        expect(walletCategory?.pnl.ars).toBe(0)
+        expect(walletCategory?.walletEmptyStateHint).toBe(true)
+    })
+
+    it('should estimate period interest for cash_ars items with yieldMeta', () => {
+        const walletItem: Partial<ItemV2> = {
+            id: 'mp-period',
+            kind: 'cash_ars',
+            accountId: 'mp-acc-2',
+            valArs: 200000,
+            valUsd: 200,
+            label: 'Pesos',
+            yieldMeta: { tna: 38 },
+        }
+
+        const walletsRubro: Partial<RubroV2> = {
+            id: 'wallets',
+            providers: [{
+                id: 'mp-acc-2',
+                name: 'Mercado Pago',
+                items: [walletItem as ItemV2],
+                totals: { ars: 200000, usd: 200 },
+                pnl: { ars: 0, usd: 0 },
+            }],
+            totals: { ars: 200000, usd: 200 },
+            pnl: { ars: 0, usd: 0 },
+        }
+
+        const portfolio: Partial<PortfolioV2> = {
+            rubros: [walletsRubro as RubroV2],
+            walletDetails: new Map(),
+            fx: mockFx,
+            asOfISO: '2025-02-01T10:00:00Z',
+            kpis: { totalArs: 200000, totalUsd: 200, totalUsdEq: 200, pnlUnrealizedArs: 0, pnlUnrealizedUsd: 0, pnlUnrealizedUsdEq: 0 } as PortfolioV2['kpis'],
+        }
+
+        const snapshotWithBreakdown: Snapshot = {
+            ...mockSnapshot,
+            dateLocal: '2025-01-01',
+            breakdownRubros: { wallets: { ars: 200000, usd: 200 } },
+            breakdownItems: {},
+        }
+
+        const result = computeResultsCardModel({
+            portfolio: portfolio as PortfolioV2,
+            snapshots: [snapshotWithBreakdown],
+            periodKey: '30D',
+            now: new Date('2025-02-01T12:00:00Z'),
+        })
+
+        const walletCategory = result.categories.find(c => c.key === 'wallets')
+        expect(walletCategory).toBeDefined()
+        expect(walletCategory?.isEstimated).toBe(true)
+
+        const item = walletCategory?.items.find(i => i.id === 'mp-period')
+        expect(item?.pnl.ars).toBeGreaterThan(0)
+        expect(item?.subtitle).toContain('Estimado')
+    })
 })
