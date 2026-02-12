@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { computeResultsCardModel } from './results-service'
+import { computeNetFlowsByRubro } from './results-flows'
 import type { PortfolioV2, ItemV2, RubroV2, WalletDetail } from '@/features/portfolioV2'
-import type { Snapshot } from '@/domain/types'
+import type { Movement, Snapshot } from '@/domain/types'
 
 // Mock minimal objects
 const mockSnapshot: Snapshot = {
@@ -577,5 +578,322 @@ describe('Results Audit - Logic Verification', () => {
         const item = walletCategory?.items.find(i => i.id === 'mp-period')
         expect(item?.pnl.ars).toBeGreaterThan(0)
         expect(item?.subtitle).toContain('Estimado')
+    })
+
+    // -----------------------------------------------------------------------
+    // Period net-flow adjustment scenarios
+    // -----------------------------------------------------------------------
+
+    const makeWalletItem = (accountId: string, valArs: number, withYield = false): ItemV2 => ({
+        id: `wallet-${accountId}`,
+        kind: 'cash_ars',
+        accountId,
+        symbol: 'ARS',
+        label: 'Pesos',
+        valArs,
+        valUsd: valArs / 1000,
+        ...(withYield ? { yieldMeta: { tna: 40 } } : {}),
+    })
+
+    const makeCedearItem = (accountId: string, symbol: string, valArs: number): ItemV2 => ({
+        id: `cedear-${symbol}-${accountId}`,
+        kind: 'cedear',
+        accountId,
+        symbol,
+        label: symbol,
+        valArs,
+        valUsd: valArs / 1000,
+    })
+
+    const makePortfolioForPeriod = (params: {
+        wallets: Array<{ accountId: string; valArs: number; yield?: boolean }>
+        cedears?: Array<{ accountId: string; symbol: string; valArs: number }>
+    }): PortfolioV2 => {
+        const walletItems = params.wallets.map((wallet) => makeWalletItem(wallet.accountId, wallet.valArs, wallet.yield === true))
+        const cedearItems = (params.cedears ?? []).map((row) => makeCedearItem(row.accountId, row.symbol, row.valArs))
+
+        const walletsTotalArs = walletItems.reduce((sum, item) => sum + item.valArs, 0)
+        const cedearsTotalArs = cedearItems.reduce((sum, item) => sum + item.valArs, 0)
+
+        const rubros: RubroV2[] = [
+            {
+                id: 'wallets',
+                name: 'Billeteras',
+                icon: 'Wallet',
+                fxPolicy: 'Oficial Venta',
+                totals: { ars: walletsTotalArs, usd: walletsTotalArs / 1000 },
+                pnl: { ars: 0, usd: 0 },
+                providers: params.wallets.map((wallet) => {
+                    const item = walletItems.find((candidate) => candidate.accountId === wallet.accountId)!
+                    return {
+                        id: wallet.accountId,
+                        name: wallet.accountId,
+                        totals: { ars: item.valArs, usd: item.valUsd },
+                        pnl: { ars: 0, usd: 0 },
+                        items: [item],
+                    }
+                }),
+            },
+        ]
+
+        if (cedearItems.length > 0) {
+            rubros.push({
+                id: 'cedears',
+                name: 'CEDEARs',
+                icon: 'BarChart3',
+                fxPolicy: 'MEP',
+                totals: { ars: cedearsTotalArs, usd: cedearsTotalArs / 1000 },
+                pnl: { ars: 0, usd: 0 },
+                providers: [{
+                    id: 'broker-1',
+                    name: 'Broker',
+                    totals: { ars: cedearsTotalArs, usd: cedearsTotalArs / 1000 },
+                    pnl: { ars: 0, usd: 0 },
+                    items: cedearItems,
+                }],
+            })
+        }
+
+        return {
+            isLoading: false,
+            asOfISO: '2025-02-01T12:00:00Z',
+            fx: mockFx,
+            kpis: {
+                totalArs: walletsTotalArs + cedearsTotalArs,
+                totalUsd: (walletsTotalArs + cedearsTotalArs) / 1000,
+                totalUsdEq: (walletsTotalArs + cedearsTotalArs) / 1000,
+                pnlUnrealizedArs: 0,
+                pnlUnrealizedUsd: 0,
+                pnlUnrealizedUsdEq: 0,
+                exposure: { usdHard: 0, usdEquivalent: 0, arsReal: walletsTotalArs + cedearsTotalArs },
+                pctUsdHard: 0,
+                pctUsdEq: 0,
+                pctArs: 100,
+            },
+            flags: { inferredBalanceCount: 0 },
+            rubros,
+            walletDetails: new Map<string, WalletDetail>(),
+            fixedDepositDetails: new Map(),
+            cedearDetails: new Map(),
+            cryptoDetails: new Map(),
+            fciDetails: new Map(),
+        }
+    }
+
+    const makePeriodSnapshot = (breakdownRubros: Record<string, { ars: number; usd: number }>): Snapshot => ({
+        id: 'snapshot-period-base',
+        dateLocal: '2025-01-01',
+        totalARS: Object.values(breakdownRubros).reduce((sum, row) => sum + row.ars, 0),
+        totalUSD: Object.values(breakdownRubros).reduce((sum, row) => sum + row.usd, 0),
+        fxUsed: { usdArs: 1000, type: 'MEP' },
+        createdAtISO: '2025-01-01T10:00:00Z',
+        source: 'v2',
+        breakdownRubros,
+        breakdownItems: {},
+    })
+
+    it('period case 1: large deposit without price change yields ~0 result', () => {
+        const portfolio = makePortfolioForPeriod({
+            wallets: [{ accountId: 'wallet-1', valArs: 1_000_000 }],
+        })
+
+        const baseline = makePeriodSnapshot({
+            wallets: { ars: 0, usd: 0 },
+        })
+
+        const movements: Movement[] = [{
+            id: 'dep-1',
+            datetimeISO: '2025-01-20T10:00:00Z',
+            type: 'DEPOSIT',
+            assetClass: 'wallet',
+            accountId: 'wallet-1',
+            tradeCurrency: 'ARS',
+            totalAmount: 1_000_000,
+        }]
+
+        const result = computeResultsCardModel({
+            portfolio,
+            snapshots: [baseline],
+            movements,
+            periodKey: '30D',
+            now: new Date('2025-02-01T12:00:00Z'),
+        })
+
+        expect(result.totals.pnl.ars).toBeCloseTo(0, 6)
+    })
+
+    it('period case 2: CEDEAR buy from cash is not counted as gain/loss', () => {
+        const portfolio = makePortfolioForPeriod({
+            wallets: [{ accountId: 'wallet-2', valArs: 0 }],
+            cedears: [{ accountId: 'broker-1', symbol: 'SPY', valArs: 100_000 }],
+        })
+
+        const baseline = makePeriodSnapshot({
+            wallets: { ars: 100_000, usd: 100 },
+            cedears: { ars: 0, usd: 0 },
+        })
+
+        const movements: Movement[] = [{
+            id: 'buy-1',
+            datetimeISO: '2025-01-25T10:00:00Z',
+            type: 'BUY',
+            assetClass: 'cedear',
+            instrumentId: 'SPY',
+            accountId: 'broker-1',
+            tradeCurrency: 'ARS',
+            totalAmount: 100_000,
+        }]
+
+        const result = computeResultsCardModel({
+            portfolio,
+            snapshots: [baseline],
+            movements,
+            periodKey: '30D',
+            now: new Date('2025-02-01T12:00:00Z'),
+        })
+
+        const cedears = result.categories.find((category) => category.key === 'cedears')
+        const wallets = result.categories.find((category) => category.key === 'wallets')
+
+        expect(cedears?.pnl.ars).toBeCloseTo(0, 6)
+        expect(wallets?.pnl.ars).toBeCloseTo(0, 6)
+    })
+
+    it('period case 3: internal wallet transfer does not create wallet result', () => {
+        const portfolio = makePortfolioForPeriod({
+            wallets: [
+                { accountId: 'wallet-a', valArs: 500_000 },
+                { accountId: 'wallet-b', valArs: 500_000 },
+            ],
+        })
+
+        const baseline = makePeriodSnapshot({
+            wallets: { ars: 1_000_000, usd: 1000 },
+        })
+
+        const movements: Movement[] = [
+            {
+                id: 'tr-out',
+                datetimeISO: '2025-01-22T10:00:00Z',
+                type: 'TRANSFER_OUT',
+                assetClass: 'wallet',
+                accountId: 'wallet-a',
+                tradeCurrency: 'ARS',
+                totalAmount: 250_000,
+                groupId: 'transfer-1',
+                meta: { transferGroupId: 'transfer-1', counterpartyAccountId: 'wallet-b', direction: 'out' },
+            },
+            {
+                id: 'tr-in',
+                datetimeISO: '2025-01-22T10:01:00Z',
+                type: 'TRANSFER_IN',
+                assetClass: 'wallet',
+                accountId: 'wallet-b',
+                tradeCurrency: 'ARS',
+                totalAmount: 250_000,
+                groupId: 'transfer-1',
+                meta: { transferGroupId: 'transfer-1', counterpartyAccountId: 'wallet-a', direction: 'in' },
+            },
+        ]
+
+        const result = computeResultsCardModel({
+            portfolio,
+            snapshots: [baseline],
+            movements,
+            periodKey: '30D',
+            now: new Date('2025-02-01T12:00:00Z'),
+        })
+
+        const flows = computeNetFlowsByRubro(
+            movements,
+            { officialSell: mockFx.officialSell, mepSell: mockFx.mepSell, cryptoSell: mockFx.cryptoSell },
+            '2025-01-01',
+            '2025-02-01',
+        )
+
+        const wallets = result.categories.find((category) => category.key === 'wallets')
+        expect(wallets?.pnl.ars).toBeCloseTo(0, 6)
+        expect(flows.get('wallets')?.ars ?? 0).toBeCloseTo(0, 6)
+    })
+
+    it('period case 4: INTEREST movement increases wallet result', () => {
+        const portfolio = makePortfolioForPeriod({
+            wallets: [{ accountId: 'wallet-yield', valArs: 100_000, yield: true }],
+        })
+
+        const baseline = makePeriodSnapshot({
+            wallets: { ars: 100_000, usd: 100 },
+        })
+
+        const movements: Movement[] = [{
+            id: 'int-1',
+            datetimeISO: '2025-01-15T12:00:00Z',
+            type: 'INTEREST',
+            assetClass: 'wallet',
+            accountId: 'wallet-yield',
+            tradeCurrency: 'ARS',
+            totalAmount: 1_250,
+        }]
+
+        const result = computeResultsCardModel({
+            portfolio,
+            snapshots: [baseline],
+            movements,
+            periodKey: '30D',
+            now: new Date('2025-02-01T12:00:00Z'),
+        })
+
+        const wallets = result.categories.find((category) => category.key === 'wallets')
+        expect(wallets?.pnl.ars).toBeCloseTo(1250, 6)
+        expect(wallets?.isEstimated).toBe(false)
+    })
+
+    it('period case 5: baseline snapshot in 0 with deposit+buy does not explode', () => {
+        const portfolio = makePortfolioForPeriod({
+            wallets: [{ accountId: 'wallet-3', valArs: 0 }],
+            cedears: [{ accountId: 'broker-3', symbol: 'AAPL', valArs: 900_000 }],
+        })
+
+        const baseline = makePeriodSnapshot({
+            wallets: { ars: 0, usd: 0 },
+            cedears: { ars: 0, usd: 0 },
+        })
+
+        const movements: Movement[] = [
+            {
+                id: 'dep-2',
+                datetimeISO: '2025-01-20T10:00:00Z',
+                type: 'DEPOSIT',
+                assetClass: 'wallet',
+                accountId: 'wallet-3',
+                tradeCurrency: 'ARS',
+                totalAmount: 900_000,
+            },
+            {
+                id: 'buy-2',
+                datetimeISO: '2025-01-20T10:05:00Z',
+                type: 'BUY',
+                assetClass: 'cedear',
+                instrumentId: 'AAPL',
+                accountId: 'broker-3',
+                tradeCurrency: 'ARS',
+                totalAmount: 900_000,
+            },
+        ]
+
+        const result = computeResultsCardModel({
+            portfolio,
+            snapshots: [baseline],
+            movements,
+            periodKey: '30D',
+            now: new Date('2025-02-01T12:00:00Z'),
+        })
+
+        const cedears = result.categories.find((category) => category.key === 'cedears')
+        const wallets = result.categories.find((category) => category.key === 'wallets')
+
+        expect(cedears?.pnl.ars).toBeCloseTo(0, 6)
+        expect(wallets?.pnl.ars).toBeCloseTo(0, 6)
+        expect(result.totals.pnl.ars).toBeCloseTo(0, 6)
     })
 })

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { snapshotsRepo } from '@/db'
 import type { FxType } from '@/domain/types'
 import { usePortfolioV2 } from '@/features/portfolioV2'
+import { useAccounts, useInstruments } from '@/hooks/use-instruments'
+import { useMovements } from '@/hooks/use-movements'
 import {
     SNAPSHOT_AUTO_STORAGE_KEY,
     buildSnapshotFromPortfolioV2,
@@ -13,6 +15,7 @@ import {
 import { syncPushSnapshots } from '@/sync/remote-sync'
 
 const AUTO_SNAPSHOTS_EVENT = 'argfolio:auto-snapshots-changed'
+const SNAPSHOT_RETRY_BACKOFF_MS = [5000, 15000, 30000, 30000, 30000] as const
 
 function emitAutoSnapshotsChange(enabled: boolean) {
     if (typeof window === 'undefined') return
@@ -118,46 +121,124 @@ export function useAutoSnapshotsSetting() {
 export function useAutoDailySnapshotCapture() {
     const queryClient = useQueryClient()
     const portfolio = usePortfolioV2()
+    const { data: accounts = [], isLoading: accountsLoading } = useAccounts()
+    const { data: movements = [], isLoading: movementsLoading } = useMovements()
+    const { data: instruments = [], isLoading: instrumentsLoading } = useInstruments()
     const { autoSnapshotsEnabled } = useAutoSnapshotsSetting()
     const savedForDayRef = useRef<string | null>(null)
     const skipLoggedRef = useRef<string | null>(null)
+    const retryAttemptRef = useRef(0)
+    const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [retryTick, setRetryTick] = useState(0)
+
+    const clearRetryTimeout = useCallback(() => {
+        if (retryTimeoutRef.current != null) {
+            clearTimeout(retryTimeoutRef.current)
+            retryTimeoutRef.current = null
+        }
+    }, [])
+
+    useEffect(() => {
+        return () => {
+            clearRetryTimeout()
+        }
+    }, [clearRetryTimeout])
 
     useEffect(() => {
         if (!autoSnapshotsEnabled) {
             savedForDayRef.current = null
+            retryAttemptRef.current = 0
+            clearRetryTimeout()
             return
         }
 
-        // FASE 1: use readiness guard instead of simple isLoading check
-        const check = isPortfolioReadyForSnapshot(portfolio)
+        const dependenciesLoading = accountsLoading || movementsLoading || instrumentsLoading
+        const check = dependenciesLoading
+            ? { ready: false as const, reason: 'LOADING' as const }
+            : isPortfolioReadyForSnapshot(portfolio, {
+                accountsCount: accounts.length,
+                movementsCount: movements.length,
+                instrumentsCount: instruments.length,
+            })
+
         if (!check.ready) {
-            // Throttle skip logs: one per reason per session
             if (skipLoggedRef.current !== check.reason) {
                 console.log('[snapshots] auto-capture skip: not ready', { reason: check.reason })
                 skipLoggedRef.current = check.reason
             }
+
+            if (retryTimeoutRef.current == null && retryAttemptRef.current < SNAPSHOT_RETRY_BACKOFF_MS.length) {
+                const attempt = retryAttemptRef.current + 1
+                const delayMs = SNAPSHOT_RETRY_BACKOFF_MS[retryAttemptRef.current]
+                retryAttemptRef.current += 1
+
+                console.log('[snapshots] auto-capture retry scheduled', {
+                    reason: check.reason,
+                    attempt,
+                    delayMs,
+                })
+
+                retryTimeoutRef.current = setTimeout(() => {
+                    retryTimeoutRef.current = null
+                    setRetryTick((current) => current + 1)
+                }, delayMs)
+            }
+
             return
         }
 
+        clearRetryTimeout()
+        retryAttemptRef.current = 0
+        skipLoggedRef.current = null
+
         const snapshot = buildSnapshotFromPortfolioV2(portfolio!, 'MEP')
-        if (savedForDayRef.current === snapshot.dateLocal) return
 
         let cancelled = false
-        snapshotsRepo.upsertByDate(snapshot)
-            .then(() => {
-                if (cancelled) return
-                savedForDayRef.current = snapshot.dateLocal
+        const persistSnapshot = async () => {
+            const existing = await snapshotsRepo.getByDate(snapshot.dateLocal)
+            const shouldRepairZero = Boolean(existing && existing.totalARS === 0 && snapshot.totalARS > 0)
+
+            if (savedForDayRef.current === snapshot.dateLocal && !shouldRepairZero) {
+                return
+            }
+
+            if (existing && !shouldRepairZero) {
+                const sameTotals = existing.totalARS === snapshot.totalARS && existing.totalUSD === snapshot.totalUSD
+                if (sameTotals) {
+                    savedForDayRef.current = snapshot.dateLocal
+                    return
+                }
+            }
+
+            await snapshotsRepo.upsertByDate(snapshot)
+
+            if (cancelled) return
+            savedForDayRef.current = snapshot.dateLocal
+
+            if (shouldRepairZero) {
+                console.log('[snapshots] auto-capture repaired zero snapshot', {
+                    date: snapshot.dateLocal,
+                    previousTotalARS: existing?.totalARS ?? 0,
+                    newTotalARS: snapshot.totalARS,
+                })
+            } else {
                 console.log('[snapshots] auto-capture saved', {
                     date: snapshot.dateLocal,
                     totalARS: snapshot.totalARS,
                     totalUSD: snapshot.totalUSD,
                 })
-                queryClient.invalidateQueries({ queryKey: ['snapshots'] })
+            }
 
-                // FASE 2: auto-sync to D1 after local persist
-                syncPushSnapshots([snapshot]).catch((error) => {
-                    console.warn('[snapshots] sync push failed (auto-capture)', error)
-                })
+            queryClient.invalidateQueries({ queryKey: ['snapshots'] })
+
+            syncPushSnapshots([snapshot]).catch((error) => {
+                console.warn('[snapshots] sync push failed (auto-capture)', error)
+            })
+        }
+
+        persistSnapshot()
+            .then(() => {
+                retryAttemptRef.current = 0
             })
             .catch((error) => {
                 if (cancelled) return
@@ -170,6 +251,14 @@ export function useAutoDailySnapshotCapture() {
     }, [
         autoSnapshotsEnabled,
         portfolio,
+        accounts.length,
+        movements.length,
+        instruments.length,
+        accountsLoading,
+        movementsLoading,
+        instrumentsLoading,
+        clearRetryTimeout,
         queryClient,
+        retryTick,
     ])
 }
