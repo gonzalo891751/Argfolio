@@ -3005,3 +3005,44 @@ Cuando billeteras TOTAL = 0 (porque nunca se ejecutó el accrual / no hay INTERE
 
 ### Pendientes
 - Ninguno crítico. El flujo "Generar ahora" depende de que existan cuentas con `cashYield.enabled` — si el usuario nunca configuró TNA en sus cuentas, el botón no genera nada (comportamiento correcto, pero podría beneficiarse de un mensaje más específico).
+
+---
+
+## CHECKPOINT - Fix: Billeteras TOTAL mostraba $0 por mismatch de `kind` (2026-02-12)
+
+### Objetivo
+Corregir que "Resultados > Billeteras (TOTAL)" mostrara siempre $0 aunque existieran movimientos de interés reales (tipo `INTEREST`) para cuentas remuneradas.
+
+### Root cause
+`buildWalletItemsTotal()` en `results-service.ts` solo leía `walletDetails.interestTotalArs` cuando `item.kind === 'wallet_yield'`. Pero el builder produce items con `kind: 'cash_ars'` + `yieldMeta` para billeteras remuneradas estándar (WALLET/BANK). El kind `wallet_yield` solo se usa para Frascos (cuentas con `rubroOverride === 'frascos'`).
+
+Resultado: los datos de interés estaban correctamente calculados en `portfolio.walletDetails` (desde builder.ts líneas 1213-1219), pero `results-service.ts` nunca los leía para items `cash_ars`.
+
+### Archivos tocados
+| Archivo | Cambio |
+|---------|--------|
+| `src/features/dashboardV2/results-service.ts` | +helper `isYieldBearingWallet()`, 5 usos de `item.kind === 'wallet_yield'` reemplazados por el helper |
+| `src/features/dashboardV2/results-audit.test.ts` | +4 tests: cash_ars con yieldMeta muestra interés, depósitos no son PnL, empty state para cash_ars+yieldMeta, estimado en período para cash_ars+yieldMeta |
+
+### Cambios realizados
+1. **Helper `isYieldBearingWallet(item)`**: retorna `true` si `kind === 'wallet_yield'` OR (`kind === 'cash_ars'` AND `yieldMeta != null`).
+2. **`buildWalletItemsTotal`**: usa el helper en lugar de `item.kind === 'wallet_yield'` para:
+   - Lectura de `walletDetails.interestTotalArs` (línea ~281)
+   - Subtitle fallback "Sin TNA" (línea ~299)
+   - Empty state detection (línea ~317)
+3. **`buildWalletItemsPeriod`**: usa el helper para:
+   - Estimación TNA compuesta (línea ~355)
+   - Subtitle fallback (línea ~358)
+
+### Validación
+- `npx tsc --noEmit` → OK (0 errores)
+- `npx vitest run` → 101 tests, 14 suites, 0 failures
+- `npm run build` → OK
+
+### Rollback
+```bash
+git checkout -- src/features/dashboardV2/results-service.ts src/features/dashboardV2/results-audit.test.ts
+```
+
+### Pendientes
+- Ninguno. El fix es backwards-compatible: items `wallet_yield` (Frascos) siguen funcionando igual. No se tocó builder.ts ni types.
