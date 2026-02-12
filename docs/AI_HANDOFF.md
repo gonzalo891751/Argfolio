@@ -2882,3 +2882,64 @@ Resolver conflicto de merge entre rama `Probable` (autosync push+pull) y `origin
 
 ### Nota sobre theme/FX y ?native=1
 - Estas features no estaban en ninguna de las dos ramas del conflicto. Si existian en commits previos, fueron perdidas antes del merge. No se agregaron en esta resolucion para mantener scope minimo.
+
+---
+
+## CHECKPOINT - Fix Resultados: Billeteras intereses + PF devengado (2026-02-12)
+
+### Objetivo
+Corregir la tarjeta "Resultados" del dashboard para que:
+- **Billeteras** muestren intereses/rendimientos (devengado/acreditado), NO variación de saldo.
+- **Plazos Fijos** muestren interés devengado con guards contra NaN y datos faltantes (en vez de 0/guiones silenciosos).
+
+### Bug raíz
+El `buildWalletItemsTotal()` anterior calculaba `currentBalance - snapshotBalance` como "resultado". Esto significaba que depósitos aparecían como "ganancias" y retiros como "pérdidas" — un error conceptual grave. Los plazos fijos ya tenían lógica correcta (`computePfAccrued`) pero sin guards contra NaN/fechas inválidas.
+
+### Archivos tocados
+1. `src/features/portfolioV2/types.ts` — ADD: campo `interestTotalArs` en `WalletDetail`
+2. `src/features/portfolioV2/builder.ts` — MODIFY: popular `interestTotalArs` sumando ALL INTEREST movements por cuenta
+3. `src/features/dashboardV2/results-service.ts` — REWRITE: wallets usan intereses (no saldo); PF con NaN guards
+4. `src/components/dashboard/ResultsCard.tsx` — MODIFY: modal wallet con 3 columnas (Cuenta/Saldo/Intereses), labels
+
+### Cambios concretos
+**results-service.ts:**
+- `computePfAccrued()`: ahora retorna `null` si fechas inválidas, NaN, o datos faltantes (en vez de propagar NaN)
+- `buildPfItemsTotal()`: fallback muestra `pnl: money(null, null)` con subtítulo "Sin datos" en vez de `money(0, 0)` silencioso
+- `buildWalletItemsTotal()` REESCRITO: itera wallet items, para `wallet_yield` usa `walletDetails.interestTotalArs` (suma de INTEREST movements), para `cash_ars`/`cash_usd` resultado = 0
+- NUEVO `buildWalletItemsPeriod()`: estima interés del período usando fórmula TNA compuesta (`balance * ((1+dailyRate)^days - 1)`)
+- NUEVO `estimateWalletInterestArs()`: helper de interés compuesto con guards NaN
+- En `buildPeriodFromSnapshots()`: wallet override antes del handler default (como PF), usa `buildWalletItemsPeriod`
+- Eliminado: `getEarliestSnapshot()`, `buildWalletSnapshotKey()` (ya no necesarios)
+- Table labels wallets: `{ col1: 'Saldo', col2: 'TNA', col3: 'Intereses' }`
+
+**ResultsCard.tsx:**
+- Modal wallet: tabla de 3 columnas (Cuenta | Saldo | Intereses) en vez de 4
+- Descripción modal: "Intereses devengados/acreditados" para wallets
+- Footer: "Total Intereses" en vez de "Subtotal Rubro" para wallets
+- Subtítulo header: muestra `model.meta.note` cuando status OK
+
+**builder.ts:**
+- `walletDetails`: computa `interestTotalArs` = sum de ALL INTEREST movements (no solo últimos 30)
+- `recentInterestMovements` sigue limitado a 30 (para UI de historial)
+
+### Decisiones
+- **Opción B** del contrato (on-the-fly): para períodos, se calcula interés con fórmula TNA + balance actual, no se modifican snapshots
+- Para TOTAL: se usa suma real de INTEREST movements (dato preciso, no estimación)
+- Non-yield wallets (`cash_ars`, `cash_usd`): resultado explícito 0 (no generan interés)
+- Deduplicación: `accountInterestClaimed` Set evita contar interés 2 veces si una cuenta tiene múltiples items
+
+### Cómo validar
+1. `npm run build` → OK
+2. `npx tsc --noEmit` → 0 errores
+3. `npx eslint` sobre archivos tocados → 0 errores (2 warnings pre-existentes)
+4. Dashboard > Resultados:
+   - Billeteras TOTAL: número chico (intereses), NO del orden del saldo
+   - Billeteras modal: columnas Cuenta/Saldo/Intereses, subtítulo con TNA
+   - Billeteras 1D/7D/etc: estimación basada en TNA (no delta de saldo)
+   - PF TOTAL: devengado lineal correcto, no 0
+   - PF con fechas faltantes: muestra "Faltan fechas" + null, no NaN
+
+### Pendientes
+- Si no hay INTEREST movements (scheduler nunca corrió), wallet TOTAL mostrará 0. Se necesita correr el accrual scheduler al menos una vez.
+- Para períodos wallet, la estimación usa balance actual (no histórico del snapshot). Si hubo depósitos grandes recientes, el período puede sobreestimar ligeramente.
+- Snapshot V2 (`breakdownItems`) sigue guardando balances de wallet, no intereses. Un futuro enhancement podría agregar campo `pnl` a los snapshots para comparación exacta histórica.

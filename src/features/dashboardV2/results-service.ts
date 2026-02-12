@@ -4,10 +4,10 @@
  * Computes the ResultsCardModel consumed by the ResultsCard component.
  *
  * - TOTAL period: uses live portfolio PnL (value - cost) per item,
- *   with special handling for Wallets (balance variation) and
- *   Plazos Fijos (accrued interest).
- * - Time periods (1D/7D/30D/90D/1Y): uses snapshot deltas (current breakdown
- *   vs past breakdown), with PF override using accrued interest calculation.
+ *   with Wallets showing accrued interest (NOT balance variation)
+ *   and Plazos Fijos showing accrued interest (linear interpolation).
+ * - Time periods (1D/7D/30D/90D/1Y): uses snapshot deltas for default
+ *   rubros, with PF and Wallet overrides using interest calculations.
  */
 
 import type { Snapshot } from '@/domain/types'
@@ -59,14 +59,6 @@ function getSnapshotAtOrBefore(
     return best
 }
 
-/** Get earliest snapshot with breakdown */
-function getEarliestSnapshot(snapshotsAsc: Snapshot[]): Snapshot | null {
-    for (const s of snapshotsAsc) {
-        if (s.breakdownRubros) return s
-    }
-    return null
-}
-
 function normalizeSnapshots(snapshots: Snapshot[]): Snapshot[] {
     return [...snapshots]
         .filter((s) => Boolean(s.dateLocal))
@@ -90,23 +82,31 @@ interface AccruedResult {
 /**
  * Compute accrued interest for a plazo fijo as of a given date.
  * Uses linear interpolation: accruedInterest = totalInterest * (elapsed / total).
+ * Returns null if dates are invalid or data produces NaN.
  */
 function computePfAccrued(
     pfMeta: NonNullable<ItemV2['pfMeta']>,
     asOfISO: string,
     oficialSell: number,
-): AccruedResult {
+): AccruedResult | null {
     const principal = pfMeta.capitalArs
     const interestTotal = pfMeta.expectedInterestArs
+
+    if (!pfMeta.startDateISO || !pfMeta.maturityDateISO) return null
+    if (!Number.isFinite(principal) || !Number.isFinite(interestTotal)) return null
 
     const startMs = new Date(pfMeta.startDateISO + 'T00:00:00Z').getTime()
     const endMs = new Date(pfMeta.maturityDateISO + 'T00:00:00Z').getTime()
     const asOfMs = new Date(asOfISO + 'T00:00:00Z').getTime()
 
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || !Number.isFinite(asOfMs)) return null
+
     const totalDays = Math.max(1, (endMs - startMs) / 86_400_000)
     const elapsedDays = Math.max(0, Math.min(totalDays, (asOfMs - startMs) / 86_400_000))
 
     const accrued = interestTotal * (elapsedDays / totalDays)
+    if (!Number.isFinite(accrued)) return null
+
     const valueNow = principal + accrued
     const fx = oficialSell > 0 ? oficialSell : 1
 
@@ -137,25 +137,37 @@ function buildPfItemsTotal(
         for (const item of provider.items) {
             if (item.pfMeta) {
                 const accrued = computePfAccrued(item.pfMeta, todayKey, oficialSell)
-                items.push({
-                    id: item.id,
-                    title: item.label || item.symbol,
-                    subtitle: provider.name,
-                    invested: accrued.invested,
-                    value: accrued.value,
-                    pnl: accrued.pnl,
-                })
-                catPnlArs += accrued.pnl.ars ?? 0
-                catPnlUsd += accrued.pnl.usd ?? 0
+                if (accrued) {
+                    items.push({
+                        id: item.id,
+                        title: item.label || item.symbol,
+                        subtitle: provider.name,
+                        invested: accrued.invested,
+                        value: accrued.value,
+                        pnl: accrued.pnl,
+                    })
+                    catPnlArs += accrued.pnl.ars ?? 0
+                    catPnlUsd += accrued.pnl.usd ?? 0
+                } else {
+                    // pfMeta present but dates invalid — show null PnL
+                    items.push({
+                        id: item.id,
+                        title: item.label || item.symbol,
+                        subtitle: `${provider.name} — Faltan fechas`,
+                        invested: money(item.pfMeta.capitalArs, null),
+                        value: money(null, null),
+                        pnl: money(null, null),
+                    })
+                }
             } else {
-                // Fallback for PF items without pfMeta (shouldn't happen)
+                // PF item without pfMeta — data not yet loaded
                 items.push({
                     id: item.id,
                     title: item.label || item.symbol,
-                    subtitle: provider.name,
-                    invested: money(item.valArs, item.valUsd),
-                    value: money(item.valArs, item.valUsd),
-                    pnl: money(0, 0),
+                    subtitle: `${provider.name} — Sin datos`,
+                    invested: money(null, null),
+                    value: money(null, null),
+                    pnl: money(null, null),
                 })
             }
         }
@@ -187,19 +199,21 @@ function buildPfItemsPeriod(
                 const accruedEnd = computePfAccrued(item.pfMeta, endISO, oficialSell)
                 const accruedStart = computePfAccrued(item.pfMeta, startISO, oficialSell)
 
-                const pnlArs = (accruedEnd.pnl.ars ?? 0) - (accruedStart.pnl.ars ?? 0)
-                const pnlUsd = (accruedEnd.pnl.usd ?? 0) - (accruedStart.pnl.usd ?? 0)
+                if (accruedEnd && accruedStart) {
+                    const pnlArs = (accruedEnd.pnl.ars ?? 0) - (accruedStart.pnl.ars ?? 0)
+                    const pnlUsd = (accruedEnd.pnl.usd ?? 0) - (accruedStart.pnl.usd ?? 0)
 
-                items.push({
-                    id: item.id,
-                    title: item.label || item.symbol,
-                    subtitle: provider.name,
-                    invested: accruedStart.value,
-                    value: accruedEnd.value,
-                    pnl: money(pnlArs, pnlUsd),
-                })
-                catPnlArs += pnlArs
-                catPnlUsd += pnlUsd
+                    items.push({
+                        id: item.id,
+                        title: item.label || item.symbol,
+                        subtitle: provider.name,
+                        invested: accruedStart.value,
+                        value: accruedEnd.value,
+                        pnl: money(pnlArs, pnlUsd),
+                    })
+                    catPnlArs += pnlArs
+                    catPnlUsd += pnlUsd
+                }
             }
         }
     }
@@ -209,149 +223,137 @@ function buildPfItemsPeriod(
 }
 
 // ---------------------------------------------------------------------------
-// Wallets — balance variation
+// Wallets — interest / yield (NOT balance variation)
 // ---------------------------------------------------------------------------
 
-const WALLET_TABLE_LABELS = { col1: 'Inicial', col2: 'Actual', col3: 'Variación' }
+const WALLET_TABLE_LABELS = { col1: 'Saldo', col2: 'TNA', col3: 'Intereses' }
 
 /**
- * Build wallet items for the TOTAL period using earliest snapshot as baseline.
- * If no snapshot is available, shows current balances with null PnL.
+ * Estimate wallet interest for a given number of days using TNA compound formula.
+ * Reuses the same math as projected-earnings.ts estimateWalletProjectedGainArs.
+ */
+function estimateWalletInterestArs(balanceArs: number, tna: number, days: number): number {
+    if (!Number.isFinite(balanceArs) || balanceArs <= 0) return 0
+    if (!Number.isFinite(tna) || tna <= 0) return 0
+    if (days <= 0) return 0
+    const dailyRate = (tna / 100) / 365
+    return balanceArs * (Math.pow(1 + dailyRate, days) - 1)
+}
+
+/**
+ * Build wallet items for the TOTAL period using accrued interest
+ * from walletDetails (sum of INTEREST movements).
+ * NON-yield wallets show result = 0 (they don't generate interest).
  */
 function buildWalletItemsTotal(
     portfolio: PortfolioV2,
-    snapshotsAsc: Snapshot[],
 ): {
     items: ResultsCategoryItem[]
     catPnlArs: number
     catPnlUsd: number
-    baselineDate: string | null
 } | null {
     const rubro = portfolio.rubros.find((r) => r.id === 'wallets')
     if (!rubro) return null
 
-    // Gather current wallet values per item
-    const currentByKey = new Map<string, { ars: number; usd: number; title: string; subtitle: string }>()
-    for (const provider of rubro.providers) {
-        for (const item of provider.items) {
-            currentByKey.set(item.id, {
-                ars: item.valArs,
-                usd: item.valUsd,
-                title: item.label || item.symbol,
-                subtitle: provider.name,
-            })
-        }
-    }
-
-    // Try to find earliest snapshot with wallet breakdown
-    const baseline = getEarliestSnapshot(snapshotsAsc)
-    const pastItems = baseline?.breakdownItems ?? {}
-    const pastRubros = baseline?.breakdownRubros ?? {}
-
-    if (!baseline?.breakdownRubros) {
-        // No baseline: show current balances, P&L unknown
-        const items: ResultsCategoryItem[] = []
-        let catArs = 0
-        let catUsd = 0
-        for (const [id, cur] of currentByKey) {
-            items.push({
-                id,
-                title: cur.title,
-                subtitle: cur.subtitle,
-                invested: money(null, null),
-                value: money(cur.ars, cur.usd),
-                pnl: money(null, null),
-            })
-            catArs += cur.ars
-            catUsd += cur.usd
-        }
-        return { items, catPnlArs: 0, catPnlUsd: 0, baselineDate: null }
-    }
-
-    // Snapshot-based baseline for wallets
-    const currentWalletArs = rubro.totals.ars
-    const currentWalletUsd = rubro.totals.usd
-    const pastWalletArs = pastRubros['wallets']?.ars ?? 0
-    const pastWalletUsd = pastRubros['wallets']?.usd ?? 0
-
-    const catPnlArs = currentWalletArs - pastWalletArs
-    const catPnlUsd = currentWalletUsd - pastWalletUsd
-
-    // Per-item detail: match by snapshot assetKey
+    const fx = portfolio.fx.officialSell > 0 ? portfolio.fx.officialSell : 1
     const items: ResultsCategoryItem[] = []
+    let catPnlArs = 0
+    let catPnlUsd = 0
 
-    // Build a map from item.id to its snapshot key (for matching)
-    // Snapshot keys look like "wallet:<account>:<symbol>"
-    // We need to match current items to past items
-    const walletPastKeys = Object.keys(pastItems).filter(
-        (k) => pastItems[k]?.rubroId === 'wallets',
-    )
-    const walletCurrentKeys = new Set<string>()
+    // Track which accounts we've already counted interest for
+    // (an account may have multiple items: cash_ars + wallet_yield + cash_usd)
+    const accountInterestClaimed = new Set<string>()
 
     for (const provider of rubro.providers) {
         for (const item of provider.items) {
-            // Build the same key pattern the snapshot uses
-            const assetKey = buildWalletSnapshotKey(item)
-            walletCurrentKeys.add(assetKey)
+            let interestArs = 0
+            let tnaLabel: string | undefined
 
-            const pastVal = pastItems[assetKey]
-            const startArs = pastVal?.ars ?? 0
-            const startUsd = pastVal?.usd ?? 0
-            const pnlArs = item.valArs - startArs
-            const pnlUsd = item.valUsd - startUsd
+            if (item.kind === 'wallet_yield') {
+                // Yield-bearing wallet: get accumulated interest from walletDetails
+                const detail = portfolio.walletDetails.get(item.accountId)
+                if (detail && detail.interestTotalArs != null && !accountInterestClaimed.has(item.accountId)) {
+                    interestArs = detail.interestTotalArs
+                    accountInterestClaimed.add(item.accountId)
+                    tnaLabel = detail.tna ? `TNA ${detail.tna}%` : undefined
+                } else if (detail?.tna && detail.tna > 0) {
+                    // walletDetails exists but no INTEREST movements yet — use null
+                    tnaLabel = `TNA ${detail.tna}%`
+                }
+            }
+            // cash_ars / cash_usd: interestArs stays 0 (no yield)
+
+            const interestUsd = interestArs / fx
 
             items.push({
                 id: item.id,
                 title: item.label || item.symbol,
-                subtitle: provider.name,
-                invested: money(startArs, startUsd),
+                subtitle: tnaLabel ?? (item.kind === 'wallet_yield' ? 'Sin TNA' : provider.name),
+                invested: money(item.valArs, item.valUsd),
                 value: money(item.valArs, item.valUsd),
-                pnl: money(pnlArs, pnlUsd),
+                pnl: money(interestArs, interestUsd),
             })
+
+            catPnlArs += interestArs
+            catPnlUsd += interestUsd
         }
     }
 
-    // Include items that existed in the past but not anymore (closed wallets)
-    for (const pastKey of walletPastKeys) {
-        if (walletCurrentKeys.has(pastKey)) continue
-        const past = pastItems[pastKey]
-        if (!past) continue
-        const label = pastKey.split(':').pop() ?? pastKey
-        items.push({
-            id: pastKey,
-            title: label,
-            invested: money(past.ars, past.usd),
-            value: money(0, 0),
-            pnl: money(-past.ars, -past.usd),
-        })
-    }
-
     items.sort((a, b) => Math.abs(b.pnl.ars ?? 0) - Math.abs(a.pnl.ars ?? 0))
-
-    return { items, catPnlArs: catPnlArs, catPnlUsd: catPnlUsd, baselineDate: baseline.dateLocal }
+    return { items, catPnlArs, catPnlUsd }
 }
 
 /**
- * Build a snapshot-compatible key for a wallet item.
- * Mirrors the logic in snapshot-v2.ts buildSnapshotAssetKey.
+ * Build wallet items for a time period using TNA-based interest estimation.
+ * Uses the compound interest formula over the period days.
+ * NON-yield wallets show result = 0.
  */
-function buildWalletSnapshotKey(item: ItemV2): string {
-    const account = item.accountId
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '')
+function buildWalletItemsPeriod(
+    portfolio: PortfolioV2,
+    periodDays: number,
+): {
+    items: ResultsCategoryItem[]
+    catPnlArs: number
+    catPnlUsd: number
+} | null {
+    const rubro = portfolio.rubros.find((r) => r.id === 'wallets')
+    if (!rubro) return null
 
-    const symbolOrId = item.symbol || item.instrumentId || item.id
-    const symbol = symbolOrId
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z0-9_-]+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '')
+    const fx = portfolio.fx.officialSell > 0 ? portfolio.fx.officialSell : 1
+    const items: ResultsCategoryItem[] = []
+    let catPnlArs = 0
+    let catPnlUsd = 0
 
-    return `wallet:${account}:${symbol}`
+    for (const provider of rubro.providers) {
+        for (const item of provider.items) {
+            let interestArs = 0
+            let tnaLabel: string | undefined
+
+            if (item.kind === 'wallet_yield' && item.yieldMeta?.tna && item.yieldMeta.tna > 0) {
+                interestArs = estimateWalletInterestArs(item.valArs, item.yieldMeta.tna, periodDays)
+                tnaLabel = `TNA ${item.yieldMeta.tna}%`
+            } else if (item.kind === 'wallet_yield') {
+                tnaLabel = 'Sin TNA'
+            }
+
+            const interestUsd = interestArs / fx
+
+            items.push({
+                id: item.id,
+                title: item.label || item.symbol,
+                subtitle: tnaLabel ?? provider.name,
+                invested: money(item.valArs, item.valUsd),
+                value: money(item.valArs, item.valUsd),
+                pnl: money(interestArs, interestUsd),
+            })
+
+            catPnlArs += interestArs
+            catPnlUsd += interestUsd
+        }
+    }
+
+    items.sort((a, b) => Math.abs(b.pnl.ars ?? 0) - Math.abs(a.pnl.ars ?? 0))
+    return { items, catPnlArs, catPnlUsd }
 }
 
 // ---------------------------------------------------------------------------
@@ -360,28 +362,22 @@ function buildWalletSnapshotKey(item: ItemV2): string {
 
 function buildTotalFromPortfolio(
     portfolio: PortfolioV2,
-    snapshots: Snapshot[],
+    _snapshots: Snapshot[],
     now: Date,
 ): ResultsCardModel {
-    const snapshotsAsc = normalizeSnapshots(snapshots)
     const todayKey = toDateKey(now)
 
     const categories: ResultsCategoryRow[] = []
     let totalPnlArs = 0
     let totalPnlUsd = 0
-    let walletBaselineNote: string | undefined
 
     for (const cfg of RESULTS_CATEGORY_CONFIG) {
-        // ── WALLETS special handling ──
+        // ── WALLETS special handling (interest, NOT balance variation) ──
         if (cfg.key === 'wallets') {
-            const walletResult = buildWalletItemsTotal(portfolio, snapshotsAsc)
+            const walletResult = buildWalletItemsTotal(portfolio)
             if (!walletResult) continue
 
-            const { items, catPnlArs, catPnlUsd, baselineDate } = walletResult
-
-            if (baselineDate) {
-                walletBaselineNote = `Billeteras: variación desde ${baselineDate}`
-            }
+            const { items, catPnlArs, catPnlUsd } = walletResult
 
             categories.push({
                 key: cfg.key,
@@ -463,9 +459,7 @@ function buildTotalFromPortfolio(
         totalPnlUsd += catPnlUsd
     }
 
-    const note = walletBaselineNote
-        ? `Total desde costo (PnL acumulado). ${walletBaselineNote}.`
-        : 'Total desde costo (PnL acumulado).'
+    const note = 'Total desde costo. Billeteras: intereses acumulados. PF: devengado.'
 
     return {
         periodKey: 'TOTAL',
@@ -549,9 +543,27 @@ function buildPeriodFromSnapshots(
             // Fall through to default snapshot delta if no PF items in portfolio
         }
 
-        // ── WALLETS: add custom table labels ──
-        const isWallets = cfg.key === 'wallets'
+        // ── WALLETS: override with TNA-based interest estimation ──
+        if (cfg.key === 'wallets') {
+            const walletResult = buildWalletItemsPeriod(portfolio, PERIOD_DAYS[periodKey])
+            if (walletResult && walletResult.items.length > 0) {
+                categories.push({
+                    key: cfg.key,
+                    rubroId: cfg.rubroId,
+                    title: cfg.label,
+                    subtitle: `${walletResult.items.length} ${cfg.sub}`,
+                    pnl: money(walletResult.catPnlArs, walletResult.catPnlUsd),
+                    items: walletResult.items,
+                    tableLabels: WALLET_TABLE_LABELS,
+                })
+                totalPnlArs += walletResult.catPnlArs
+                totalPnlUsd += walletResult.catPnlUsd
+                continue
+            }
+            // Fall through to default if no wallet items
+        }
 
+        // ── Default handling (CEDEARs, Crypto, FCI) ──
         const currentRubro = currentRubros[rubroId]
         const pastRubro = pastRubros[rubroId]
         const catPnlArs = (currentRubro?.ars ?? 0) - (pastRubro?.ars ?? 0)
@@ -591,7 +603,6 @@ function buildPeriodFromSnapshots(
             subtitle: items.length > 0 ? `${items.length} ${cfg.sub}` : undefined,
             pnl: money(catPnlArs, catPnlUsd),
             items,
-            ...(isWallets ? { tableLabels: WALLET_TABLE_LABELS } : {}),
         })
 
         totalPnlArs += catPnlArs

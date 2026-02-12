@@ -216,6 +216,8 @@ export interface WalletDetail {
     interestMonthArs?: number
     interestYtdArs?: number
     projectedMonthEndArs?: number
+    /** Total accumulated interest from all INTEREST movements (ARS) */
+    interestTotalArs?: number
     projectedYearEndArs?: number
     recentInterestMovements: Array<{
         dateISO: string

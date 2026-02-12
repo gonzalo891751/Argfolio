@@ -1209,11 +1209,15 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
             .filter(m => m.category === 'CASH_USD')
             .reduce((s, m) => s + (m.valArs ?? 0), 0)
 
-        // Get recent interest movements
-        const interestMovs = movements
+        // Get ALL interest movements for this account
+        const allInterestMovs = movements
             .filter(m => m.type === 'INTEREST' && m.accountId === acc.id)
             .sort((a, b) => b.datetimeISO.localeCompare(a.datetimeISO))
-            .slice(0, 30)
+
+        // Sum total interest earned ever (ARS)
+        const interestTotalArs = allInterestMovs.reduce(
+            (sum, m) => sum + (m.totalAmount ?? 0), 0
+        )
 
         walletDetails.set(acc.id, {
             accountId: acc.id,
@@ -1223,7 +1227,8 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
             yieldEnabled: true,
             tna: acc.cashYield.tna,
             tea: computeTEA(acc.cashYield.tna),
-            recentInterestMovements: interestMovs.map(m => ({
+            interestTotalArs,
+            recentInterestMovements: allInterestMovs.slice(0, 30).map(m => ({
                 dateISO: m.datetimeISO.slice(0, 10),
                 amountArs: m.totalAmount ?? 0,
             })),
