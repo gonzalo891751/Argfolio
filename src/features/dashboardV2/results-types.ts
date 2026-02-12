@@ -31,6 +31,10 @@ export interface ResultsCategoryRow {
     items: ResultsCategoryItem[]
     /** Custom column labels for the detail modal (used by wallets) */
     tableLabels?: { col1: string; col2: string; col3: string }
+    /** True when wallet TOTAL=0 but yield accounts exist with TNA+balance */
+    walletEmptyStateHint?: boolean
+    /** True when values are TNA-based estimates, not real movements */
+    isEstimated?: boolean
 }
 
 export type ResultsSnapshotStatus = 'ok' | 'insufficient' | 'fallback_cost' | 'error'

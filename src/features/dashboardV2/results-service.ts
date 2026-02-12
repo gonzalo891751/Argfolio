@@ -95,8 +95,11 @@ function computePfAccrued(
     if (!pfMeta.startDateISO || !pfMeta.maturityDateISO) return null
     if (!Number.isFinite(principal) || !Number.isFinite(interestTotal)) return null
 
-    const startMs = new Date(pfMeta.startDateISO + 'T00:00:00Z').getTime()
-    const endMs = new Date(pfMeta.maturityDateISO + 'T00:00:00Z').getTime()
+    const startStr = pfMeta.startDateISO.includes('T') ? pfMeta.startDateISO : pfMeta.startDateISO + 'T00:00:00Z'
+    const endStr = pfMeta.maturityDateISO.includes('T') ? pfMeta.maturityDateISO : pfMeta.maturityDateISO + 'T00:00:00Z'
+
+    const startMs = new Date(startStr).getTime()
+    const endMs = new Date(endStr).getTime()
     const asOfMs = new Date(asOfISO + 'T00:00:00Z').getTime()
 
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || !Number.isFinite(asOfMs)) return null
@@ -251,6 +254,7 @@ function buildWalletItemsTotal(
     items: ResultsCategoryItem[]
     catPnlArs: number
     catPnlUsd: number
+    walletEmptyStateHint: boolean
 } | null {
     const rubro = portfolio.rubros.find((r) => r.id === 'wallets')
     if (!rubro) return null
@@ -300,7 +304,22 @@ function buildWalletItemsTotal(
     }
 
     items.sort((a, b) => Math.abs(b.pnl.ars ?? 0) - Math.abs(a.pnl.ars ?? 0))
-    return { items, catPnlArs, catPnlUsd }
+
+    // Detect empty-state: TOTAL=0 but yield accounts with TNA+balance exist
+    let walletEmptyStateHint = false
+    if (catPnlArs === 0) {
+        for (const provider of rubro.providers) {
+            for (const item of provider.items) {
+                if (item.kind === 'wallet_yield' && item.valArs > 0 && item.yieldMeta?.tna && item.yieldMeta.tna > 0) {
+                    walletEmptyStateHint = true
+                    break
+                }
+            }
+            if (walletEmptyStateHint) break
+        }
+    }
+
+    return { items, catPnlArs, catPnlUsd, walletEmptyStateHint }
 }
 
 /**
@@ -331,7 +350,7 @@ function buildWalletItemsPeriod(
 
             if (item.kind === 'wallet_yield' && item.yieldMeta?.tna && item.yieldMeta.tna > 0) {
                 interestArs = estimateWalletInterestArs(item.valArs, item.yieldMeta.tna, periodDays)
-                tnaLabel = `TNA ${item.yieldMeta.tna}%`
+                tnaLabel = `TNA ${item.yieldMeta.tna}% (Estimado)`
             } else if (item.kind === 'wallet_yield') {
                 tnaLabel = 'Sin TNA'
             }
@@ -377,7 +396,7 @@ function buildTotalFromPortfolio(
             const walletResult = buildWalletItemsTotal(portfolio)
             if (!walletResult) continue
 
-            const { items, catPnlArs, catPnlUsd } = walletResult
+            const { items, catPnlArs, catPnlUsd, walletEmptyStateHint } = walletResult
 
             categories.push({
                 key: cfg.key,
@@ -387,6 +406,7 @@ function buildTotalFromPortfolio(
                 pnl: money(catPnlArs, catPnlUsd),
                 items,
                 tableLabels: WALLET_TABLE_LABELS,
+                walletEmptyStateHint,
             })
 
             totalPnlArs += catPnlArs
@@ -555,6 +575,7 @@ function buildPeriodFromSnapshots(
                     pnl: money(walletResult.catPnlArs, walletResult.catPnlUsd),
                     items: walletResult.items,
                     tableLabels: WALLET_TABLE_LABELS,
+                    isEstimated: true,
                 })
                 totalPnlArs += walletResult.catPnlArs
                 totalPnlUsd += walletResult.catPnlUsd

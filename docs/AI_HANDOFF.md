@@ -2943,3 +2943,65 @@ El `buildWalletItemsTotal()` anterior calculaba `currentBalance - snapshotBalanc
 - Si no hay INTEREST movements (scheduler nunca corrió), wallet TOTAL mostrará 0. Se necesita correr el accrual scheduler al menos una vez.
 - Para períodos wallet, la estimación usa balance actual (no histórico del snapshot). Si hubo depósitos grandes recientes, el período puede sobreestimar ligeramente.
 - Snapshot V2 (`breakdownItems`) sigue guardando balances de wallet, no intereses. Un futuro enhancement podría agregar campo `pnl` a los snapshots para comparación exacta histórica.
+
+---
+
+## CHECKPOINT - Fix Resultados: Bugfix Fechas PF (2026-02-12)
+
+### Objetivo
+Corregir un bug introducido en la implementación de resultados PF donde fechas válidas se marcaban como "Faltan fechas".
+
+### Hallazgo
+La función `computePfAccrued` agregaba `T00:00:00Z` a fechas que ya eran ISO strings completos, resultando en `Invalid Date`.
+
+### Fix
+- `src/features/dashboardV2/results-service.ts`: Detectar si el string ya tiene tiempo antes de concatenar.
+- `src/features/dashboardV2/results-audit.test.ts`: Test unitario para verificar accrual con fechas ISO.
+
+### Estado
+- Billeteras: OK (0 por default es correcto).
+- PF: OK (devengado visible).
+
+---
+
+## CHECKPOINT - Resultados Anti-Confusión: Empty State + Estimado (2026-02-12)
+
+### Objetivo
+Cuando billeteras TOTAL = 0 (porque nunca se ejecutó el accrual / no hay INTEREST movements), el usuario no se queda con un "0" pelado. Se muestra un callout contextual con acción directa "Generar ahora". Los períodos quedan rotulados como "Estimado".
+
+### Archivos tocados
+| Archivo | Cambio |
+|---------|--------|
+| `src/features/dashboardV2/results-types.ts` | +`walletEmptyStateHint`, `isEstimated` en `ResultsCategoryRow` |
+| `src/features/dashboardV2/results-service.ts` | Detección empty state en `buildWalletItemsTotal`, "(Estimado)" en `buildWalletItemsPeriod` subtitles, `isEstimated: true` en período wallet category |
+| `src/components/dashboard/ResultsCard.tsx` | Badge "Estimado" en CategoryRow, callout con "Generar ahora" + "Ir a Configuración" en modal, feedback post-accrual, modal header diferenciado TOTAL vs Estimado |
+| `src/features/dashboardV2/results-audit.test.ts` | +3 tests: empty state hint true, hint false (con intereses), isEstimated en período |
+
+### Cambios realizados
+1. **Empty state detection**: `buildWalletItemsTotal` detecta cuando `catPnlArs === 0` pero hay items `wallet_yield` con `valArs > 0` y `tna > 0` → setea `walletEmptyStateHint: true`
+2. **"Estimado" label**: Períodos wallet muestran `(Estimado)` en subtitles de items y en el footer del modal
+3. **Callout UI**: En modal de billeteras, si `walletEmptyStateHint`, se muestra callout con:
+   - Texto: "Todavía no hay intereses registrados."
+   - Botón primario: "Generar ahora" → ejecuta `runAccrualNow()` del `useAccrualScheduler` existente
+   - Link secundario: "Ir a Configuración" → navega a `/mis-activos-v2` (donde está el PreferencesSheet con toggle autoAccrue)
+4. **Post-accrual feedback**: Mensaje verde "Intereses generados. Cerrá este modal y reabrí para ver los valores actualizados."
+5. **CategoryRow badge**: Chip "Estimado" en la fila de billeteras cuando `isEstimated`
+
+### Cómo validar
+- `npm run build` → OK
+- `npx tsc --noEmit` → OK
+- `npx vitest run` → 97 tests, 14 suites, 0 failures
+- Manual:
+  - Dashboard → Resultados → TOTAL → Billeteras con TOTAL=0 y wallet_yield con TNA+saldo → callout visible
+  - Click "Generar ahora" → accrual ejecuta, mensaje verde
+  - Cambiar a 30D → badge "Estimado" en row + "(Estimado)" en subtitles + modal header "Estimación por TNA"
+  - TOTAL con intereses reales → sin callout, TOTAL muestra suma real
+
+### Decisiones tomadas
+- **`useAccrualScheduler` directo** (no `useAutomationTrigger`): solo necesitamos accrual wallet, no PF settlement
+- **Navigate a `/mis-activos-v2`** para "Ir a Configuración": el PreferencesSheet vive ahí, no hay deep-link directo al sheet
+- **`accrualDone` state local**: después de generar, mostramos feedback sin forzar re-render del modal completo
+- **HTML entities** para acentos en JSX strings: evita problemas de encoding
+
+### Pendientes
+- Ninguno crítico. El flujo "Generar ahora" depende de que existan cuentas con `cashYield.enabled` — si el usuario nunca configuró TNA en sus cuentas, el botón no genera nada (comportamiento correcto, pero podría beneficiarse de un mensaje más específico).

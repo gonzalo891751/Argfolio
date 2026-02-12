@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Clock, X, BarChart3 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Clock, X, BarChart3, Info, Loader2, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDeltaMoneyARS, formatDeltaMoneyUSD, formatMoneyARS, formatMoneyUSD } from '@/lib/format'
 import type { Snapshot } from '@/domain/types'
@@ -12,6 +13,8 @@ import {
     type ResultsCategoryRow,
     type ResultsPeriodKey,
 } from '@/features/dashboardV2/results-types'
+import { useAccrualScheduler } from '@/features/yield/useAccrualScheduler'
+import { useQueryClient } from '@tanstack/react-query'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -224,9 +227,19 @@ function CategoryRow({
                     </span>
                 </div>
                 <div>
-                    <div className="text-sm font-medium text-white">{category.title}</div>
+                    <div className="text-sm font-medium text-white flex items-center gap-1.5">
+                        {category.title}
+                        {category.isEstimated && (
+                            <span className="text-[10px] font-mono text-amber-400/80 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                                Estimado
+                            </span>
+                        )}
+                    </div>
                     {category.subtitle && (
                         <div className="text-xs text-slate-500">{category.subtitle}</div>
+                    )}
+                    {category.walletEmptyStateHint && (
+                        <div className="text-[10px] text-amber-400/70 mt-0.5">Sin intereses registrados</div>
                     )}
                 </div>
             </div>
@@ -267,6 +280,10 @@ function CategoryDetailModal({
 }) {
     const [mounted, setMounted] = useState(false)
     const [active, setActive] = useState(false)
+    const { runAccrualNow, isRunning: isAccrualRunning } = useAccrualScheduler()
+    const queryClient = useQueryClient()
+    const navigate = useNavigate()
+    const [accrualDone, setAccrualDone] = useState(false)
 
     useEffect(() => {
         setMounted(true)
@@ -288,12 +305,28 @@ function CategoryDetailModal({
         setTimeout(onClose, 300)
     }, [onClose])
 
+    const handleGenerateNow = useCallback(async () => {
+        try {
+            const result = await runAccrualNow()
+            if (result.movementsCreated > 0) {
+                setAccrualDone(true)
+                queryClient.invalidateQueries({ queryKey: ['movements'] })
+                queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+            } else {
+                setAccrualDone(true)
+            }
+        } catch {
+            // Error handled by accrual scheduler internally
+        }
+    }, [runAccrualNow, queryClient])
+
     if (!mounted) return null
 
     const subtotalPnlArs = category.items.reduce((sum, item) => sum + (item.pnl.ars ?? 0), 0)
     const subtotalPnlUsd = category.items.reduce((sum, item) => sum + (item.pnl.usd ?? 0), 0)
     const isCrypto = category.key === 'crypto'
     const isWallets = category.key === 'wallets'
+    const showEmptyState = isWallets && category.walletEmptyStateHint && !accrualDone
 
     return createPortal(
         <div
@@ -323,7 +356,9 @@ function CategoryDetailModal({
                         </h3>
                         <p className="text-xs text-slate-400 mt-1">
                             {isWallets
-                                ? `Intereses devengados/acreditados | Periodo: ${periodKey}`
+                                ? category.isEstimated
+                                    ? `Estimaci\u00f3n por TNA | Periodo: ${periodKey}`
+                                    : `Intereses acreditados (movimientos reales) | Periodo: ${periodKey}`
                                 : category.tableLabels
                                     ? `${category.tableLabels.col3} = ${category.tableLabels.col2} - ${category.tableLabels.col1} | Periodo: ${periodKey}`
                                     : `P&L = Valor Actual - Invertido | Periodo: ${periodKey}`}
@@ -339,6 +374,46 @@ function CategoryDetailModal({
 
                 {/* Body */}
                 <div className="p-0 overflow-y-auto flex-1 bg-[#0B1121]/50">
+                    {/* Wallet empty state callout */}
+                    {showEmptyState && (
+                        <div className="mx-6 mt-4 mb-2 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                            <div className="flex items-start gap-3">
+                                <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                    <p className="text-sm text-slate-300">
+                                        Todav&iacute;a no hay intereses registrados.
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Para ver el acumulado real, gener&aacute; intereses ahora o activ&aacute; Auto-accrue en Configuraci&oacute;n.
+                                    </p>
+                                    <div className="flex items-center gap-3 mt-3">
+                                        <button
+                                            onClick={handleGenerateNow}
+                                            disabled={isAccrualRunning}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                                        >
+                                            {isAccrualRunning ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            ) : null}
+                                            Generar ahora
+                                        </button>
+                                        <button
+                                            onClick={() => { handleClose(); navigate('/mis-activos-v2') }}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors"
+                                        >
+                                            <Settings className="w-3.5 h-3.5" />
+                                            Ir a Configuraci&oacute;n
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {accrualDone && isWallets && (
+                        <div className="mx-6 mt-4 mb-2 p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-xs text-emerald-400">
+                            Intereses generados. Cerr&aacute; este modal y reabr&iacute; para ver los valores actualizados.
+                        </div>
+                    )}
                     {category.items.length === 0 ? (
                         <div className="p-12 text-center text-slate-500">
                             <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-50" />
@@ -459,7 +534,9 @@ function CategoryDetailModal({
                 <div className="px-6 py-4 bg-[#0f172a] border-t border-white/10 shrink-0 rounded-b-2xl">
                     <div className="flex justify-between items-center">
                         <div className="text-sm font-display text-slate-400 uppercase tracking-widest font-semibold">
-                            {isWallets ? 'Total Intereses' : 'Subtotal Rubro'}
+                            {isWallets
+                                ? category.isEstimated ? 'Total Intereses (Estimado)' : 'Total Intereses'
+                                : 'Subtotal Rubro'}
                         </div>
                         <div className="text-right">
                             {isCrypto ? (
