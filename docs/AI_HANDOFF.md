@@ -50,6 +50,93 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 ---
 
+# CHECKPOINT: Grid-12 Layout + Column Headers en /mis-activos-v2 (2026-02-12 #2)
+
+**Objetivo:** Migrar todas las filas (rubro/provider/item) de flex→grid-12 para alinear correctamente las columnas Balance y Resultados en todos los niveles. Agregar encabezados de columnas (Nombre / Balance / Resultados).
+
+**Archivos modificados:**
+- `src/pages/assets-v2.tsx`
+
+**Cambios realizados:**
+- **Column header (desktop)**: Nuevo bloque `grid grid-cols-12` con labels "Activo / Rubro" | "Balance" | toggle período + "Resultados"
+- **Mobile period toggle**: Toggle compacto separado para mobile (md:hidden)
+- **RubroCard**: `flex justify-between` → `grid grid-cols-12` (col-span-5 name, col-span-3 balance, col-span-4 results)
+- **ProviderSection single-item**: Idem grid-12
+- **ProviderSection multi-item header**: Idem grid-12, Settings icon movido a columna Name
+- **ItemRow**: Idem grid-12, TC chip movido dentro de columna Balance
+- **ResultsCell**: Agregado `tabular-nums`, level 2 subido a `text-sm`
+- **Tipografía jerárquica**: Rubro text-base font-semibold, Provider text-sm font-semibold, Item text-sm font-medium
+- **tabular-nums**: Aplicado en todas las columnas numéricas (balance + resultados)
+- **border-l separador**: Consistente en col-span-4 de resultados con `border-l border-border/50 pl-4`
+
+**Grid compartido (desktop md+):**
+| Columna | Span | Contenido |
+|---------|------|-----------|
+| Nombre | col-span-5 | Icon + label + chips + chevron (desktop: sin chevron explícito) |
+| Balance | col-span-3 | Primary ARS + secondary USD, text-right tabular-nums |
+| Resultados | col-span-4 | ResultsCell, border-l, text-right tabular-nums |
+
+**Mobile**: col-span-10 nombre + col-span-2 chevron. Balance y Resultados hidden.
+
+**Cómo validar:**
+```bash
+npx tsc --noEmit     # 0 errors
+npm run build         # OK (built in ~13s)
+npm test              # 109 tests passed (15 suites)
+```
+QA manual:
+1. Abrir /mis-activos-v2 desktop → ver header "Activo/Rubro | Balance | Resultados"
+2. Expandir rubros → Balance y Resultados alineados verticalmente en todos los niveles
+3. Cambiar período → funciona igual
+4. Responsive mobile → toggle visible, columnas Balance/Resultados ocultas
+5. No glifos corruptos
+
+---
+
+# CHECKPOINT: Columna "Resultados" en /mis-activos-v2 (2026-02-12)
+
+**Objetivo:** Agregar columna "Resultados" (PnL por rango) a la página /mis-activos-v2, con toggle de período (TOTAL/1D/7D/30D/90D/1Y), reutilizando lógica de dashboard.
+
+**Archivos creados:**
+- `src/features/assetsV2/use-assets-results.ts` — Hook que mapea `computeResultsCardModel()` a lookup maps por rubro/provider/item
+
+**Archivos modificados:**
+- `src/pages/assets-v2.tsx`:
+  - Imports: `useSnapshots`, `useAssetsResults`, `RESULTS_PERIODS`, `ResultsPeriodKey`, `Money`, `formatDeltaMoneyARS/USD`
+  - Estado: `resultsPeriod` con persistencia en localStorage (`misActivosV2.resultsRange`)
+  - Toggle: Segmented control compacto debajo del toolbar (TOTAL/1D/7D/30D/90D/1Y)
+  - `ResultsCell` component: renderiza PnL con tipografía jerárquica por nivel (0=rubro, 1=provider, 2=item)
+  - Integración: ResultsCell en RubroCard, ProviderSection (single + multi), ItemRow via prop drilling (`results`)
+  - Fix encoding: ~30 ocurrencias de caracteres UTF-8 corruptos (â‰ˆ→≈, â€"→—, CÃ³mo→Cómo, etc.)
+
+**Cambios realizados:**
+- Toggle de período visible en desktop y mobile (flex-wrap responsive)
+- ResultsCell visible solo en desktop (md:block), con separador border-l
+- Tipografía: level 0 = text-base font-semibold, level 1 = text-sm font-semibold, level 2 = text-xs font-medium
+- Colores semánticos: emerald (+), rose (-), muted-foreground (0/null)
+- Datos: reutiliza `computeResultsCardModel()` para paridad exacta con dashboard
+- PF muestra devengado diario (no todo al vencimiento)
+- Wallets muestra intereses (TNA-based para períodos, acumulado real para TOTAL)
+
+**Pendientes:**
+- Mobile: ResultsCell oculto en <md (futuro: pills compactos debajo del nombre)
+- Vista "Cuentas": providers mergeados muestran resultado del provider original (no mergeado)
+
+**Cómo validar:**
+```bash
+npx tsc --noEmit     # 0 errors
+npm run build         # ✅ built in ~23s
+npm test              # 109 tests passed (15 suites)
+```
+QA manual:
+1. Abrir /mis-activos-v2 → toggle "30D" → verificar que rubros muestran resultados
+2. Cambiar a TOTAL → verificar que billeteras muestran intereses acumulados
+3. Comparar con /dashboard para el mismo rango
+4. Expandir/colapsar rubros y providers → resultados en cada nivel
+5. Verificar que no aparece glifo raro (â‰ˆ) en ningún lugar
+
+---
+
 # Changelog / Sessions
 
 ### 2026-02-07 — Claude Opus 4.6 — CEDEAR TC Editable + Back to Asset Type + UI Polish
@@ -3087,7 +3174,7 @@ Corregir definitivamente "Resultados" para periodos (1D/7D/30D/90D/1Y) ajustando
     - prioriza intereses reales (`INTEREST`) en rango.
     - si no hay movimientos reales, estima por TNA y marca `isEstimated`.
   - PF periodo se mantiene como devengado (`accrued(end)-accrued(start)`), con guards de NaN/fechas.
-  - Nota de periodo agregada: "Resultado neto = Variaci�n de valuaci�n - Flujos netos del per�odo".
+  - Nota de periodo agregada: "Resultado neto = Variaci�n de valuaci�n - Flujos netos del per�odo".
 
 - UI minima (`ResultsCard.tsx`):
   - Modal detalle agrega linea informativa con la formula de resultado neto.

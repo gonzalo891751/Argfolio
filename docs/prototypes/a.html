@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="es" class="antialiased dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argfolio — Mis Activos V2.1 (Prototipo)</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Configuration -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            900: '#0f172a', // Deep Navy
+                            800: '#1e293b', // Surface
+                            700: '#334155', // Border
+                            primary: '#6366f1', // Indigo
+                            accent: '#0ea5e9', // Sky
+                        },
+                        semantic: {
+                            up: '#10b981', // Emerald
+                            down: '#f43f5e', // Rose
+                            warn: '#f59e0b', // Amber
+                            info: '#3b82f6', // Blue
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px -5px rgba(99, 102, 241, 0.3)',
+                        'glow-sm': '0 0 10px -2px rgba(99, 102, 241, 0.2)',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #0B1121;
+            --border-subtle: rgba(255,255,255,0.08);
+            --border-highlight: rgba(255,255,255,0.15);
+        }
+
+        body {
+            background-color: var(--bg-app);
+            color: #F8FAFC;
+        }
+
+        /* Glass Utility */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .glass-header {
+            background: rgba(11, 17, 33, 0.85);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        /* Grid Background */
+        .grid-bg {
+            background-image: linear-gradient(var(--border-subtle) 1px, transparent 1px),
+            linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* Export Mode Styles */
+        body.export-mode {
+            overflow: hidden;
+            width: 1920px;
+            height: 1080px;
+            padding: 40px;
+            border: 2px solid #6366f1;
+        }
+        
+        body.export-mode .no-export {
+            display: none !important;
+        }
+
+        /* Toggle Button Styles (Manual CSS because @apply doesn't work in CDN) */
+        .toggle-btn {
+            transition: all 0.2s ease;
+        }
+        .toggle-btn:hover:not(.active) {
+            color: #e2e8f0; /* slate-200 */
+            background-color: rgba(255,255,255,0.05);
+        }
+        /* Active state handled by JS adding Tailwind classes directly or specific style below */
+        .toggle-btn.active {
+            background-color: rgba(99, 102, 241, 0.2); /* brand-primary/20 */
+            color: #818cf8; /* brand-primary (lighter) */
+            border-color: rgba(99, 102, 241, 0.3);
+            box-shadow: 0 0 10px -2px rgba(99, 102, 241, 0.2);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Animation for expanding rows */
+        .sub-row {
+            transition: all 0.3s ease-in-out;
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+        }
+        .sub-row.open {
+            max-height: 500px;
+            opacity: 1;
+        }
+        
+        .rotate-arrow { transition: transform 0.2s; }
+        .open .rotate-arrow { transform: rotate(180deg); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col relative selection:bg-brand-primary/30 selection:text-white">
+
+    <!-- Background Decoration -->
+    <div class="fixed inset-0 grid-bg opacity-20 pointer-events-none z-0"></div>
+    <div class="fixed top-0 right-0 w-[600px] h-[600px] bg-brand-primary/10 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2 z-0"></div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 glass-header px-6 py-4 flex justify-between items-center no-export">
+        <div class="flex items-center gap-3">
+            <svg class="w-6 h-6 text-brand-primary" viewBox="0 0 40 40" fill="none">
+                <path d="M20 4L4 36H12L20 20L28 36H36L20 4Z" fill="currentColor"/>
+                <circle cx="20" cy="14" r="3" class="text-white" fill="currentColor"/>
+            </svg>
+            <span class="font-display font-bold tracking-wide text-lg">Argfolio</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-white/5 border border-white/10 text-slate-400">BETA</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <button onclick="toggleExportMode()" class="hidden md:block text-xs font-mono text-slate-400 hover:text-white transition">
+                [ Toggle Export Mode ]
+            </button>
+            <div class="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs font-bold text-indigo-400 border border-indigo-500/30">
+                AF
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="relative z-10 w-full max-w-7xl mx-auto pt-24 pb-20 px-4 md:px-6 flex flex-col gap-8">
+
+        <!-- Top Metrics Cards -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Patrimonio -->
+            <div class="glass-panel p-5 rounded-xl border-t border-white/10 hover:border-brand-primary/30 transition group">
+                <div class="flex justify-between items-start mb-2">
+                    <h3 class="text-xs font-mono text-slate-400 uppercase tracking-wider">Patrimonio Total</h3>
+                    <svg class="w-4 h-4 text-slate-600 group-hover:text-brand-primary transition" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                </div>
+                <div class="font-display font-bold text-2xl md:text-3xl text-white tracking-tight">
+                    $ 24.502.100<span class="text-slate-500 text-lg">,00</span>
+                </div>
+                <div class="mt-2 flex items-center gap-2">
+                    <span class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">▲ 2.4%</span>
+                    <span class="text-xs text-slate-500">vs mes anterior</span>
+                </div>
+            </div>
+
+            <!-- Exposición Moneda -->
+            <div class="glass-panel p-5 rounded-xl border-t border-white/10">
+                <h3 class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-3">Exposición</h3>
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden flex">
+                        <div class="w-[65%] bg-brand-primary"></div>
+                        <div class="w-[35%] bg-slate-600"></div>
+                    </div>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <div><span class="w-2 h-2 inline-block rounded-full bg-brand-primary mr-1"></span><span class="text-white font-mono">65% USD</span></div>
+                    <div><span class="w-2 h-2 inline-block rounded-full bg-slate-600 mr-1"></span><span class="text-white font-mono">35% ARS</span></div>
+                </div>
+            </div>
+
+            <!-- P&L Total (Card) -->
+            <div class="glass-panel p-5 rounded-xl border-t border-white/10 relative overflow-hidden">
+                <div class="absolute right-0 top-0 p-3 opacity-10">
+                    <svg class="w-16 h-16 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                </div>
+                <h3 class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Resultado (YTD)</h3>
+                <div class="font-mono text-xl text-emerald-400 font-medium">
+                    + USD 3.240,50
+                </div>
+                <div class="text-xs text-slate-500 mt-1">Intereses y valuación</div>
+            </div>
+
+             <!-- Distribución Simple -->
+             <div class="glass-panel p-5 rounded-xl border-t border-white/10 flex items-center justify-between">
+                <div>
+                    <h3 class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Liquidez</h3>
+                    <div class="font-display text-xl text-white">12%</div>
+                </div>
+                <div class="w-px h-8 bg-white/10"></div>
+                <div>
+                    <h3 class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Renta Fija</h3>
+                    <div class="font-display text-xl text-white">45%</div>
+                </div>
+                <div class="w-px h-8 bg-white/10"></div>
+                <div>
+                    <h3 class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Renta Var.</h3>
+                    <div class="font-display text-xl text-white">43%</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Assets List Container -->
+        <section class="flex flex-col gap-0">
+            
+            <!-- SECTION HEADER + MOBILE TOGGLE -->
+            <div class="flex flex-col md:flex-row md:justify-between md:items-end mb-4 gap-4">
+                <h2 class="font-display text-2xl font-bold text-white">Mis Tenencias</h2>
+                
+                <!-- MOBILE TOGGLE (Visible on MD and below) -->
+                <!-- We duplicate this control for mobile UX so users can switch period without seeing the desktop header -->
+                <div class="md:hidden flex items-center justify-between bg-slate-900/50 p-1 rounded-lg border border-white/10 w-full max-w-xs">
+                    <span class="text-[10px] font-mono text-slate-500 uppercase px-2">Período</span>
+                    <div class="flex gap-1">
+                        <button class="toggle-btn px-3 py-1 rounded text-[10px] font-mono font-medium border border-transparent" data-mode="TOTAL" onclick="setResultMode('TOTAL')">Total</button>
+                        <button class="toggle-btn px-3 py-1 rounded text-[10px] font-mono font-medium border border-transparent" data-mode="1D" onclick="setResultMode('1D')">1D</button>
+                        <button class="toggle-btn active px-3 py-1 rounded text-[10px] font-mono font-medium border border-brand-primary/30 shadow-glow-sm bg-brand-primary/20 text-brand-primary" data-mode="30D" onclick="setResultMode('30D')">30D</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table/List Structure -->
+            <div class="glass-panel rounded-xl overflow-hidden shadow-2xl shadow-black/40">
+                
+                <!-- Sticky Header with DESKTOP TOGGLE -->
+                <div class="sticky top-0 z-20 bg-brand-900/95 backdrop-blur-md border-b border-white/10 grid grid-cols-12 px-6 py-3 items-center">
+                    
+                    <!-- Col 1: Name -->
+                    <div class="col-span-8 md:col-span-5 text-xs font-mono text-slate-500 uppercase tracking-wider">
+                        Activo / Rubro
+                    </div>
+                    
+                    <!-- Col 2: Balance -->
+                    <div class="hidden md:block md:col-span-3 text-right text-xs font-mono text-slate-500 uppercase tracking-wider">
+                        Balance
+                    </div>
+                    
+                    <!-- Col 3: Resultados + Toggle (Desktop) -->
+                    <div class="hidden md:flex md:col-span-4 justify-end items-center gap-4">
+                        
+                        <!-- Toggle Wrapper (Segmented Control) -->
+                        <div class="flex items-center gap-2 bg-slate-950/50 rounded-lg p-1 border border-white/10 shadow-inner">
+                            <button class="toggle-btn px-3 py-1 rounded text-[10px] font-mono font-medium border border-transparent text-slate-500" 
+                                    data-mode="TOTAL" onclick="setResultMode('TOTAL')">TOTAL</button>
+                            <button class="toggle-btn px-3 py-1 rounded text-[10px] font-mono font-medium border border-transparent text-slate-500" 
+                                    data-mode="1D" onclick="setResultMode('1D')">1D</button>
+                            <button class="toggle-btn active px-3 py-1 rounded text-[10px] font-mono font-medium bg-brand-primary/20 text-brand-primary border border-brand-primary/30 shadow-glow-sm" 
+                                    data-mode="30D" onclick="setResultMode('30D')">30D</button>
+                        </div>
+
+                        <div class="text-xs font-mono text-slate-500 uppercase tracking-wider text-right">
+                            Resultados
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Asset Rows Container -->
+                <div class="divide-y divide-white/5 font-sans" id="assets-container">
+                    
+                    <!-- 1. BILLETERAS -->
+                    <div class="group bg-slate-900/20 hover:bg-white/[0.02] transition cursor-pointer" onclick="toggleRow('wallets')">
+                        <div class="grid grid-cols-12 px-6 py-4 items-center">
+                            
+                            <!-- Activo -->
+                            <div class="col-span-8 md:col-span-5 flex items-center gap-3">
+                                <div class="p-1 rounded bg-white/5 border border-white/10 transition group-hover:border-white/20">
+                                    <svg class="w-3 h-3 text-slate-400 rotate-arrow" id="arrow-wallets" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-white flex items-center gap-2">
+                                        Billeteras
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">Remuneradas</span>
+                                    </div>
+                                    <!-- Mobile Result Pill -->
+                                    <div class="md:hidden mt-2">
+                                        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/5 border border-emerald-500/10">
+                                            <span class="text-xs text-emerald-400 font-mono data-val-ars" data-cat="wallets">+$ 24.890</span>
+                                            <span class="text-[9px] text-slate-500 uppercase tracking-wide data-label" data-cat="wallets">Int (30d)</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Balance -->
+                            <div class="hidden md:block md:col-span-3 text-right">
+                                <div class="font-mono text-white text-base">$ 1.507.657,00</div>
+                                <div class="font-mono text-xs text-slate-500">USD 1.235,00</div>
+                            </div>
+
+                            <!-- Resultados -->
+                            <div class="hidden md:flex md:col-span-4 flex-col items-end justify-center pl-4 border-l border-white/5">
+                                <div class="font-mono text-sm text-emerald-400 flex items-center gap-1.5">
+                                    <span class="data-val-ars" data-cat="wallets">+$ 24.890,20</span>
+                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse-slow data-est-badge" title="Estimado"></span>
+                                </div>
+                                <div class="font-mono text-[10px] text-emerald-400/70 data-val-usd" data-cat="wallets">+USD 20,40</div>
+                                <div class="text-[9px] text-slate-500 font-mono mt-0.5 uppercase tracking-wide data-label" data-cat="wallets">Intereses (30d)</div>
+                            </div>
+                        </div>
+
+                        <!-- Nested Rows: Billeteras -->
+                        <div id="row-wallets" class="sub-row bg-black/20 shadow-inner">
+                            <!-- Item 1: MP -->
+                            <div class="grid grid-cols-12 px-6 py-3 items-center hover:bg-white/[0.02]">
+                                <div class="col-span-12 md:col-span-5 pl-12 flex items-center gap-3">
+                                    <div class="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center text-[10px] text-blue-400 font-bold">M</div>
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm text-slate-300">MercadoPago</span>
+                                            <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-white/5 text-slate-400 border border-white/10">TNA 32%</span>
+                                        </div>
+                                        <!-- Mobile Result -->
+                                        <div class="md:hidden mt-1 flex items-center gap-2">
+                                            <span class="text-xs font-mono text-emerald-400 data-sub-ars" data-item="mp">+$ 18.540</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="hidden md:block md:col-span-3 text-right">
+                                    <div class="font-mono text-sm text-slate-300">$ 1.002.551,00</div>
+                                </div>
+                                <div class="hidden md:block md:col-span-4 text-right">
+                                    <div class="font-mono text-xs text-emerald-400 data-sub-ars" data-item="mp">+$ 18.540</div>
+                                    <div class="font-mono text-[10px] text-emerald-400/60 data-sub-usd" data-item="mp">+USD 15.20</div>
+                                </div>
+                            </div>
+
+                            <!-- Item 2: Fiwind -->
+                            <div class="grid grid-cols-12 px-6 py-3 items-center hover:bg-white/[0.02]">
+                                <div class="col-span-12 md:col-span-5 pl-12 flex items-center gap-3">
+                                    <div class="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-[10px] text-indigo-400 font-bold">F</div>
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm text-slate-300">Fiwind</span>
+                                            <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-white/5 text-slate-400 border border-white/10">TNA 41%</span>
+                                        </div>
+                                        <div class="md:hidden mt-1 flex items-center gap-2">
+                                            <span class="text-xs font-mono text-emerald-400 data-sub-ars" data-item="fiwind">+$ 6.350</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="hidden md:block md:col-span-3 text-right">
+                                    <div class="font-mono text-sm text-slate-300">$ 505.106,00</div>
+                                </div>
+                                <div class="hidden md:block md:col-span-4 text-right">
+                                     <div class="font-mono text-xs text-emerald-400 data-sub-ars" data-item="fiwind">+$ 6.350</div>
+                                     <div class="font-mono text-[10px] text-emerald-400/60 data-sub-usd" data-item="fiwind">+USD 5.20</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. PLAZOS FIJOS -->
+                    <div class="group bg-slate-900/20 hover:bg-white/[0.02] transition cursor-pointer" onclick="toggleRow('pf')">
+                        <div class="grid grid-cols-12 px-6 py-4 items-center">
+                            
+                            <div class="col-span-8 md:col-span-5 flex items-center gap-3">
+                                <div class="p-1 rounded bg-white/5 border border-white/10 transition group-hover:border-white/20">
+                                    <svg class="w-3 h-3 text-slate-400 rotate-arrow" id="arrow-pf" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-white">Plazos Fijos</div>
+                                    <div class="md:hidden mt-2">
+                                        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/5 border border-emerald-500/10">
+                                            <span class="text-xs text-emerald-400 font-mono data-val-ars" data-cat="pf">+$ 34.400</span>
+                                            <span class="text-[9px] text-slate-500 uppercase tracking-wide data-label" data-cat="pf">Devengado</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="hidden md:block md:col-span-3 text-right">
+                                <div class="font-mono text-white text-base">$ 865.438,00</div>
+                                <div class="font-mono text-xs text-slate-500">USD 709,00</div>
+                            </div>
+
+                            <div class="hidden md:flex md:col-span-4 flex-col items-end justify-center pl-4 border-l border-white/5">
+                                <div class="font-mono text-sm text-emerald-400">
+                                    <span class="data-val-ars" data-cat="pf">+$ 34.400,00</span>
+                                </div>
+                                <div class="font-mono text-[10px] text-emerald-400/70 data-val-usd" data-cat="pf">+USD 28,20</div>
+                                <div class="text-[9px] text-slate-500 font-mono mt-0.5 uppercase tracking-wide data-label" data-cat="pf">Devengado</div>
+                            </div>
+                        </div>
+
+                        <div id="row-pf" class="sub-row bg-black/20 shadow-inner">
+                            <div class="grid grid-cols-12 px-6 py-3 items-center hover:bg-white/[0.02]">
+                                <div class="col-span-12 md:col-span-5 pl-12">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm text-slate-300">PF-20260207-RD3D</span>
+                                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-white/5 text-slate-400 border border-white/10">38%</span>
+                                    </div>
+                                    <div class="md:hidden mt-1">
+                                        <span class="text-xs font-mono text-emerald-400 data-sub-ars" data-item="pf1">+$ 24.100</span>
+                                    </div>
+                                </div>
+                                <div class="hidden md:block md:col-span-3 text-right">
+                                    <div class="font-mono text-sm text-slate-300">$ 665.438,00</div>
+                                </div>
+                                <div class="hidden md:block md:col-span-4 text-right">
+                                    <div class="font-mono text-xs text-emerald-400 data-sub-ars" data-item="pf1">+$ 24.100</div>
+                                    <div class="font-mono text-[10px] text-emerald-400/60 data-sub-usd" data-item="pf1">+USD 19.80</div>
+                                </div>
+                            </div>
+                             <div class="grid grid-cols-12 px-6 py-3 items-center hover:bg-white/[0.02]">
+                                <div class="col-span-12 md:col-span-5 pl-12">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm text-slate-300">PF-20260207-JV97</span>
+                                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-white/5 text-slate-400 border border-white/10">37.5%</span>
+                                    </div>
+                                    <div class="md:hidden mt-1">
+                                        <span class="text-xs font-mono text-emerald-400 data-sub-ars" data-item="pf2">+$ 10.300</span>
+                                    </div>
+                                </div>
+                                <div class="hidden md:block md:col-span-3 text-right">
+                                    <div class="font-mono text-sm text-slate-300">$ 200.000,00</div>
+                                </div>
+                                <div class="hidden md:block md:col-span-4 text-right">
+                                    <div class="font-mono text-xs text-emerald-400 data-sub-ars" data-item="pf2">+$ 10.300</div>
+                                    <div class="font-mono text-[10px] text-emerald-400/60 data-sub-usd" data-item="pf2">+USD 8.40</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. CEDEARs -->
+                    <div class="group bg-slate-900/20 hover:bg-white/[0.02] transition cursor-pointer" onclick="toggleRow('cedears')">
+                        <div class="grid grid-cols-12 px-6 py-4 items-center">
+                            <div class="col-span-8 md:col-span-5 flex items-center gap-3">
+                                <div class="p-1 rounded bg-white/5 border border-white/10 transition group-hover:border-white/20">
+                                    <svg class="w-3 h-3 text-slate-400 rotate-arrow" id="arrow-cedears" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-white">CEDEARs</div>
+                                    <div class="md:hidden mt-2">
+                                        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/5 border border-emerald-500/10">
+                                            <span class="text-xs text-emerald-400 font-mono data-val-ars" data-cat="cedears">+$ 640.280</span>
+                                            <span class="text-[9px] text-slate-500 uppercase tracking-wide data-label" data-cat="cedears">P&L (Mkt)</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="hidden md:block md:col-span-3 text-right">
+                                <div class="font-mono text-white text-base">$ 12.550.200,00</div>
+                                <div class="font-mono text-xs text-slate-500">USD 10.287,00</div>
+                            </div>
+
+                            <div class="hidden md:flex md:col-span-4 flex-col items-end justify-center pl-4 border-l border-white/5">
+                                <div class="font-mono text-sm text-emerald-400">
+                                    <span class="data-val-ars" data-cat="cedears">+$ 640.280,00</span>
+                                </div>
+                                <div class="font-mono text-[10px] text-emerald-400/70 data-val-usd" data-cat="cedears">+USD 524,00</div>
+                                <div class="text-[9px] text-slate-500 font-mono mt-0.5 uppercase tracking-wide data-label" data-cat="cedears">P&L (Mkt)</div>
+                            </div>
+                        </div>
+                        <div id="row-cedears" class="sub-row bg-black/20 shadow-inner">
+                            <div class="px-6 py-4 text-xs font-mono text-slate-500 text-center">Detalle de CEDEARs simplificado...</div>
+                        </div>
+                    </div>
+
+                    <!-- 4. CRYPTO -->
+                    <div class="group bg-slate-900/20 hover:bg-white/[0.02] transition cursor-pointer" onclick="toggleRow('crypto')">
+                        <div class="grid grid-cols-12 px-6 py-4 items-center">
+                            <div class="col-span-8 md:col-span-5 flex items-center gap-3">
+                                <div class="p-1 rounded bg-white/5 border border-white/10 transition group-hover:border-white/20">
+                                    <svg class="w-3 h-3 text-slate-400 rotate-arrow" id="arrow-crypto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-white">Criptomonedas</div>
+                                    <div class="md:hidden mt-2">
+                                        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-rose-500/5 border border-rose-500/10">
+                                            <span class="text-xs text-rose-400 font-mono data-val-ars" data-cat="crypto">-$ 249.000</span>
+                                            <span class="text-[9px] text-slate-500 uppercase tracking-wide data-label" data-cat="crypto">P&L (Mkt)</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="hidden md:block md:col-span-3 text-right">
+                                <div class="font-mono text-white text-base">$ 9.578.805,00</div>
+                                <div class="font-mono text-xs text-slate-500">USD 7.850,00</div>
+                            </div>
+
+                            <div class="hidden md:flex md:col-span-4 flex-col items-end justify-center pl-4 border-l border-white/5">
+                                <div class="font-mono text-sm text-rose-400">
+                                    <span class="data-val-ars" data-cat="crypto">-$ 249.000,50</span>
+                                </div>
+                                <div class="font-mono text-[10px] text-rose-400/70 data-val-usd" data-cat="crypto">-USD 204,10</div>
+                                <div class="text-[9px] text-slate-500 font-mono mt-0.5 uppercase tracking-wide data-label" data-cat="crypto">P&L (Mkt)</div>
+                            </div>
+                        </div>
+
+                        <div id="row-crypto" class="sub-row bg-black/20 shadow-inner">
+                            <!-- Bitcoin -->
+                            <div class="grid grid-cols-12 px-6 py-3 items-center hover:bg-white/[0.02]">
+                                <div class="col-span-12 md:col-span-5 pl-12 flex items-center gap-3">
+                                    <div class="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-[10px] text-orange-400 font-bold">₿</div>
+                                    <div>
+                                        <span class="text-sm text-slate-300 block">Bitcoin</span>
+                                        <div class="md:hidden mt-1">
+                                            <span class="text-xs font-mono text-rose-400 data-sub-ars" data-item="btc">-$ 150.200</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="hidden md:block md:col-span-3 text-right">
+                                    <div class="font-mono text-sm text-slate-300">$ 6.340.000,00</div>
+                                </div>
+                                <div class="hidden md:block md:col-span-4 text-right">
+                                    <div class="font-mono text-xs text-rose-400 data-sub-ars" data-item="btc">-$ 150.200</div>
+                                    <div class="font-mono text-[10px] text-rose-400/60 data-sub-usd" data-item="btc">-USD 122.50</div>
+                                </div>
+                            </div>
+                            <!-- Stablecoins -->
+                            <div class="grid grid-cols-12 px-6 py-3 items-center hover:bg-white/[0.02]">
+                                <div class="col-span-12 md:col-span-5 pl-12 flex items-center gap-3">
+                                    <div class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] text-emerald-400 font-bold">$</div>
+                                    <div>
+                                        <span class="text-sm text-slate-300 block">USDT</span>
+                                        <div class="md:hidden mt-1">
+                                            <span class="text-xs font-mono text-slate-500 data-sub-ars" data-item="usdt">N/A</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="hidden md:block md:col-span-3 text-right">
+                                    <div class="font-mono text-sm text-slate-300">$ 3.238.805,00</div>
+                                </div>
+                                <div class="hidden md:block md:col-span-4 text-right">
+                                    <div class="font-mono text-xs text-slate-500 data-sub-ars" data-item="usdt">N/A</div>
+                                    <div class="font-mono text-[10px] text-slate-500/60 data-sub-usd" data-item="usdt">N/A</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Footer Notes -->
+            <div class="mt-6 text-center text-xs text-slate-500 font-mono no-export">
+                Datos actualizados hace 4 minutos.
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Logic Script -->
+    <script>
+        // Data Store (Mock)
+        const mockData = {
+            TOTAL: {
+                wallets: { ars: "+$ 421.500,00", usd: "+USD 345,50", label: "Intereses (Tot)", showEst: false, items: {
+                    mp: { ars: "+$ 310.000", usd: "+USD 254.10" },
+                    fiwind: { ars: "+$ 111.500", usd: "+USD 91.40" }
+                }},
+                pf: { ars: "+$ 124.800,00", usd: "+USD 102,30", label: "Devengado (Tot)", showEst: false, items: {
+                    pf1: { ars: "+$ 84.500", usd: "+USD 69.20" },
+                    pf2: { ars: "+$ 40.300", usd: "+USD 33.10" }
+                }},
+                cedears: { ars: "+$ 2.440.100,00", usd: "+USD 2.000,00", label: "P&L (Hist)", showEst: false },
+                crypto: { ars: "+$ 890.000,00", usd: "+USD 729,50", label: "P&L (Hist)", showEst: false, items: {
+                    btc: { ars: "+$ 890.000", usd: "+USD 729.50" },
+                    usdt: { ars: "N/A", usd: "N/A" }
+                }}
+            },
+            '1D': {
+                wallets: { ars: "+$ 829,67", usd: "+USD 0,68", label: "Intereses (Est)", showEst: true, items: {
+                    mp: { ars: "+$ 618", usd: "+USD 0.50" },
+                    fiwind: { ars: "+$ 211", usd: "+USD 0.18" }
+                }},
+                pf: { ars: "+$ 1.150,00", usd: "+USD 0,94", label: "Devengado (1d)", showEst: false, items: {
+                    pf1: { ars: "+$ 803", usd: "+USD 0.65" },
+                    pf2: { ars: "+$ 347", usd: "+USD 0.29" }
+                }},
+                cedears: { ars: "-$ 15.400,00", usd: "-USD 12,60", label: "Var (1d)", showEst: false },
+                crypto: { ars: "-$ 42.100,00", usd: "-USD 34,50", label: "Var (1d)", showEst: false, items: {
+                    btc: { ars: "-$ 42.100", usd: "-USD 34.50" },
+                    usdt: { ars: "0", usd: "0" }
+                }}
+            },
+            '30D': {
+                wallets: { ars: "+$ 24.890,20", usd: "+USD 20,40", label: "Intereses (30d)", showEst: true, items: {
+                    mp: { ars: "+$ 18.540", usd: "+USD 15.20" },
+                    fiwind: { ars: "+$ 6.350", usd: "+USD 5.20" }
+                }},
+                pf: { ars: "+$ 34.400,00", usd: "+USD 28,20", label: "Devengado (30d)", showEst: false, items: {
+                    pf1: { ars: "+$ 24.100", usd: "+USD 19.80" },
+                    pf2: { ars: "+$ 10.300", usd: "+USD 8.40" }
+                }},
+                cedears: { ars: "+$ 640.280,00", usd: "+USD 524,00", label: "P&L (30d)", showEst: false },
+                crypto: { ars: "-$ 249.000,50", usd: "-USD 204,10", label: "P&L (30d)", showEst: false, items: {
+                    btc: { ars: "-$ 150.200", usd: "-USD 122.50" },
+                    usdt: { ars: "N/A", usd: "N/A" }
+                }}
+            }
+        };
+
+        // Logic
+        function setResultMode(mode) {
+            // Update buttons logic to handle multiple toggle instances (Mobile & Desktop)
+            // We select ALL buttons with the matching data-mode attribute
+            document.querySelectorAll('.toggle-btn').forEach(b => {
+                const isSelected = b.getAttribute('data-mode') === mode;
+                
+                if (isSelected) {
+                    // Activate styles
+                    b.classList.add('active');
+                    // Add tailwind specific active classes (manual implementation of the @apply logic)
+                    b.classList.add('bg-brand-primary/20', 'text-brand-primary', 'border-brand-primary/30', 'shadow-glow-sm');
+                    b.classList.remove('text-slate-500', 'border-transparent');
+                } else {
+                    // Deactivate styles
+                    b.classList.remove('active');
+                    b.classList.remove('bg-brand-primary/20', 'text-brand-primary', 'border-brand-primary/30', 'shadow-glow-sm');
+                    b.classList.add('text-slate-500', 'border-transparent');
+                }
+            });
+
+            // Update Data
+            const data = mockData[mode];
+            if (!data) return;
+
+            // Categories
+            for (const [catId, catData] of Object.entries(data)) {
+                // Update Main Values
+                updateElementText(`[data-cat="${catId}"].data-val-ars`, catData.ars, catData.ars.includes('-') ? 'text-rose-400' : 'text-emerald-400');
+                updateElementText(`[data-cat="${catId}"].data-val-usd`, catData.usd);
+                updateElementText(`[data-cat="${catId}"].data-label`, catData.label);
+                
+                // Show/Hide Est Badge
+                const badges = document.querySelectorAll(`[data-cat="${catId}"] ~ .data-est-badge, [data-cat="${catId}"] .data-est-badge`);
+                badges.forEach(el => el.style.display = catData.showEst ? 'inline-block' : 'none');
+
+                // Sub Items
+                if (catData.items) {
+                    for (const [itemId, itemData] of Object.entries(catData.items)) {
+                        updateElementText(`[data-item="${itemId}"].data-sub-ars`, itemData.ars, itemData.ars.includes('-') ? 'text-rose-400' : (itemData.ars === 'N/A' ? 'text-slate-500' : 'text-emerald-400'));
+                        updateElementText(`[data-item="${itemId}"].data-sub-usd`, itemData.usd);
+                    }
+                }
+            }
+        }
+
+        function updateElementText(selector, text, colorClass = null) {
+            document.querySelectorAll(selector).forEach(el => {
+                el.style.opacity = '0.5';
+                setTimeout(() => {
+                    el.innerText = text;
+                    if(colorClass) {
+                        el.classList.remove('text-emerald-400', 'text-rose-400', 'text-slate-500');
+                        el.classList.add(colorClass);
+                    }
+                    el.style.opacity = '1';
+                }, 150);
+            });
+        }
+
+        function toggleRow(id) {
+            const row = document.getElementById(`row-${id}`);
+            const arrow = document.getElementById(`arrow-${id}`);
+            
+            if (row.classList.contains('open')) {
+                row.classList.remove('open');
+                arrow.parentElement.parentElement.parentElement.parentElement.classList.remove('open');
+            } else {
+                row.classList.add('open');
+                arrow.parentElement.parentElement.parentElement.parentElement.classList.add('open');
+            }
+        }
+
+        function toggleExportMode() {
+            document.body.classList.toggle('export-mode');
+            
+            // Intentar actualizar la URL, pero fallar silenciosamente si el entorno (sandbox/iframe) lo bloquea
+            try {
+                const url = new URL(window.location);
+                if(document.body.classList.contains('export-mode')) {
+                    url.searchParams.set('export', '1');
+                } else {
+                    url.searchParams.delete('export');
+                }
+                window.history.pushState({}, '', url);
+            } catch (e) {
+                console.warn('History pushState bloqueado por seguridad. El modo exportación funcionará solo visualmente.');
+            }
+        }
+
+        if(new URLSearchParams(window.location.search).get('export') === '1') {
+            document.body.classList.add('export-mode');
+        }
+    </script>
+</body>
+</html>
