@@ -3491,3 +3491,68 @@ Rediseñar la tarjeta RESUMEN GENERAL para:
 ### Validación
 - `npm run build` → OK
 - Algebra: incTotal - pasivosTotal - savTotal - egreTotal === incTotal - (cardsBal+servTotal+planTotal+savTotal) - egreTotal
+
+---
+
+## CHECKPOINT #1 — UI Patch: Subtotales con Color + Items Neutros (FASE 0)
+
+**Fecha**: 2026-02-21
+**Estado**: Inspección completada, listo para implementar
+
+### Objetivo
+- Items individuales (Sueldo, Tarjetas, Servicios, etc.) → color neutro (blanco/muted)
+- Subtotales/totales → color + bold (verde ingresos, rojo pasivos, violeta ahorro)
+- Regla: si sección tiene 1 solo item → NO mostrar subtotal (redundante)
+- Si 1 solo pasivo visible → esa fila se vuelve "total" (rojo bold)
+
+### Archivo a tocar
+- `public/apps/finanzas-express/index.html` — solo bloque RESUMEN GENERAL (L1968-2047)
+
+### Plan
+1. INGRESOS items: quitar `text-success`, dejar `font-num` neutro. Subtotal: ya tiene condición `length > 1`
+2. PASIVOS items: quitar `text-danger`, dejar neutro. Calcular `pasivosVisibleCount`. Si count==1: esa fila es total (rojo bold). Si count>1: subtotal rojo bold
+3. AHORRO: sin cambios (ya es single-row total violeta)
+4. EGRESOS: sin cambios (ya es single-row total rojo)
+
+### Riesgos
+- Ninguno: solo cambios visuales en el template, sin tocar cálculos ni persistencia
+
+---
+
+## CHECKPOINT FINAL — UI Patch: Subtotales con Color + Items Neutros (IMPLEMENTADO)
+
+**Fecha**: 2026-02-21
+**Estado**: Implementado y compilando
+
+### Archivo modificado
+- `public/apps/finanzas-express/index.html` — solo bloque RESUMEN GENERAL
+
+### Cambios realizados
+
+**INGRESOS**:
+- Items individuales: `font-num` + `color:var(--c-muted)` (neutro gris). Quitado `font-bold text-success`
+- "Total Ingresos": mantiene `font-bold text-success` (verde). Solo aparece cuando `incomes.length > 1`
+
+**PASIVOS**:
+- Refactorizado con IIFE `(() => { ... })()` que construye array `pItems` con categorías visibles (monto > 0)
+- `pItems.length === 0` → no renderiza sección
+- `pItems.length === 1` → single-row total: esa fila en `font-bold text-danger` (rojo). SIN subtotal
+- `pItems.length > 1` → items en `font-num` + `color:var(--c-muted)` (neutro) + fila "Subtotal Pasivos" en `font-bold text-danger`
+- Signos `−` mantenidos en todos los montos
+
+**AHORRO OBJETIVO**: Sin cambios. Single-row total violeta (`var(--c-card)`)
+
+**EGRESOS**: Sin cambios. Single-row total rojo (`text-danger`)
+
+**SALDO FINAL**: Sin cambios
+
+### Regla implementada
+```
+count > 1 → items neutros + subtotal con color/bold
+count == 1 → single-row total con color/bold (sin subtotal redundante)
+count == 0 → sección oculta
+```
+
+### Validación
+- `npm run build` → OK
+- Cálculos no modificados (solo template/render)
