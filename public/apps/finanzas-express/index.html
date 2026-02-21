@@ -1969,13 +1969,13 @@
                         <div class="glass-card" style="border:1px solid var(--glass-highlight); background: linear-gradient(135deg, var(--bg-card), rgba(30,32,40,0.9));">
                             <div class="rubro-title mb-4" style="font-size:1rem; letter-spacing:1.5px; text-align:center;">RESUMEN GENERAL</div>
 
-                            <!-- INGRESOS (verde) -->
+                            <!-- INGRESOS -->
                             <div style="margin-bottom:12px;">
                                 <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--c-income); margin-bottom:6px; letter-spacing:0.5px;">Ingresos</div>
                                 ${this.state.incomes.map(inc => `
                                 <div class="summary-row">
                                     <span class="summary-label"><span class="indicator" style="background:var(--c-income)"></span>${inc.name || 'Ingreso'}</span>
-                                    <span class="font-num font-bold text-success">${Utils.fmtARS(inc.amount)}</span>
+                                    <span class="font-num" style="color:var(--c-muted)">${Utils.fmtARS(inc.amount)}</span>
                                 </div>
                                 `).join('')}
                                 ${this.state.incomes.length > 1 ? `
@@ -1987,31 +1987,36 @@
 
                             <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>
 
-                            <!-- PASIVOS (rojo) -->
-                            ${pasivosTotal > 0 ? `
+                            <!-- PASIVOS -->
+                            ${(() => {
+                                const pItems = [];
+                                if (cardsBal > 0) pItems.push({ label: 'Tarjetas', color: 'var(--c-card)', amount: cardsBal });
+                                if (servTotal > 0) pItems.push({ label: 'Servicios', color: 'var(--c-service)', amount: servTotal });
+                                if (planTotal > 0) pItems.push({ label: 'Planificados', color: 'var(--c-planned)', amount: planTotal });
+                                if (pItems.length === 0) return '';
+                                if (pItems.length === 1) return `
                             <div style="margin-bottom:12px;">
                                 <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--c-danger); margin-bottom:6px; letter-spacing:0.5px;">Pasivos</div>
-                                ${cardsBal > 0 ? `<div class="summary-row">
-                                    <span class="summary-label"><span class="indicator" style="background:var(--c-card)"></span>Tarjetas</span>
-                                    <span class="font-num font-bold text-danger">− ${Utils.fmtARS(cardsBal)}</span>
-                                </div>` : ''}
-                                ${servTotal > 0 ? `<div class="summary-row">
-                                    <span class="summary-label"><span class="indicator" style="background:var(--c-service)"></span>Servicios</span>
-                                    <span class="font-num font-bold text-danger">− ${Utils.fmtARS(servTotal)}</span>
-                                </div>` : ''}
-                                ${planTotal > 0 ? `<div class="summary-row">
-                                    <span class="summary-label"><span class="indicator" style="background:var(--c-planned)"></span>Planificados</span>
-                                    <span class="font-num font-bold text-danger">− ${Utils.fmtARS(planTotal)}</span>
-                                </div>` : ''}
-                                ${(cardsBal > 0 && servTotal > 0) || (cardsBal > 0 && planTotal > 0) || (servTotal > 0 && planTotal > 0) ? `
+                                <div class="summary-row">
+                                    <span class="summary-label"><span class="indicator" style="background:${pItems[0].color}"></span>${pItems[0].label}</span>
+                                    <span class="font-num font-bold text-danger">− ${Utils.fmtARS(pItems[0].amount)}</span>
+                                </div>
+                            </div>
+                            <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>`;
+                                return `
+                            <div style="margin-bottom:12px;">
+                                <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--c-danger); margin-bottom:6px; letter-spacing:0.5px;">Pasivos</div>
+                                ${pItems.map(p => `<div class="summary-row">
+                                    <span class="summary-label"><span class="indicator" style="background:${p.color}"></span>${p.label}</span>
+                                    <span class="font-num" style="color:var(--c-muted)">− ${Utils.fmtARS(p.amount)}</span>
+                                </div>`).join('')}
                                 <div class="summary-row" style="margin-top:4px; padding-top:4px; border-top:1px dashed var(--glass-border);">
                                     <span class="summary-label" style="font-weight:700;">Subtotal Pasivos</span>
                                     <span class="font-num font-bold text-danger">− ${Utils.fmtARS(pasivosTotal)}</span>
-                                </div>` : ''}
+                                </div>
                             </div>
-
-                            <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>
-                            ` : ''}
+                            <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>`;
+                            })()}
 
                             <!-- AHORRO OBJETIVO (violeta) -->
                             ${savTotal > 0 ? `
