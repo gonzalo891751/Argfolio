@@ -365,6 +365,23 @@
         .card-credit {
             border-left: 3px solid var(--c-card);
         }
+        /* Card Themes */
+        .card-credit.theme-galicia { border-left-color: #f97316; --card-accent: #f97316; }
+        .card-credit.theme-galicia .rubro-icon, .card-credit.theme-galicia .rubro-title,
+        .card-credit.theme-galicia .hero-amount-input:focus, .card-credit.theme-galicia .btn-chip { color: #f97316; }
+        .card-credit.theme-galicia .btn-chip { background: rgba(249,115,22,0.15); border-color: rgba(249,115,22,0.3); color: #f97316; }
+        .card-credit.theme-nativa { border-left-color: #3b82f6; --card-accent: #3b82f6; }
+        .card-credit.theme-nativa .rubro-icon, .card-credit.theme-nativa .rubro-title,
+        .card-credit.theme-nativa .hero-amount-input:focus, .card-credit.theme-nativa .btn-chip { color: #3b82f6; }
+        .card-credit.theme-nativa .btn-chip { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.3); color: #3b82f6; }
+        .card-credit.theme-corrientes { border-left-color: #9ca3af; --card-accent: #d4a017; }
+        .card-credit.theme-corrientes .rubro-icon, .card-credit.theme-corrientes .rubro-title { color: #9ca3af; }
+        .card-credit.theme-corrientes .hero-amount-input:focus { color: #d4a017; }
+        .card-credit.theme-corrientes .btn-chip { background: rgba(156,163,175,0.15); border-color: rgba(156,163,175,0.3); color: #9ca3af; }
+        .card-logo { position: absolute; bottom: 12px; right: 16px; display: flex; align-items: center; gap: 6px; opacity: 0.7; }
+        .card-network-chip { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; }
+        .card-network-chip.visa { background: rgba(26,86,219,0.15); color: #1a56db; }
+        .card-network-chip.mastercard { background: rgba(235,87,35,0.15); color: #eb5723; }
 
         .card-name-input {
             background: transparent;
@@ -1038,6 +1055,50 @@
                 opacity: 1;
             }
         }
+        /* --- EGRESOS --- */
+        .egreso-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            padding: 8px 0;
+        }
+        .egreso-row:last-child { border-bottom: none; }
+        .origen-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .origen-badge.manual { background: rgba(239,68,68,0.15); color: var(--c-danger); }
+        .origen-badge.tarjeta { background: rgba(139,92,246,0.15); color: var(--c-card); }
+        .origen-badge.servicio { background: rgba(6,182,212,0.15); color: var(--c-service); }
+        .origen-badge.planificado { background: rgba(217,70,239,0.15); color: var(--c-planned); }
+        .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+        .filter-chip {
+            padding: 4px 10px;
+            border-radius: 99px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+            border: 1px solid var(--glass-border);
+            background: transparent;
+            color: var(--c-muted);
+            transition: 0.2s;
+        }
+        .filter-chip:hover { border-color: var(--glass-highlight); color: var(--c-text); }
+        .filter-chip.active { background: rgba(239,68,68,0.15); border-color: var(--c-danger); color: var(--c-danger); }
+        .filter-chip.active-tarjeta { background: rgba(139,92,246,0.15); border-color: var(--c-card); color: var(--c-card); }
+        .filter-chip.active-servicio { background: rgba(6,182,212,0.15); border-color: var(--c-service); color: var(--c-service); }
+        .filter-chip.active-planificado { background: rgba(217,70,239,0.15); border-color: var(--c-planned); color: var(--c-planned); }
+        .filter-chip.active-manual { background: rgba(239,68,68,0.15); border-color: var(--c-danger); color: var(--c-danger); }
+
         /* When embedded inside Argfolio, hide the theme toggle (parent controls theme) */
         html.from-argfolio .btn-theme-toggle { display: none !important; }
     </style>
@@ -1055,6 +1116,26 @@
             <div class="modal-actions">
                 <button class="btn-modal btn-cancel" onclick="app.closeModal()">Cancelar</button>
                 <button class="btn-modal btn-confirm" onclick="app.confirmAction()">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Egreso Modal -->
+    <div id="egresoModal" class="modal-overlay">
+        <div class="modal-box" style="text-align:left;">
+            <h3 style="font-size:1.1rem; margin-bottom:1rem; color:var(--c-danger); text-align:center;">Nuevo Egreso</h3>
+            <div style="margin-bottom:1rem;">
+                <label style="font-size:0.75rem; font-weight:700; color:var(--c-muted); text-transform:uppercase; display:block; margin-bottom:4px;">Descripción</label>
+                <input id="egresoDescInput" type="text" placeholder="Ej: Supermercado, Nafta..." style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--glass-border); background:var(--bg-input); color:var(--c-text); font-size:0.95rem; font-family:var(--font-main);">
+            </div>
+            <div style="margin-bottom:1.2rem;">
+                <label style="font-size:0.75rem; font-weight:700; color:var(--c-muted); text-transform:uppercase; display:block; margin-bottom:4px;">Monto ($)</label>
+                <input id="egresoMontoInput" type="text" inputmode="decimal" placeholder="0" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--glass-border); background:var(--bg-input); color:var(--c-text); font-size:1.2rem; font-weight:700; font-family:var(--font-main); text-align:right;">
+            </div>
+            <div id="egresoError" style="color:var(--c-danger); font-size:0.8rem; text-align:center; margin-bottom:8px; display:none;"></div>
+            <div class="modal-actions">
+                <button class="btn-modal btn-cancel" onclick="app.closeEgresoModal()">Cancelar</button>
+                <button class="btn-modal btn-confirm" style="background:var(--c-danger);" onclick="app.submitEgresoModal()">Agregar</button>
             </div>
         </div>
     </div>
@@ -1077,8 +1158,28 @@
             moon: `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`,
             percent: `<svg class="svg-icon" viewBox="0 0 24 24"><line x1="19" y1="5" x2="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg>`,
             refresh: `<svg class="svg-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>`,
-            check: `<svg class="svg-icon" viewBox="0 0 24 24" style="stroke-width:3"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+            check: `<svg class="svg-icon" viewBox="0 0 24 24" style="stroke-width:3"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+            arrowDown: `<svg class="svg-icon svg-lg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>`
         };
+
+        // Card Theming
+        const CardLogos = {
+            visa: `<svg viewBox="0 0 48 16" width="36" height="12" style="vertical-align:middle;"><path fill="#1a56db" d="M19.5 1.2l-3.1 13.6h-2.5l3.1-13.6h2.5zm13.3 8.8l1.3-3.6.8-2.2.4 2.2.8 3.6h-3.3zm2.8-8.8h2.3l2 13.6h-2.3l-.3-1.6h-4l-.7 1.6h-2.6l3.8-12.4c.3-.8.9-1.2 1.8-1.2zm-7.2 13.6l-2.2-13.6h-2.4l-3.5 13.6h2.5l.6-2.6h3.4l.4 2.6h1.2zm-18.4 0l-2-9.2-1.8 9.2h-2.5l-2.4-13.6h2.6l1.5 10 1.9-10h2.2l1.8 10.1 1.5-10.1h2.5l-2.4 13.6h-2.9z"/></svg>`,
+            mastercard: `<svg viewBox="0 0 40 24" width="32" height="19" style="vertical-align:middle;"><circle cx="15" cy="12" r="10" fill="#eb5723" opacity="0.9"/><circle cx="25" cy="12" r="10" fill="#f79e1b" opacity="0.9"/><path d="M20 5.3a10 10 0 0 1 0 13.4 10 10 0 0 1 0-13.4z" fill="#ff5f00"/></svg>`,
+            fish: `<svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:middle;"><path d="M12 4c-3 0-5.5 1.8-7.5 4C2.5 10 1.5 12 1.5 12s1 2 3 4c2 2.2 4.5 4 7.5 4 3 0 5.5-1.8 7.5-4 2-2 3-4 3-4s-1-2-3-4c-2-2.2-4.5-4-7.5-4z" fill="#d4a017" opacity="0.85"/><circle cx="15" cy="11" r="1.2" fill="#1a1a1a"/><path d="M22 12c-1-1.3-2-2-2-2" stroke="#b8860b" stroke-width="1" fill="none"/><path d="M3.5 9l-2 3 2 3" stroke="#d4a017" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>`
+        };
+
+        function getCardTheme(name) {
+            const n = (name || '').toLowerCase();
+            let variant = 'default';
+            let network = null;
+            if (n.includes('galicia')) variant = 'galicia';
+            else if (n.includes('nativa')) variant = 'nativa';
+            else if (n.includes('ctes') || n.includes('corrientes')) variant = 'corrientes';
+            if (n.includes('mastercard')) network = 'mastercard';
+            else if (n.includes('visa')) network = 'visa';
+            return { variant, network };
+        }
 
         const Utils = {
             id: () => Math.random().toString(36).substr(2, 9),
@@ -1139,13 +1240,16 @@
             ],
             services: [{ id: 's1', name: 'Personal Flow', amount: 31732, discount: 3500 }],
             planned: [], savings: 200000, incomes: [{ id: 'i1', name: 'Sueldo', amount: 641093 }],
-            events: [] /* Ledger for paid items */
+            egresos: [], /* Manual + automatic expenses */
+            events: [] /* Ledger for paid items (undo) */
         };
 
         class BudgetApp {
             constructor() {
                 this.state = JSON.parse(localStorage.getItem('budget_fintech')) || JSON.parse(JSON.stringify(DemoData));
+                if (!Array.isArray(this.state.egresos)) this.state.egresos = [];
                 this.state.fxLoading = false;
+                this.egresoFilter = null; // null = all, or 'manual'|'tarjeta'|'servicio'|'planificado'
                 this.container = document.getElementById('app');
                 this.initTheme();
                 this.initFx();
@@ -1266,6 +1370,60 @@
                 this.closeModal();
             }
 
+            // --- EGRESOS ---
+            addEgresoManual(desc, monto) {
+                if (!desc || monto <= 0) return;
+                this.state.egresos.push({
+                    id: Utils.id(),
+                    descripcion: desc,
+                    monto: monto,
+                    fecha: new Date().toISOString().slice(0, 10),
+                    origen: 'manual'
+                });
+                this.save();
+            }
+
+            removeEgreso(idx) {
+                this.state.egresos.splice(idx, 1);
+                this.save();
+            }
+
+            setEgresoFilter(origen) {
+                this.egresoFilter = this.egresoFilter === origen ? null : origen;
+                this.render();
+            }
+
+            openEgresoModal() {
+                const el = document.getElementById('egresoModal');
+                document.getElementById('egresoDescInput').value = '';
+                document.getElementById('egresoMontoInput').value = '';
+                document.getElementById('egresoError').style.display = 'none';
+                el.classList.add('open');
+                setTimeout(() => document.getElementById('egresoDescInput').focus(), 100);
+            }
+
+            closeEgresoModal() {
+                document.getElementById('egresoModal').classList.remove('open');
+            }
+
+            submitEgresoModal() {
+                const desc = document.getElementById('egresoDescInput').value.trim();
+                const monto = Utils.parse(document.getElementById('egresoMontoInput').value);
+                const errEl = document.getElementById('egresoError');
+                if (!desc) {
+                    errEl.textContent = 'Ingresá una descripción';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                if (monto <= 0) {
+                    errEl.textContent = 'El monto debe ser mayor a 0';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                this.addEgresoManual(desc, monto);
+                this.closeEgresoModal();
+            }
+
             // --- PAY / LEDGER LOGIC ---
             addEvent(evt) {
                 if (!this.state.events) this.state.events = [];
@@ -1299,7 +1457,6 @@
                 if (evt.type === 'pay_card') {
                     const c = this.state.cards.find(x => x.id === evt.cardId);
                     if (c && evt.snapshot) {
-                        // Restore snapshot completely
                         Object.assign(c, evt.snapshot);
                     }
                 } else if (evt.type === 'pay_service') {
@@ -1308,6 +1465,12 @@
                 } else if (evt.type === 'pay_plan') {
                     const p = this.state.planned.find(x => x.id === evt.itemId);
                     if (p) p.paid = false;
+                }
+
+                // Remove corresponding egreso
+                if (evt.egresoId) {
+                    const idx = this.state.egresos.findIndex(e => e.id === evt.egresoId);
+                    if (idx !== -1) this.state.egresos.splice(idx, 1);
                 }
 
                 this.save();
@@ -1330,7 +1493,16 @@
 
                 this.openModal(`¿Marcar tarjeta como PAGADA? Se descontarán ${Utils.fmtARS(balance)} de la billetera.`, () => {
                     const snapshot = JSON.parse(JSON.stringify(c));
-                    this.addEvent({ type: 'pay_card', cardId: c.id, amount: balance, snapshot, ts: Date.now() });
+                    // Create egreso
+                    const egresoId = Utils.id();
+                    this.state.egresos.push({
+                        id: egresoId,
+                        descripcion: `Tarjetas / ${c.name}`,
+                        monto: balance,
+                        fecha: new Date().toISOString().slice(0, 10),
+                        origen: 'tarjeta'
+                    });
+                    this.addEvent({ type: 'pay_card', cardId: c.id, amount: balance, snapshot, egresoId, ts: Date.now() });
 
                     // Clear Card
                     c.payments = [];
@@ -1347,7 +1519,15 @@
                 const net = s.amount - (s.discount || 0);
                 this.openModal(`¿Pagar "${s.name}"? Se descontarán ${Utils.fmtARS(net)}.`, () => {
                     s.paid = true;
-                    this.addEvent({ type: 'pay_service', itemId: s.id, amount: net, ts: Date.now() });
+                    const egresoId = Utils.id();
+                    this.state.egresos.push({
+                        id: egresoId,
+                        descripcion: `Servicios / ${s.name}`,
+                        monto: net,
+                        fecha: new Date().toISOString().slice(0, 10),
+                        origen: 'servicio'
+                    });
+                    this.addEvent({ type: 'pay_service', itemId: s.id, amount: net, egresoId, ts: Date.now() });
                     this.save();
                 });
             }
@@ -1357,9 +1537,25 @@
                 if (p.paid) return;
                 this.openModal(`¿Gasto "${p.name}" realizado? Se descontarán ${Utils.fmtARS(p.amount)}.`, () => {
                     p.paid = true;
-                    this.addEvent({ type: 'pay_plan', itemId: p.id, amount: p.amount, ts: Date.now() });
+                    const egresoId = Utils.id();
+                    this.state.egresos.push({
+                        id: egresoId,
+                        descripcion: `Planificados / ${p.name}`,
+                        monto: p.amount,
+                        fecha: new Date().toISOString().slice(0, 10),
+                        origen: 'planificado'
+                    });
+                    this.addEvent({ type: 'pay_plan', itemId: p.id, amount: p.amount, egresoId, ts: Date.now() });
                     this.save();
                 });
+            }
+
+            // Clear all data
+            confirmClear() {
+                this.state = JSON.parse(JSON.stringify(DemoData));
+                this.state.fxLoading = false;
+                this.egresoFilter = null;
+                this.save();
             }
 
             // Theme
@@ -1408,8 +1604,19 @@
                 if (balance > 1) balClass = 'balance-neg'; // Debe
                 if (balance < -1) balClass = 'balance-pos'; // A favor
 
+                // Theming
+                const theme = getCardTheme(c.name);
+                const themeClass = theme.variant !== 'default' ? ` theme-${theme.variant}` : '';
+                const logoHtml = (theme.network || theme.variant === 'corrientes') ? `
+                    <div class="card-logo">
+                        ${theme.variant === 'corrientes' ? CardLogos.fish : ''}
+                        ${theme.network === 'visa' ? CardLogos.visa : ''}
+                        ${theme.network === 'mastercard' ? CardLogos.mastercard : ''}
+                    </div>` : '';
+
                 return `
-            <div class="glass-card card-credit">
+            <div class="glass-card card-credit${themeClass}">
+                ${logoHtml}
                 <!-- Header Card -->
                 <div class="rubro-header">
                     <div class="rubro-icon text-card">${Icons.card}</div>
@@ -1429,8 +1636,9 @@
                 </div>
                 
                 <!-- Nombre & Hero Number -->
-                <div style="margin-bottom:1rem;">
-                    <input class="card-name-input" value="${c.name}" onchange="app.updateVal(['cards',${i},'name'], this.value)">
+                <div style="margin-bottom:1rem; display:flex; align-items:center; gap:8px;">
+                    <input class="card-name-input" value="${c.name}" onchange="app.updateVal(['cards',${i},'name'], this.value)" style="flex:1;">
+                    ${theme.network ? `<span class="card-network-chip ${theme.network}">${theme.network.toUpperCase()}</span>` : ''}
                 </div>
                 
                 <!-- Fee Section (Collapsible) -->
@@ -1526,19 +1734,21 @@
             }
 
             renderService(s, i) {
-                const total = s.amount - (s.discount || 0);
+                const total = s.paid ? 0 : (s.amount - (s.discount || 0));
                 const isPaid = s.paid || false;
                 return `
-            <div class="service-row ${isPaid ? 'item-paid' : ''}">
+            <div class="service-row">
                 <!-- Col 1: Check + Name -->
                 <div style="min-width:0; overflow:hidden; display:flex; align-items:center;">
-                    ${!isPaid ? `<div class="btn-check" style="width:20px; height:20px; min-width:20px;" onclick="app.payService(${i})">${Icons.check}</div>` : ''}
+                    ${!isPaid ? `<div class="btn-check" style="width:20px; height:20px; min-width:20px;" onclick="app.payService(${i})">${Icons.check}</div>`
+                    : `<div class="btn-check disabled" style="width:20px; height:20px; min-width:20px;">${Icons.check}</div>`}
                     <div>
                         <input class="text-input font-bold" value="${s.name}" onchange="app.updateVal(['services',${i},'name'], this.value)" style="text-overflow:ellipsis;">
-                        ${s.discount ? `<div class="discount-badge" style="margin-top:4px;">Desc aplicado</div>` : ''}
+                        ${s.discount && !isPaid ? `<div class="discount-badge" style="margin-top:4px;">Desc aplicado</div>` : ''}
+                        ${isPaid ? `<div class="text-xs text-muted" style="margin-top:2px;">Pagado</div>` : ''}
                     </div>
                 </div>
-                
+
                 <!-- Col 2: Net Total (Big) -->
                 <div>
                    <span class="font-num font-bold text-service" style="font-size:1.1rem;">${Utils.fmtARS(total)}</span>
@@ -1580,14 +1790,28 @@
                 const savTotal = this.state.savings;
                 const incTotal = this.state.incomes.reduce((acc, i) => acc + i.amount, 0);
 
-                // Executed Events Total
-                const executedTotal = (this.state.events || []).reduce((acc, e) => acc + e.amount, 0);
+                // Egresos Total (manual + automatic from payments)
+                const allEgresos = this.state.egresos || [];
+                const egreTotal = allEgresos.reduce((acc, e) => acc + e.monto, 0);
+
+                // Egresos categories for breakdown + filter
+                const egreCatMap = {};
+                allEgresos.forEach(e => {
+                    const o = e.origen || 'manual';
+                    if (!egreCatMap[o]) egreCatMap[o] = { key: o, label: o.charAt(0).toUpperCase() + o.slice(1), count: 0, total: 0 };
+                    egreCatMap[o].count++;
+                    egreCatMap[o].total += e.monto;
+                });
+                const egreCats = Object.values(egreCatMap);
+
+                // Filtered egresos (preserving original index for edit/delete)
+                const filteredEgresos = allEgresos
+                    .map((eg, idx) => ({ eg, origIdx: idx }))
+                    .filter(({ eg }) => !this.egresoFilter || (eg.origen || 'manual') === this.egresoFilter);
 
                 const expTotal = cardsBal + servTotal + planTotal + savTotal;
-                // Available = Income - ActiveExpenses - ExecutedHistory
-                // But wait, if I paid a card, cardsBal dropped. executedTotal increased.
-                // Formula: Available = Income - (CardsBal_Remaining + ServTotal_Remaining + PlanTotal_Remaining + Savings) - ExecutedTotal
-                const available = incTotal - expTotal - executedTotal;
+                // Saldo Final = Ingresos - Gastos pendientes - Egresos ejecutados
+                const available = incTotal - expTotal - egreTotal;
 
                 // HTML Structure
                 const html = `
@@ -1654,13 +1878,17 @@
                                 <div class="text-right flex-1 rubro-total text-planned">${Utils.fmtARS(planTotal)}</div>
                             </div>
                             ${this.state.planned.map((p, i) => `
-                                <div class="list-row ${p.paid ? 'item-paid' : ''}">
+                                <div class="list-row">
                                     <div style="flex:1; min-width:0; display:flex; align-items:center;">
-                                        ${!p.paid ? `<div class="btn-check" style="width:20px; height:20px; min-width:20px;" onclick="app.payPlanned(${i})">${Icons.check}</div>` : ''}
-                                        <input class="text-input" value="${p.name}" placeholder="Nombre" onchange="app.updateVal(['planned',${i},'name'],this.value)">
+                                        ${!p.paid ? `<div class="btn-check" style="width:20px; height:20px; min-width:20px;" onclick="app.payPlanned(${i})">${Icons.check}</div>`
+                                        : `<div class="btn-check disabled" style="width:20px; height:20px; min-width:20px;">${Icons.check}</div>`}
+                                        <div>
+                                            <input class="text-input" value="${p.name}" placeholder="Nombre" onchange="app.updateVal(['planned',${i},'name'],this.value)">
+                                            ${p.paid ? `<div class="text-xs text-muted" style="margin-top:2px;">Pagado</div>` : ''}
+                                        </div>
                                     </div>
                                     <div style="display:flex; align-items:center; gap:8px;">
-                                        <div style="width:110px;">${this.moneyInput(p.amount, v => this.updateVal(['planned', i, 'amount'], v), 'money-input')}</div>
+                                        <div style="width:110px;">${this.moneyInput(p.paid ? 0 : p.amount, v => this.updateVal(['planned', i, 'amount'], v), 'money-input')}</div>
                                         <div class="btn-del" onclick="app.remove('planned', ${i})">${Icons.trash}</div>
                                     </div>
                                 </div>
@@ -1692,36 +1920,106 @@
                             <button class="btn-add-simple" onclick="app.add('incomes', {name:'Ingreso', amount:0})">${Icons.plus} Agregar ingreso</button>
                         </div>
 
-                        <!-- RESUMEN -->
-                        <div class="glass-card">
-                            <div class="rubro-title mb-4">Resumen General</div>
-                            
-                            <div class="summary-row">
-                                <span class="summary-label"><span class="indicator" style="background:var(--c-card)"></span>Tarjetas</span>
-                                <span class="font-num font-bold">${Utils.fmtARS(cardsBal)}</span>
+                        <!-- EGRESOS -->
+                        <div class="glass-card" style="border-left:3px solid var(--c-danger);">
+                            <div class="rubro-header">
+                                <div class="rubro-icon text-danger">${Icons.arrowDown}</div>
+                                <div class="rubro-title text-danger">Egresos</div>
+                                <div class="text-right flex-1 rubro-total text-danger">${Utils.fmtARS(egreTotal)}</div>
                             </div>
-                            <div class="summary-row">
-                                <span class="summary-label"><span class="indicator" style="background:var(--c-service)"></span>Servicios</span>
-                                <span class="font-num font-bold">${Utils.fmtARS(servTotal)}</span>
+                            ${this.state.egresos.length > 1 ? `
+                            <div class="filter-bar">
+                                <button class="filter-chip ${!this.egresoFilter ? 'active' : ''}" onclick="app.setEgresoFilter(null)">Todos</button>
+                                ${egreCats.map(cat => `
+                                    <button class="filter-chip ${this.egresoFilter === cat.key ? 'active-' + cat.key : ''}" onclick="app.setEgresoFilter('${cat.key}')">
+                                        ${cat.label} (${cat.count})
+                                    </button>
+                                `).join('')}
                             </div>
-                            <div class="summary-row">
-                                <span class="summary-label"><span class="indicator" style="background:var(--c-planned)"></span>Planificados</span>
-                                <span class="font-num font-bold">${Utils.fmtARS(planTotal)}</span>
+                            ` : ''}
+                            ${filteredEgresos.map(({ eg, origIdx }) => `
+                                <div class="egreso-row">
+                                    <div style="min-width:0; display:flex; flex-direction:column; gap:2px;">
+                                        <input class="text-input text-sm font-bold" value="${eg.descripcion}" onchange="app.updateVal(['egresos',${origIdx},'descripcion'],this.value)" style="padding:0;">
+                                        <div style="display:flex; align-items:center; gap:6px;">
+                                            <span class="origen-badge ${eg.origen || 'manual'}">${eg.origen || 'manual'}</span>
+                                            <span class="text-xs text-muted">${eg.fecha || ''}</span>
+                                        </div>
+                                    </div>
+                                    <div style="width:110px;">${this.moneyInput(eg.monto, v => this.updateVal(['egresos', origIdx, 'monto'], Math.abs(v) || eg.monto), 'money-input text-danger')}</div>
+                                    <div class="btn-del" onclick="app.removeEgreso(${origIdx})">${Icons.trash}</div>
+                                </div>
+                            `).join('')}
+                            ${this.state.egresos.length > 0 && egreCats.length > 1 ? `
+                            <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--glass-border);">
+                                <div class="text-xs text-muted font-bold uppercase" style="margin-bottom:6px;">Por categoría</div>
+                                ${egreCats.map(cat => `
+                                    <div style="display:flex; justify-content:space-between; padding:3px 0;">
+                                        <span class="origen-badge ${cat.key}">${cat.label}</span>
+                                        <span class="font-num text-xs font-bold" style="color:var(--c-muted);">${Utils.fmtARS(cat.total)}</span>
+                                    </div>
+                                `).join('')}
                             </div>
-                            <div class="summary-row">
-                                <span class="summary-label"><span class="indicator" style="background:var(--c-savings)"></span>Ahorro Obj.</span>
-                                <span class="font-num font-bold">${Utils.fmtARS(savTotal)}</span>
-                            </div>
-                            <div class="summary-row" style="margin-top:10px; border-top:1px dashed var(--glass-border); padding-top:10px;">
-                                <span class="summary-label"><span class="indicator" style="background:var(--c-income)"></span>INGRESOS</span>
-                                <span class="font-num font-bold text-success">${Utils.fmtARS(incTotal)}</span>
+                            ` : ''}
+                            <button class="btn-add-simple" style="border-color:rgba(239,68,68,0.3); color:var(--c-danger);" onclick="app.openEgresoModal()">${Icons.plus} Agregar egreso</button>
+                        </div>
+
+                        <!-- RESUMEN GENERAL -->
+                        <div class="glass-card" style="border:1px solid var(--glass-highlight); background: linear-gradient(135deg, var(--bg-card), rgba(30,32,40,0.9));">
+                            <div class="rubro-title mb-4" style="font-size:1rem; letter-spacing:1.5px; text-align:center;">RESUMEN GENERAL</div>
+
+                            <!-- INGRESOS -->
+                            <div style="margin-bottom:12px;">
+                                <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--c-income); margin-bottom:6px; letter-spacing:0.5px;">Ingresos</div>
+                                <div class="summary-row">
+                                    <span class="summary-label"><span class="indicator" style="background:var(--c-income)"></span>Ingresos</span>
+                                    <span class="font-num font-bold text-success">${Utils.fmtARS(incTotal)}</span>
+                                </div>
                             </div>
 
+                            <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>
+
+                            <!-- PASIVOS -->
+                            ${(cardsBal > 0 || servTotal > 0 || planTotal > 0 || savTotal > 0) ? `
+                            <div style="margin-bottom:12px;">
+                                <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:#f59e0b; margin-bottom:6px; letter-spacing:0.5px;">Pasivos</div>
+                                ${cardsBal > 0 ? `<div class="summary-row">
+                                    <span class="summary-label"><span class="indicator" style="background:var(--c-card)"></span>Tarjetas</span>
+                                    <span class="font-num font-bold" style="color:#f59e0b">− ${Utils.fmtARS(cardsBal)}</span>
+                                </div>` : ''}
+                                ${servTotal > 0 ? `<div class="summary-row">
+                                    <span class="summary-label"><span class="indicator" style="background:var(--c-service)"></span>Servicios</span>
+                                    <span class="font-num font-bold" style="color:#f59e0b">− ${Utils.fmtARS(servTotal)}</span>
+                                </div>` : ''}
+                                ${planTotal > 0 ? `<div class="summary-row">
+                                    <span class="summary-label"><span class="indicator" style="background:var(--c-planned)"></span>Planificados</span>
+                                    <span class="font-num font-bold" style="color:#f59e0b">− ${Utils.fmtARS(planTotal)}</span>
+                                </div>` : ''}
+                                ${savTotal > 0 ? `<div class="summary-row">
+                                    <span class="summary-label"><span class="indicator" style="background:var(--c-savings)"></span>Ahorro Obj.</span>
+                                    <span class="font-num font-bold" style="color:#f59e0b">− ${Utils.fmtARS(savTotal)}</span>
+                                </div>` : ''}
+                            </div>
+
+                            <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>
+                            ` : ''}
+
+                            <!-- EGRESOS -->
+                            ${egreTotal > 0 ? `
+                            <div style="margin-bottom:4px;">
+                                <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--c-danger); margin-bottom:6px; letter-spacing:0.5px;">Egresos</div>
+                                <div class="summary-row">
+                                    <span class="summary-label"><span class="indicator" style="background:var(--c-danger)"></span>Egresos</span>
+                                    <span class="font-num font-bold text-danger">− ${Utils.fmtARS(egreTotal)}</span>
+                                </div>
+                            </div>` : ''}
+
+                            <!-- SALDO FINAL -->
                             <div class="available-display">
-                                <div class="text-xs text-muted font-bold uppercase">Disponible Final</div>
+                                <div class="text-xs text-muted font-bold uppercase">Saldo Final</div>
                                 <div class="available-big ${available >= 0 ? 'text-success' : 'text-danger'}">${Utils.fmtARS(available)}</div>
                                 <div class="text-sm font-bold ${available >= 0 ? 'text-success' : 'text-danger'}">
-                                    ${available >= 0 ? 'Disponible para gastar' : `Te faltan ${Utils.fmtARS(Math.abs(available))}`}
+                                    ${available >= 0 ? 'Saldo a favor' : `Saldo en contra`}
                                 </div>
                             </div>
                         </div>
@@ -1740,7 +2038,7 @@
                     <span class="dock-val text-success">${Utils.fmtCompact(incTotal)}</span>
                 </div>
                 <div class="dock-col end">
-                    <span class="dock-label">Disponible</span>
+                    <span class="dock-label">Saldo</span>
                     <span class="dock-val ${available < 0 ? 'text-danger' : 'text-success'}">${Utils.fmtCompact(available)}</span>
                 </div>
             </div>
@@ -1785,6 +2083,7 @@
                 if (raw) {
                     try {
                         window.app.state = JSON.parse(raw);
+                        if (!Array.isArray(window.app.state.egresos)) window.app.state.egresos = [];
                         window.app.state.fxLoading = false;
                         window.app.render();
                     } catch(err) { console.warn('Failed to reload state from localStorage', err); }
@@ -1797,6 +2096,7 @@
             if (e.key === 'budget_fintech' && e.newValue) {
                 try {
                     window.app.state = JSON.parse(e.newValue);
+                    if (!Array.isArray(window.app.state.egresos)) window.app.state.egresos = [];
                     window.app.state.fxLoading = false;
                     window.app.render();
                 } catch(err) { console.warn('Failed to reload state from storage event', err); }

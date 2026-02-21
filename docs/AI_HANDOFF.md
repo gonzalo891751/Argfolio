@@ -3218,3 +3218,188 @@ Corregir definitivamente "Resultados" para periodos (1D/7D/30D/90D/1Y) ajustando
 git checkout -- src/features/dashboardV2/results-flows.ts src/features/dashboardV2/results-service.ts src/components/dashboard/ResultsCard.tsx src/pages/dashboard.tsx src/features/dashboardV2/snapshot-v2.ts src/hooks/use-snapshots.ts src/features/dashboardV2/results-audit.test.ts src/features/dashboardV2/snapshot-v2-readiness.test.ts
 ```
 - Si ya esta commiteado, usar `git revert <commit_sha>`.
+
+---
+
+## CHECKPOINT #1 — Módulo Egresos (FASE 0: Inspección)
+
+**Fecha**: 2026-02-21
+**Objetivo**: Agregar módulo de EGRESOS manuales + automáticos por pago a Finanzas Express.
+
+### Hallazgos
+
+**Archivo principal**: `public/apps/finanzas-express/index.html` (standalone vanilla JS, ~1808 líneas)
+**Wrapper React**: `src/pages/finanzas-express.tsx` (iframe + sync remoto — NO se toca)
+
+**Estado actual** (`localStorage` key `budget_fintech`):
+- `cards[]`, `services[]`, `planned[]`, `savings`, `incomes[]`, `events[]`
+- `events[]` es el ledger de pagos ejecutados (para undo + cálculo)
+
+**Fórmula actual "Disponible Final"**:
+```
+cardsBal = Σ(totalArs + usdArs + fee - pagos) por tarjeta
+servTotal = Σ(amount - discount) de servicios NO pagados
+planTotal = Σ(amount) de planificados NO pagados
+expTotal = cardsBal + servTotal + planTotal + savings
+executedTotal = Σ(events[].amount)
+available = incTotal - expTotal - executedTotal
+```
+
+### Plan de cambios
+
+1. **Estado**: Agregar `egresos: [{id, descripcion, monto, fecha, origen}]` al state
+2. **UI**: Tarjeta "EGRESOS" debajo de "INGRESOS" (columna derecha), color rojo
+3. **Pago**: Al pagar tarjeta/servicio/planificado → crear egreso automático con origen
+4. **Undo**: Mantener `events[]` para snapshots; al deshacer, quitar también el egreso
+5. **Fórmula**: `Saldo Final = incTotal - cardsBal - servTotal - planTotal - savings - egresosTotal`
+6. **Texto**: "Disponible Final" → "Saldo Final"
+
+### Archivos a modificar
+- `public/apps/finanzas-express/index.html` (único archivo funcional)
+- `docs/AI_HANDOFF.md` (checkpoints)
+
+### Riesgos
+- Doble conteo: `executedTotal` se reemplaza por `egresosTotal` (no coexisten en fórmula)
+- Undo: `events[]` sigue para snapshots, `egresos[]` para display/cálculo
+- Sync: `save()` ya notifica al host, no se necesitan cambios en sync
+
+---
+
+## CHECKPOINT FINAL — Módulo Egresos (IMPLEMENTADO)
+
+**Fecha**: 2026-02-21
+**Estado**: Implementado y compilando
+
+### Archivo modificado
+- `public/apps/finanzas-express/index.html`
+
+### Cambios realizados
+
+**1. Estado** (DemoData + constructor):
+- Agregado `egresos: []` a DemoData
+- Migración defensiva: `if (!Array.isArray(this.state.egresos)) this.state.egresos = []`
+- Migración en bridge listeners (argfolio:data-updated, storage event)
+
+**2. Nuevo icono**: `Icons.arrowDown` (flecha hacia abajo para egresos)
+
+**3. CSS**: Clases `.egreso-row`, `.origen-badge` con variantes `.manual`, `.tarjeta`, `.servicio`, `.planificado`
+
+**4. Métodos nuevos en BudgetApp**:
+- `addEgresoManual(desc, monto)` — crea egreso con origen 'manual'
+- `removeEgreso(idx)` — elimina egreso por índice
+- `promptEgresoManual()` — prompt nativo para desc + monto
+
+**5. Lógica de pago modificada** (payCard, payService, payPlanned):
+- Cada pago ahora crea un egreso automático con `origen` correspondiente
+- El event incluye `egresoId` para vincular undo
+
+**6. Undo actualizado** (undoLastEvent):
+- Al deshacer, también elimina el egreso vinculado por `egresoId`
+
+**7. Fórmula cambiada**:
+- Antes: `available = incTotal - expTotal - executedTotal`
+- Ahora: `available = incTotal - expTotal - egreTotal`
+- `egreTotal = Σ(egresos[].monto)`
+- `executedTotal` eliminado completamente
+
+**8. UI**:
+- Tarjeta EGRESOS debajo de INGRESOS (columna derecha), borde rojo
+- Lista con descripción, badge de origen coloreado, fecha, monto, botón eliminar
+- Botón "Agregar egreso" con prompt
+- Resumen General: nueva línea "Egresos" con indicador rojo
+- "Disponible Final" → "Saldo Final"
+- "Disponible para gastar" → "Saldo a favor"
+- Dock inferior: "Disponible" → "Saldo"
+
+### Validación
+- `npm run build` → OK
+- Sintaxis JS → OK (validada con `new Function()`)
+- Sin referencias residuales a `executedTotal` o "Disponible Final"
+
+### Decisiones técnicas
+1. **Coexistencia events[] + egresos[]**: events[] mantiene snapshots para undo, egresos[] es la fuente visible de gastos ejecutados
+2. **`egresoId` en events**: permite vincular undo → egreso para limpieza automática
+3. **prompt() nativo**: solución simple y consistente para agregar egresos manuales (sin modal custom)
+4. **Migración defensiva**: `Array.isArray` check en 3 puntos de carga para datos legacy sin egresos
+
+---
+
+## CHECKPOINT — UI/UX: Resumen Diferenciado + Theming Tarjetas (FASE 0)
+
+**Fecha**: 2026-02-21
+**Objetivo**: Rediseñar Resumen General, eliminar tachados de pago, theming automático de tarjetas
+
+### Archivos a tocar
+- `public/apps/finanzas-express/index.html` (único archivo)
+
+### Plan de cambios
+
+**A) Resumen General diferenciado**:
+- Secciones: INGRESOS (verde, positivo) / PASIVOS (rojo, con −) / EGRESOS (rojo, con −)
+- PASIVOS incluye: Tarjetas, Servicios, Planificados, Ahorro Obj.
+- Saldo Final con color/texto dinámico
+
+**B) Eliminar tachados**:
+- Clase `.item-paid` tiene `text-decoration: line-through` + `opacity: 0.5` + `pointer-events: none`
+- Se usa en: `renderService()` línea 1692, planificados línea 1831
+- Nuevo: al pagar, el total queda 0, items siguen visibles sin tachado ni opacity
+
+**C) Theming tarjetas**:
+- Función `getCardTheme(name)` → `{variant, network}`
+- Keywords: galicia→naranja, nativa→azul, ctes/corrientes→gris+pescado
+- Red: visa→logo azul, mastercard→logo rojo/naranja
+- SVG inline para logos + pescadito
+- Aplicar en `renderCard()` via clases CSS dinámicas
+
+### Riesgos
+- Tachados: al quitar `item-paid`, los items pagados quedan editables (OK según spec)
+- Theming: solo UI, no afecta cálculos ni persistencia
+
+---
+
+## CHECKPOINT FINAL — UI/UX: Resumen Diferenciado + Theming Tarjetas (IMPLEMENTADO)
+
+**Fecha**: 2026-02-21
+**Estado**: Implementado y compilando
+
+### Archivo modificado
+- `public/apps/finanzas-express/index.html`
+
+### Cambios realizados
+
+**A) Resumen General diferenciado**:
+- Tarjeta con gradient background y borde highlight
+- 3 secciones: INGRESOS (verde), PASIVOS (rojo con −), EGRESOS (rojo con −)
+- PASIVOS incluye: Tarjetas, Servicios, Planificados, Ahorro Obj. — todos con signo − cuando > 0
+- Saldo Final: "Saldo a favor" (verde) / "Saldo en contra" (rojo)
+- Separadores visuales entre secciones
+
+**B) Eliminación de tachados**:
+- Servicios: quitado `item-paid` class, total muestra 0 cuando pagado, texto "Pagado" discreto
+- Planificados: quitado `item-paid` class, monto muestra 0 cuando pagado, texto "Pagado" discreto
+- Items pagados: check button deshabilitado (`.disabled`) en vez de desaparecer
+- Clase CSS `.item-paid` sigue en el archivo pero no se usa (backward compat)
+
+**C) Theming automático de tarjetas**:
+- Función pura `getCardTheme(name)` → `{variant, network}`
+- Keywords banco: `galicia`→naranja (#f97316), `nativa`→azul (#3b82f6), `ctes`/`corrientes`→gris+dorado
+- Keywords red: `visa`→logo azul SVG, `mastercard`→logo círculos SVG
+- Prioridad: mastercard > visa (si ambos presentes)
+- SVG inline: logos Visa, Mastercard, pescadito dorado (Corrientes)
+- Clases CSS: `.theme-galicia`, `.theme-nativa`, `.theme-corrientes`
+- Logo posicionado absoluto top-right de la tarjeta
+- Chip de red (VISA/MASTERCARD) junto al nombre de la tarjeta
+- Re-theme instantáneo al renombrar (recalcula en cada render)
+- Nombre vacío → tema default
+
+### Validación
+- `npm run build` → OK
+- JS syntax → OK
+- Sin usos de `item-paid` en render
+- Sin "Disponible Final" en el archivo
+
+### Decisiones técnicas
+1. Theming derivado del nombre (no persistido) → sin cambios al modelo de datos
+2. SVG logos inline → sin dependencias de assets externos
+3. `.item-paid` CSS mantenida pero no usada → si algún otro módulo la referencia, no se rompe
+4. Check button `.disabled` en items pagados → feedback visual sin bloquear edición del nombre
