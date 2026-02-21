@@ -3403,3 +3403,91 @@ available = incTotal - expTotal - executedTotal
 2. SVG logos inline → sin dependencias de assets externos
 3. `.item-paid` CSS mantenida pero no usada → si algún otro módulo la referencia, no se rompe
 4. Check button `.disabled` en items pagados → feedback visual sin bloquear edición del nombre
+
+---
+
+## CHECKPOINT #1 — Resumen General Detallado + Algebra Correcta (FASE 0: Inspección)
+
+**Fecha**: 2026-02-21
+**Estado**: Inspección completada, listo para implementar
+
+### Objetivo
+Rediseñar la tarjeta RESUMEN GENERAL para:
+1. Detallar cada ingreso individual (Sueldo, Ingreso, etc.) + Total Ingresos
+2. Separar AHORRO OBJETIVO como sección independiente con color violeta
+3. PASIVOS en rojo (Tarjetas, Servicios, Planificados) + Subtotal
+4. EGRESOS como sección independiente en rojo
+5. Fórmula algebraica: SaldoFinal = TotalIngresos - TotalPasivos - AhorroObjetivo - TotalEgresos
+
+### Archivo a tocar
+- `public/apps/finanzas-express/index.html` (solo el bloque Resumen General, líneas ~1967-2025)
+
+### Variables actuales identificadas
+- `incTotal` (L1791): `this.state.incomes.reduce(...)` — suma de todos los ingresos
+- `cardsBal` (L1781-1786): balance de tarjetas
+- `servTotal` (L1788): servicios no pagados
+- `planTotal` (L1789): planificados no pagados
+- `savTotal` (L1790): `this.state.savings` — ahorro objetivo
+- `egreTotal` (L1795): suma de egresos
+- `expTotal` (L1812): `cardsBal + servTotal + planTotal + savTotal`
+- `available` (L1814): `incTotal - expTotal - egreTotal`
+
+### Plan
+1. Agregar variable `pasivosTotal = cardsBal + servTotal + planTotal` (sin savTotal)
+2. En INGRESOS: iterar `this.state.incomes` para listar cada uno + fila "Total Ingresos"
+3. En PASIVOS: mantener tarjetas/servicios/planificados (sin ahorro), agregar "Subtotal Pasivos", color rojo
+4. Nueva sección AHORRO OBJETIVO: color violeta (`--c-card` = #8b5cf6)
+5. EGRESOS: mantener como está (rojo)
+6. Verificar álgebra: available = incTotal - pasivosTotal - savTotal - egreTotal (idéntico resultado)
+
+### Riesgos
+- Ninguno: la fórmula algebraica no cambia, solo se reorganiza visualmente
+- El `expTotal` del dock inferior sigue siendo cardsBal+servTotal+planTotal+savTotal (no se toca)
+- La persistencia no se modifica
+
+---
+
+## CHECKPOINT FINAL — Resumen General Detallado + Algebra Correcta (IMPLEMENTADO)
+
+**Fecha**: 2026-02-21
+**Estado**: Implementado y compilando
+
+### Archivo modificado
+- `public/apps/finanzas-express/index.html`
+
+### Cambios realizados
+
+**1) INGRESOS detallados**:
+- Cada ingreso se lista individualmente con su nombre (Sueldo, Ingreso, etc.)
+- "Total Ingresos" aparece solo cuando hay 2+ ingresos (con línea dashed separadora)
+- Color verde (`var(--c-income)`)
+
+**2) PASIVOS separados de Ahorro**:
+- Solo incluye Tarjetas, Servicios, Planificados
+- Subtotal Pasivos aparece cuando 2+ categorías tienen saldo > 0
+- Color rojo (`var(--c-danger)`)
+- Sección completa se oculta cuando `pasivosTotal === 0`
+
+**3) AHORRO OBJETIVO independiente**:
+- Sección propia con color violeta (`var(--c-card)` = #8b5cf6)
+- Se oculta cuando `savTotal === 0`
+
+**4) EGRESOS**:
+- Mantiene color rojo
+- Se oculta cuando `egreTotal === 0`
+
+**5) Fórmula algebraica**:
+- `pasivosTotal = cardsBal + servTotal + planTotal` (nueva variable)
+- `expTotal = pasivosTotal + savTotal` (preservado para dock inferior)
+- `available = incTotal - pasivosTotal - savTotal - egreTotal`
+- Resultado idéntico al anterior, solo reorganizado visualmente
+
+### Flujo de pago verificado
+- payCard: balance → 0, egreso "Tarjetas / {name}" creado
+- payService: `paid = true` → servTotal excluye, egreso "Servicios / {name}"
+- payPlanned: `paid = true` → planTotal excluye, egreso "Planificados / {name}"
+- Saldo Final no cambia por el traspaso (misma resta total)
+
+### Validación
+- `npm run build` → OK
+- Algebra: incTotal - pasivosTotal - savTotal - egreTotal === incTotal - (cardsBal+servTotal+planTotal+savTotal) - egreTotal

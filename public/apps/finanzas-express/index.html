@@ -1809,9 +1809,10 @@
                     .map((eg, idx) => ({ eg, origIdx: idx }))
                     .filter(({ eg }) => !this.egresoFilter || (eg.origen || 'manual') === this.egresoFilter);
 
-                const expTotal = cardsBal + servTotal + planTotal + savTotal;
-                // Saldo Final = Ingresos - Gastos pendientes - Egresos ejecutados
-                const available = incTotal - expTotal - egreTotal;
+                const pasivosTotal = cardsBal + servTotal + planTotal;
+                const expTotal = pasivosTotal + savTotal;
+                // Saldo Final = Ingresos - Pasivos - Ahorro - Egresos
+                const available = incTotal - pasivosTotal - savTotal - egreTotal;
 
                 // HTML Structure
                 const html = `
@@ -1968,43 +1969,64 @@
                         <div class="glass-card" style="border:1px solid var(--glass-highlight); background: linear-gradient(135deg, var(--bg-card), rgba(30,32,40,0.9));">
                             <div class="rubro-title mb-4" style="font-size:1rem; letter-spacing:1.5px; text-align:center;">RESUMEN GENERAL</div>
 
-                            <!-- INGRESOS -->
+                            <!-- INGRESOS (verde) -->
                             <div style="margin-bottom:12px;">
                                 <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--c-income); margin-bottom:6px; letter-spacing:0.5px;">Ingresos</div>
+                                ${this.state.incomes.map(inc => `
                                 <div class="summary-row">
-                                    <span class="summary-label"><span class="indicator" style="background:var(--c-income)"></span>Ingresos</span>
-                                    <span class="font-num font-bold text-success">${Utils.fmtARS(incTotal)}</span>
+                                    <span class="summary-label"><span class="indicator" style="background:var(--c-income)"></span>${inc.name || 'Ingreso'}</span>
+                                    <span class="font-num font-bold text-success">${Utils.fmtARS(inc.amount)}</span>
                                 </div>
+                                `).join('')}
+                                ${this.state.incomes.length > 1 ? `
+                                <div class="summary-row" style="margin-top:4px; padding-top:4px; border-top:1px dashed var(--glass-border);">
+                                    <span class="summary-label" style="font-weight:700;">Total Ingresos</span>
+                                    <span class="font-num font-bold text-success">${Utils.fmtARS(incTotal)}</span>
+                                </div>` : ''}
                             </div>
 
                             <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>
 
-                            <!-- PASIVOS -->
-                            ${(cardsBal > 0 || servTotal > 0 || planTotal > 0 || savTotal > 0) ? `
+                            <!-- PASIVOS (rojo) -->
+                            ${pasivosTotal > 0 ? `
                             <div style="margin-bottom:12px;">
-                                <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:#f59e0b; margin-bottom:6px; letter-spacing:0.5px;">Pasivos</div>
+                                <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--c-danger); margin-bottom:6px; letter-spacing:0.5px;">Pasivos</div>
                                 ${cardsBal > 0 ? `<div class="summary-row">
                                     <span class="summary-label"><span class="indicator" style="background:var(--c-card)"></span>Tarjetas</span>
-                                    <span class="font-num font-bold" style="color:#f59e0b">− ${Utils.fmtARS(cardsBal)}</span>
+                                    <span class="font-num font-bold text-danger">− ${Utils.fmtARS(cardsBal)}</span>
                                 </div>` : ''}
                                 ${servTotal > 0 ? `<div class="summary-row">
                                     <span class="summary-label"><span class="indicator" style="background:var(--c-service)"></span>Servicios</span>
-                                    <span class="font-num font-bold" style="color:#f59e0b">− ${Utils.fmtARS(servTotal)}</span>
+                                    <span class="font-num font-bold text-danger">− ${Utils.fmtARS(servTotal)}</span>
                                 </div>` : ''}
                                 ${planTotal > 0 ? `<div class="summary-row">
                                     <span class="summary-label"><span class="indicator" style="background:var(--c-planned)"></span>Planificados</span>
-                                    <span class="font-num font-bold" style="color:#f59e0b">− ${Utils.fmtARS(planTotal)}</span>
+                                    <span class="font-num font-bold text-danger">− ${Utils.fmtARS(planTotal)}</span>
                                 </div>` : ''}
-                                ${savTotal > 0 ? `<div class="summary-row">
-                                    <span class="summary-label"><span class="indicator" style="background:var(--c-savings)"></span>Ahorro Obj.</span>
-                                    <span class="font-num font-bold" style="color:#f59e0b">− ${Utils.fmtARS(savTotal)}</span>
+                                ${(cardsBal > 0 && servTotal > 0) || (cardsBal > 0 && planTotal > 0) || (servTotal > 0 && planTotal > 0) ? `
+                                <div class="summary-row" style="margin-top:4px; padding-top:4px; border-top:1px dashed var(--glass-border);">
+                                    <span class="summary-label" style="font-weight:700;">Subtotal Pasivos</span>
+                                    <span class="font-num font-bold text-danger">− ${Utils.fmtARS(pasivosTotal)}</span>
                                 </div>` : ''}
                             </div>
 
                             <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>
                             ` : ''}
 
-                            <!-- EGRESOS -->
+                            <!-- AHORRO OBJETIVO (violeta) -->
+                            ${savTotal > 0 ? `
+                            <div style="margin-bottom:12px;">
+                                <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--c-card); margin-bottom:6px; letter-spacing:0.5px;">Ahorro Objetivo</div>
+                                <div class="summary-row">
+                                    <span class="summary-label"><span class="indicator" style="background:var(--c-card)"></span>Ahorro Obj.</span>
+                                    <span class="font-num font-bold" style="color:var(--c-card)">− ${Utils.fmtARS(savTotal)}</span>
+                                </div>
+                            </div>
+
+                            <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>
+                            ` : ''}
+
+                            <!-- EGRESOS (rojo) -->
                             ${egreTotal > 0 ? `
                             <div style="margin-bottom:4px;">
                                 <div style="font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--c-danger); margin-bottom:6px; letter-spacing:0.5px;">Egresos</div>
@@ -2012,7 +2034,10 @@
                                     <span class="summary-label"><span class="indicator" style="background:var(--c-danger)"></span>Egresos</span>
                                     <span class="font-num font-bold text-danger">− ${Utils.fmtARS(egreTotal)}</span>
                                 </div>
-                            </div>` : ''}
+                            </div>
+
+                            <div style="height:1px; background:var(--glass-border); margin:8px 0;"></div>
+                            ` : ''}
 
                             <!-- SALDO FINAL -->
                             <div class="available-display">
