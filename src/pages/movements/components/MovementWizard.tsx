@@ -1179,6 +1179,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         accounts={accountsList}
                         movements={allMovements}
                         instruments={instrumentsList}
+                        prefillMovement={prefillMovement}
                         onClose={() => onOpenChange(false)}
                         onBackToAssetType={() => { setStep(1); setChildStep(1) }}
                         onStepChange={setChildStep}
