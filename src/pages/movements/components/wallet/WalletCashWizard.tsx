@@ -251,17 +251,37 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
         setState(s => ({ ...s, realBalance: realStr }))
         const real = parseFloat(realStr)
         if (!Number.isFinite(real)) return
-        if (real < availableBalance) {
-            const diff = (availableBalance - real).toFixed(2)
-            setState(s => ({ ...s, amount: diff }))
+
+        if (state.mode === 'income') {
+            // Income: real > system → deposit delta; real <= system → suggest expense
+            if (real > availableBalance) {
+                const diff = (real - availableBalance).toFixed(2)
+                setState(s => ({ ...s, amount: diff }))
+            }
+            // If real <= system, feedback component handles the message
+        } else {
+            // Expense: real < system → withdraw delta; real > system → suggest income
+            if (real < availableBalance) {
+                const diff = (availableBalance - real).toFixed(2)
+                setState(s => ({ ...s, amount: diff }))
+            }
         }
-        // If real > system, we show a message in the UI but don't auto-set
     }
 
     const switchToIncome = (diff: number) => {
         setState(s => ({
             ...s,
             mode: 'income',
+            amount: diff.toFixed(2),
+            adjustmentMode: false,
+            realBalance: '',
+        }))
+    }
+
+    const switchToExpense = (diff: number) => {
+        setState(s => ({
+            ...s,
+            mode: 'expense',
             amount: diff.toFixed(2),
             adjustmentMode: false,
             realBalance: '',
@@ -499,6 +519,7 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
                         onPercentage={setAmountPercentage}
                         onAdjustment={calculateAdjustment}
                         onSwitchToIncome={switchToIncome}
+                        onSwitchToExpense={switchToExpense}
                     />
                 )}
                 {state.step === 3 && (
@@ -633,20 +654,51 @@ function Step1Datos({
             {state.mode === 'income' && state.accountId && (() => {
                 const acc = accounts.find(a => a.id === state.accountId)
                 if (!acc || (acc.kind !== 'BANK' && acc.kind !== 'WALLET')) return null
+
+                // Lock editing if account already has history (movements/balance or cashYield already set)
+                const hasBalance = (() => {
+                    const bals = originBalances
+                    for (const v of bals.values()) {
+                        if (Math.abs(v) > 0.01) return true
+                    }
+                    return false
+                })()
+                const isLocked = hasBalance || acc.cashYield?.enabled !== undefined
+
                 return (
                     <div className="space-y-3">
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                        <div className={cn(
+                            'flex items-center gap-3 p-3 rounded-lg',
+                            isLocked ? 'bg-slate-800/50 border border-slate-700/50' : 'bg-indigo-500/10 border border-indigo-500/20',
+                        )}>
                             <div
-                                className={cn('w-5 h-5 rounded border flex items-center justify-center transition-colors cursor-pointer', state.isRemunerada ? 'bg-indigo-500 border-indigo-500' : 'bg-transparent border-slate-500')}
-                                onClick={() => setState(s => ({ ...s, isRemunerada: !s.isRemunerada }))}
+                                className={cn(
+                                    'w-5 h-5 rounded border flex items-center justify-center transition-colors',
+                                    isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+                                    state.isRemunerada ? 'bg-indigo-500 border-indigo-500' : 'bg-transparent border-slate-500',
+                                )}
+                                onClick={() => { if (!isLocked) setState(s => ({ ...s, isRemunerada: !s.isRemunerada })) }}
                             >
                                 {state.isRemunerada && <Check className="w-3.5 h-3.5 text-white" />}
                             </div>
-                            <label className="text-sm text-indigo-200 select-none cursor-pointer" onClick={() => setState(s => ({ ...s, isRemunerada: !s.isRemunerada }))}>
-                                Marcar como cuenta remunerada
+                            <label
+                                className={cn(
+                                    'text-sm select-none',
+                                    isLocked ? 'text-slate-400 cursor-not-allowed' : 'text-indigo-200 cursor-pointer',
+                                )}
+                                onClick={() => { if (!isLocked) setState(s => ({ ...s, isRemunerada: !s.isRemunerada })) }}
+                            >
+                                {state.isRemunerada ? 'Cuenta remunerada' : 'Marcar como cuenta remunerada'}
                             </label>
+                            {isLocked && (
+                                <span className="ml-auto text-[9px] bg-slate-700 text-slate-400 px-2 py-0.5 rounded font-mono uppercase">
+                                    Bloqueado
+                                </span>
+                            )}
                         </div>
-                        {state.isRemunerada && (
+
+                        {/* Show current TNA/TEA (read-only if locked) */}
+                        {(state.isRemunerada || (isLocked && acc.cashYield?.enabled)) && (
                             <div className="grid grid-cols-2 gap-4 p-3 rounded-lg bg-slate-800/50 border border-slate-700/50 animate-in fade-in duration-300">
                                 <div>
                                     <label className="block text-xs font-medium text-slate-400 mb-1.5">TNA %</label>
@@ -654,9 +706,13 @@ function Step1Datos({
                                         <input
                                             type="number"
                                             value={state.tna || ''}
-                                            onChange={e => setState(s => ({ ...s, tna: parseFloat(e.target.value) || 0 }))}
+                                            onChange={e => { if (!isLocked) setState(s => ({ ...s, tna: parseFloat(e.target.value) || 0 })) }}
                                             placeholder="0"
-                                            className="input-base w-full rounded-lg pl-3 pr-8 py-2 text-white text-sm bg-slate-950 border border-white/10 outline-none"
+                                            disabled={isLocked}
+                                            className={cn(
+                                                'input-base w-full rounded-lg pl-3 pr-8 py-2 text-sm bg-slate-950 border border-white/10 outline-none',
+                                                isLocked ? 'text-slate-400 cursor-not-allowed opacity-70' : 'text-white',
+                                            )}
                                         />
                                         <span className="absolute right-3 top-2 text-slate-500 text-xs font-bold">%</span>
                                     </div>
@@ -667,6 +723,46 @@ function Step1Datos({
                                         {state.tna > 0 ? `${(computeTEA(state.tna) * 100).toFixed(2)}%` : '—'}
                                     </div>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Locked message + CTA */}
+                        {isLocked && (
+                            <div className="text-xs text-slate-500 flex items-center gap-2 p-2 rounded bg-slate-900/30 border border-white/5">
+                                <svg className="w-4 h-4 flex-shrink-0 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                                <span>
+                                    El interés se configura a nivel de cuenta para evitar inconsistencias.
+                                    {' '}
+                                    <button
+                                        onClick={() => {
+                                            // Navigate to preferences or open edit modal
+                                            // For now, we'll update directly via a prompt
+                                            const newTna = prompt(
+                                                `Editar TNA de "${acc.name}"\n\nTNA actual: ${acc.cashYield?.tna ?? 0}%\n\nIngresá la nueva TNA (%):`,
+                                                String(acc.cashYield?.tna ?? 0)
+                                            )
+                                            if (newTna !== null) {
+                                                const tna = parseFloat(newTna)
+                                                if (Number.isFinite(tna) && tna >= 0) {
+                                                    db.accounts.update(acc.id, {
+                                                        cashYield: {
+                                                            ...acc.cashYield!,
+                                                            tna,
+                                                            enabled: tna > 0,
+                                                        },
+                                                    }).then(() => {
+                                                        setState(s => ({ ...s, tna, isRemunerada: tna > 0 }))
+                                                    })
+                                                }
+                                            }
+                                        }}
+                                        className="text-indigo-400 underline hover:text-white transition"
+                                    >
+                                        Editar interés de la cuenta
+                                    </button>
+                                </span>
                             </div>
                         )}
                     </div>
@@ -680,7 +776,7 @@ function Step1Datos({
 // Step 2 — Monto
 // ===========================================================================
 function Step2Monto({
-    state, setState, availableCurrencies, availableBalance, parsedAmount, theme, amountInputRef, shaking, onAmountChange, onPercentage, onAdjustment, onSwitchToIncome,
+    state, setState, availableCurrencies, availableBalance, parsedAmount, theme, amountInputRef, shaking, onAmountChange, onPercentage, onAdjustment, onSwitchToIncome, onSwitchToExpense,
 }: {
     state: WalletWizardState
     setState: React.Dispatch<React.SetStateAction<WalletWizardState>>
@@ -694,6 +790,7 @@ function Step2Monto({
     onPercentage: (pct: number) => void
     onAdjustment: (val: string) => void
     onSwitchToIncome: (diff: number) => void
+    onSwitchToExpense: (diff: number) => void
 }) {
     const exceeds = state.mode !== 'income' && parsedAmount > availableBalance + 0.001
 
@@ -780,8 +877,8 @@ function Step2Monto({
                 </div>
             )}
 
-            {/* Ajuste Rápido (Egreso only) */}
-            {state.mode === 'expense' && (
+            {/* Ajuste Rápido (Egreso + Ingreso) */}
+            {(state.mode === 'expense' || state.mode === 'income') && (
                 <div className="border-t border-white/5 pt-6">
                     <button
                         onClick={() => setState(s => ({ ...s, adjustmentMode: !s.adjustmentMode }))}
@@ -792,7 +889,11 @@ function Step2Monto({
                                 <Zap className="w-4 h-4 text-indigo-400" />
                                 Ajuste Rápido
                             </h4>
-                            <p className="text-xs text-slate-400 mt-1">Calculá el egreso ingresando el saldo que ves en tu banco.</p>
+                            <p className="text-xs text-slate-400 mt-1">
+                                {state.mode === 'income'
+                                    ? 'Calculá el ingreso ingresando el saldo real que ves en tu banco.'
+                                    : 'Calculá el egreso ingresando el saldo que ves en tu banco.'}
+                            </p>
                         </div>
                         <ChevronDown className={cn('w-5 h-5 text-slate-500 transition', state.adjustmentMode && 'rotate-180')} />
                     </button>
@@ -810,11 +911,16 @@ function Step2Monto({
                                     className="w-full pl-8 pr-4 py-3 rounded-lg font-mono text-lg bg-slate-950 border border-white/10 text-white outline-none focus:border-indigo-500"
                                 />
                             </div>
+                            <div className="text-[10px] text-slate-500 mt-1 font-mono">
+                                Saldo sistema: {formatMoney(availableBalance, state.currency)}
+                            </div>
                             <AdjustmentFeedback
                                 realBalance={state.realBalance}
                                 systemBalance={availableBalance}
                                 currency={state.currency}
+                                mode={state.mode}
                                 onSwitchToIncome={onSwitchToIncome}
+                                onSwitchToExpense={onSwitchToExpense}
                             />
                         </div>
                     )}
@@ -945,38 +1051,81 @@ function BalanceCard({
 }
 
 function AdjustmentFeedback({
-    realBalance, systemBalance, currency, onSwitchToIncome,
+    realBalance, systemBalance, currency, mode, onSwitchToIncome, onSwitchToExpense,
 }: {
     realBalance: string
     systemBalance: number
     currency: Currency
+    mode: WalletMode
     onSwitchToIncome: (diff: number) => void
+    onSwitchToExpense: (diff: number) => void
 }) {
     const real = parseFloat(realBalance)
     if (!Number.isFinite(real) || realBalance === '') return null
 
-    if (real > systemBalance) {
-        const diff = real - systemBalance
+    const diff = real - systemBalance
+
+    // Balances match
+    if (Math.abs(diff) < 0.01) {
         return (
-            <div className="mt-3 text-xs">
-                <div className="text-rose-400 flex items-start gap-2 bg-rose-500/10 p-2 rounded">
-                    <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                    <span>Tu saldo es mayor al del sistema. Esto debería ser un <b>Ingreso</b> de {formatMoney(diff, currency)}.</span>
-                </div>
-                <button
-                    onClick={() => onSwitchToIncome(diff)}
-                    className="mt-2 text-indigo-400 underline hover:text-white transition text-xs"
-                >
-                    Cambiar a Ingreso y precargar
-                </button>
+            <div className="mt-3 text-xs text-emerald-400 flex items-center gap-2 bg-emerald-500/10 p-2 rounded">
+                <Check className="w-4 h-4 flex-shrink-0" />
+                Tu saldo ya coincide con el sistema. No hace falta ajuste.
             </div>
         )
     }
 
-    const diff = systemBalance - real
-    return (
-        <div className="mt-3 text-xs text-emerald-400">
-            Egreso calculado: {formatMoney(diff, currency)}
-        </div>
-    )
+    if (mode === 'income') {
+        // Income mode: expect real > system (need to deposit the diff)
+        if (diff > 0) {
+            return (
+                <div className="mt-3 text-xs text-emerald-400">
+                    Ingreso calculado: {formatMoney(diff, currency)}
+                </div>
+            )
+        } else {
+            // real < system → should be an expense
+            const absDiff = Math.abs(diff)
+            return (
+                <div className="mt-3 text-xs">
+                    <div className="text-rose-400 flex items-start gap-2 bg-rose-500/10 p-2 rounded">
+                        <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        <span>Tu saldo real es menor al del sistema. Usá <b>Ajuste Rápido en Egreso</b> para debitar {formatMoney(absDiff, currency)}.</span>
+                    </div>
+                    <button
+                        onClick={() => onSwitchToExpense(absDiff)}
+                        className="mt-2 text-rose-400 underline hover:text-white transition text-xs"
+                    >
+                        Cambiar a Egreso y precargar
+                    </button>
+                </div>
+            )
+        }
+    } else {
+        // Expense mode: expect real < system (need to withdraw the diff)
+        if (diff < 0) {
+            const absDiff = Math.abs(diff)
+            return (
+                <div className="mt-3 text-xs text-emerald-400">
+                    Egreso calculado: {formatMoney(absDiff, currency)}
+                </div>
+            )
+        } else {
+            // real > system → should be an income
+            return (
+                <div className="mt-3 text-xs">
+                    <div className="text-rose-400 flex items-start gap-2 bg-rose-500/10 p-2 rounded">
+                        <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        <span>Tu saldo es mayor al del sistema. Esto debería ser un <b>Ingreso</b> de {formatMoney(diff, currency)}.</span>
+                    </div>
+                    <button
+                        onClick={() => onSwitchToIncome(diff)}
+                        className="mt-2 text-indigo-400 underline hover:text-white transition text-xs"
+                    >
+                        Cambiar a Ingreso y precargar
+                    </button>
+                </div>
+            )
+        }
+    }
 }

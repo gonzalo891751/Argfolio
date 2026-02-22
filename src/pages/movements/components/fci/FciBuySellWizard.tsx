@@ -6,11 +6,17 @@
  *
  * Buy mode:  Standard flow – any FCI from market, any account.
  * Sell mode: Filtered by holdings – only accounts/funds with qty > 0,
- *            bidirectional qty/total inputs, atomic SELL + DEPOSIT.
+ *            bidirectional qty/total inputs, lot-based costing (PPP/PEPS/UEPS/Manual),
+ *            P&L calculation, atomic SELL + DEPOSIT.
+ *
+ * Edit mode: When prefillMovement is provided with an existing id,
+ *            wizard opens in edit mode with pre-filled data.
+ *            If the BUY lot was consumed by sells, edit is blocked
+ *            and a "Corregir" (adjustment) option is offered.
  */
 
 import { useState, useMemo, useEffect } from 'react'
-import { RefreshCw, AlertTriangle } from 'lucide-react'
+import { RefreshCw, AlertTriangle, Info, ShieldAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Movement, Currency, Account, Instrument, MovementType, MovementFee } from '@/domain/types'
 import { FciTypeahead, generateFciSlug } from '../FciTypeahead'
@@ -19,7 +25,7 @@ import type { FciFund } from '@/domain/fci/types'
 import { AccountSelectCreatable } from '../AccountSelectCreatable'
 import { useFciPrices } from '@/hooks/useFciPrices'
 import { useFxRates } from '@/hooks/use-fx-rates'
-import { useCreateMovement } from '@/hooks/use-movements'
+import { useCreateMovement, useUpdateMovement } from '@/hooks/use-movements'
 import { useCreateInstrument } from '@/hooks/use-instruments'
 import { useToast } from '@/components/ui/toast'
 import { db } from '@/db'
@@ -27,6 +33,11 @@ import { useQueryClient } from '@tanstack/react-query'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
 import { formatMoneyARS, formatMoneyUSD } from '@/lib/format'
 import { WizardFooter } from '../ui/WizardFooter'
+import { buildFifoLots } from '@/domain/portfolio/fifo'
+import { allocateSale, COSTING_METHODS, type CostingMethod, type ManualAllocation } from '@/domain/portfolio/lot-allocation'
+import type { LotDetail } from '@/features/portfolioV2/types'
+import { LotTable } from '../ui/LotTable'
+import { CostMethodPicker } from '../ui/CostMethodPicker'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,12 +65,16 @@ interface FciWizardState {
     feeValue: string
     datetime: string
     notes: string
+    // Lot costing (sell)
+    costingMethod: CostingMethod
+    manualAllocations: ManualAllocation[]
 }
 
 interface FciBuySellWizardProps {
     accounts: Account[]
     movements: Movement[]
     instruments: Instrument[]
+    prefillMovement?: Movement | null
     onClose: () => void
     onBackToAssetType?: () => void
     onStepChange?: (step: number) => void
@@ -83,6 +98,9 @@ const fmtMoney = (n: number, currency: 'ARS' | 'USD' = 'ARS') =>
 
 const currencySymbol = (c: 'ARS' | 'USD') => (c === 'USD' ? 'US$' : '$')
 
+// FCI uses all costing methods except CHEAPEST (like CEDEAR)
+const FCI_COSTING_EXCLUDED: CostingMethod[] = ['CHEAPEST']
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -90,6 +108,7 @@ export function FciBuySellWizard({
     accounts,
     movements,
     instruments,
+    prefillMovement,
     onClose,
     onBackToAssetType,
     onStepChange,
@@ -97,6 +116,7 @@ export function FciBuySellWizard({
     const { priceMap, getPrice } = useFciPrices()
     const { data: fxRates } = useFxRates()
     const createMovement = useCreateMovement()
+    const updateMovement = useUpdateMovement()
     const createInstrument = useCreateInstrument()
     const queryClient = useQueryClient()
     const { toast } = useToast()
@@ -104,23 +124,112 @@ export function FciBuySellWizard({
     const now = new Date()
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
 
-    const [state, setState] = useState<FciWizardState>({
-        mode: 'buy',
-        step: 1,
-        fund: null,
-        accountId: '',
-        sellQtyStr: '',
-        sellTotalStr: '',
-        lastEdited: 'qty',
-        buyQtyStr: '',
-        buyTotalStr: '',
-        buyLastEdited: 'qty',
-        price: 0,
-        priceManual: false,
-        feeMode: 'PERCENT',
-        feeValue: '0',
-        datetime: now.toISOString().slice(0, 16),
-        notes: '',
+    // Determine edit mode
+    const isEditMode = !!(prefillMovement?.id)
+    const isEditBuy = isEditMode && prefillMovement?.type === 'BUY'
+
+    // ---------------------------------------------------------------------------
+    // Check if a BUY movement's lot was consumed by subsequent sells
+    // ---------------------------------------------------------------------------
+    const consumedInfo = useMemo(() => {
+        if (!isEditBuy || !prefillMovement) return { consumed: false, consumedQty: 0 }
+
+        const instId = prefillMovement.instrumentId
+        const accId = prefillMovement.accountId
+        if (!instId || !accId) return { consumed: false, consumedQty: 0 }
+
+        // Get all movements for this instrument+account, sorted by date
+        const assetMoves = movements
+            .filter(m => m.assetClass === 'fci' && m.instrumentId === instId && m.accountId === accId)
+            .sort((a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime())
+
+        // Build lots to find remaining qty of the lot corresponding to this buy
+        const fifo = buildFifoLots(assetMoves)
+        const buyDate = prefillMovement.datetimeISO
+        const buyQty = prefillMovement.quantity || 0
+
+        // Find the lot matching this buy movement (by date and original qty)
+        const matchingLot = fifo.lots.find(l => l.date === buyDate && Math.abs(l.originalQty - buyQty) < 0.001)
+        if (matchingLot) {
+            const consumed = matchingLot.originalQty - matchingLot.quantity
+            return { consumed: consumed > 0.001, consumedQty: consumed }
+        }
+
+        // Fallback: if lot was fully consumed (not in fifo.lots anymore), it's consumed
+        // Check if there are any SELL movements after this BUY
+        const sellsAfter = assetMoves.filter(m =>
+            m.type === 'SELL' &&
+            new Date(m.datetimeISO).getTime() >= new Date(buyDate).getTime()
+        )
+        const totalSold = sellsAfter.reduce((s, m) => s + (m.quantity || 0), 0)
+        return { consumed: totalSold > 0, consumedQty: Math.min(totalSold, buyQty) }
+    }, [isEditBuy, prefillMovement, movements])
+
+    // ---------------------------------------------------------------------------
+    // State initialization (with prefill support)
+    // ---------------------------------------------------------------------------
+    const [state, setState] = useState<FciWizardState>(() => {
+        if (prefillMovement) {
+            const pm = prefillMovement
+            const mode: Mode = pm.type === 'BUY' ? 'buy' : 'sell'
+            const qty = pm.quantity || 0
+            const total = pm.totalAmount || 0
+
+            // Reconstruct fund value from movement data
+            const fund: FciValue | null = pm.instrumentId ? {
+                id: pm.instrumentId,
+                name: pm.assetName || pm.meta?.fci?.nameSnapshot || pm.instrumentId,
+                manager: pm.meta?.fci?.managerSnapshot || '',
+                category: pm.meta?.fci?.categorySnapshot || '',
+                currency: (pm.tradeCurrency || 'ARS') as 'ARS' | 'USD',
+                vcp: pm.unitPrice || 0,
+                date: pm.meta?.fci?.vcpAsOf || '',
+            } : null
+
+            return {
+                mode,
+                step: 1,
+                fund,
+                accountId: pm.accountId || '',
+                sellQtyStr: mode === 'sell' ? (qty > 0 ? qty.toString() : '') : '',
+                sellTotalStr: mode === 'sell' ? (total > 0 ? total.toFixed(2) : '') : '',
+                lastEdited: 'qty',
+                buyQtyStr: mode === 'buy' ? (qty > 0 ? qty.toString() : '') : '',
+                buyTotalStr: mode === 'buy' ? (total > 0 ? total.toFixed(2) : '') : '',
+                buyLastEdited: 'qty',
+                price: pm.unitPrice || 0,
+                priceManual: true,
+                feeMode: pm.fee?.mode || 'PERCENT',
+                feeValue: pm.fee?.mode === 'PERCENT'
+                    ? (pm.fee?.percent?.toString() || '0')
+                    : (pm.fee?.amount?.toString() || '0'),
+                datetime: pm.datetimeISO ? new Date(pm.datetimeISO).toISOString().slice(0, 16) : now.toISOString().slice(0, 16),
+                notes: pm.notes || '',
+                costingMethod: (pm.meta?.costingMethod as CostingMethod) || 'PPP',
+                manualAllocations: [],
+            }
+        }
+
+        return {
+            mode: 'buy',
+            step: 1,
+            fund: null,
+            accountId: '',
+            sellQtyStr: '',
+            sellTotalStr: '',
+            lastEdited: 'qty',
+            buyQtyStr: '',
+            buyTotalStr: '',
+            buyLastEdited: 'qty',
+            price: 0,
+            priceManual: false,
+            feeMode: 'PERCENT',
+            feeValue: '0',
+            datetime: now.toISOString().slice(0, 16),
+            notes: '',
+            costingMethod: 'PPP',
+            manualAllocations: [],
+        }
     })
 
     const isBuy = state.mode === 'buy'
@@ -183,6 +292,53 @@ export function FciBuySellWizard({
 
     // Fund currency
     const fundCurrency: 'ARS' | 'USD' = state.fund?.currency || 'ARS'
+
+    // ---------------------------------------------------------------------------
+    // FIFO Lots for sell (lot-based costing)
+    // ---------------------------------------------------------------------------
+    const fifoLots = useMemo((): LotDetail[] => {
+        if (!state.fund || !state.accountId || isBuy) return []
+        const instId = state.fund.id
+
+        const assetMoves = movements.filter(m =>
+            m.assetClass === 'fci' &&
+            m.accountId === state.accountId &&
+            (m.instrumentId === instId)
+        )
+        if (assetMoves.length === 0) return []
+
+        const fifo = buildFifoLots(assetMoves)
+        const currentPrice = state.price || 0
+
+        return fifo.lots.map((lot, idx) => {
+            // For FCI, use native currency costs (ARS or USD depending on fund)
+            const unitCost = fundCurrency === 'ARS' ? lot.unitCostArs : lot.unitCostUsd
+            return {
+                id: `lot-${idx}`,
+                dateISO: lot.date,
+                qty: lot.quantity,
+                unitCostNative: unitCost,
+                totalCostNative: lot.quantity * unitCost,
+                currentValueNative: lot.quantity * currentPrice,
+                pnlNative: lot.quantity * currentPrice - lot.quantity * unitCost,
+                pnlPct: unitCost > 0 ? (currentPrice - unitCost) / unitCost : 0,
+            }
+        })
+    }, [state.fund, state.accountId, isBuy, movements, state.price, fundCurrency])
+
+    // Sale allocation (for sell mode)
+    const saleAllocation = useMemo(() => {
+        if (isBuy || fifoLots.length === 0) return null
+        const qty = Math.min(safeFloat(state.sellQtyStr), availableQty)
+        if (qty <= 0) return null
+        return allocateSale(
+            fifoLots,
+            qty,
+            state.price,
+            state.costingMethod,
+            state.costingMethod === 'MANUAL' ? state.manualAllocations : undefined,
+        )
+    }, [isBuy, fifoLots, state.sellQtyStr, availableQty, state.price, state.costingMethod, state.manualAllocations])
 
     // Auto-select account when only 1 option (sell)
     useEffect(() => {
@@ -251,15 +407,19 @@ export function FciBuySellWizard({
                 fee = state.feeMode === 'PERCENT' ? gross * (feeVal / 100) : feeVal
             }
             const totalPaid = gross + fee
-            return { qty, gross, fee, net: 0, totalPaid }
+            return { qty, gross, fee, net: 0, totalPaid, costBasis: 0, pnl: 0 }
         } else {
-            const qty = Math.min(safeFloat(state.sellQtyStr), availableQty)
-            const gross = qty * price
+            const sellQty = state.costingMethod === 'MANUAL' && saleAllocation
+                ? saleAllocation.totalQtySold
+                : Math.min(safeFloat(state.sellQtyStr), availableQty)
+            const gross = sellQty * price
             const fee = state.feeMode === 'PERCENT' ? gross * (feeVal / 100) : feeVal
             const net = gross - fee
-            return { qty, gross, fee, net, totalPaid: 0 }
+            const costBasis = saleAllocation?.totalCostUsd || 0
+            const pnl = net - costBasis
+            return { qty: sellQty, gross, fee, net, totalPaid: 0, costBasis, pnl }
         }
-    }, [state, isBuy, availableQty])
+    }, [state, isBuy, availableQty, saleAllocation])
 
     // Equivalences
     const equivalences = useMemo(() => {
@@ -297,6 +457,10 @@ export function FciBuySellWizard({
             if (state.price <= 0) return false
             if (computed.qty <= 0) return false
             if (!isBuy && computed.qty > availableQty + 0.000001) return false
+            if (!isBuy && state.costingMethod === 'MANUAL') {
+                const manualTotal = state.manualAllocations.reduce((s, a) => s + a.qty, 0)
+                if (manualTotal <= 0) return false
+            }
             return true
         }
         return true // step 3
@@ -319,6 +483,7 @@ export function FciBuySellWizard({
     useEffect(() => { onStepChange?.(state.step) }, [state.step])
 
     const setMode = (mode: Mode) => {
+        if (isEditMode) return // Can't change mode in edit
         setState(s => ({
             ...s,
             mode,
@@ -331,6 +496,8 @@ export function FciBuySellWizard({
             buyTotalStr: '',
             priceManual: false,
             price: 0,
+            costingMethod: 'PPP',
+            manualAllocations: [],
         }))
     }
 
@@ -424,6 +591,9 @@ export function FciBuySellWizard({
     const handleConfirm = async () => {
         if (!state.fund || !state.accountId) return
 
+        // Block edit if consumed
+        if (isEditBuy && consumedInfo.consumed) return
+
         try {
             // 1. Find or create instrument
             const fciId = state.fund.id
@@ -467,10 +637,19 @@ export function FciBuySellWizard({
             const totalArs = fundCurrency === 'ARS' ? gross : gross * oficialSellRate
             const totalUsd = fundCurrency === 'USD' ? gross : (oficialSellRate > 0 ? gross / oficialSellRate : 0)
 
+            const fciMeta = {
+                fci: {
+                    nameSnapshot: state.fund.name,
+                    managerSnapshot: state.fund.manager,
+                    categorySnapshot: state.fund.category,
+                    vcpAsOf: state.fund.date,
+                },
+            }
+
             if (isBuy) {
                 // --- BUY: single movement ---
                 const movPayload: Movement = {
-                    id: crypto.randomUUID(),
+                    id: isEditMode ? prefillMovement!.id : crypto.randomUUID(),
                     datetimeISO,
                     type: movementType,
                     assetClass: 'fci',
@@ -490,21 +669,36 @@ export function FciBuySellWizard({
                     fx: fxSnapshot,
                     notes: state.notes || undefined,
                     meta: {
-                        fci: {
-                            nameSnapshot: state.fund.name,
-                            managerSnapshot: state.fund.manager,
-                            categorySnapshot: state.fund.category,
-                            vcpAsOf: state.fund.date,
-                        },
+                        ...fciMeta,
+                        ...(isEditMode ? {
+                            editedAt: new Date().toISOString(),
+                            editedFrom: {
+                                quantity: prefillMovement!.quantity,
+                                unitPrice: prefillMovement!.unitPrice,
+                                totalAmount: prefillMovement!.totalAmount,
+                            },
+                        } : {}),
                     },
                 }
-                await createMovement.mutateAsync(movPayload)
 
-                toast({
-                    title: 'Suscripción registrada',
-                    description: `${fmtQty(qty)} cuotapartes de ${state.fund.name} por ${fmtMoney(gross, fundCurrency)}`,
-                    variant: 'default',
-                })
+                if (isEditMode) {
+                    await updateMovement.mutateAsync({
+                        id: prefillMovement!.id,
+                        updates: movPayload,
+                    })
+                    toast({
+                        title: 'Suscripción actualizada',
+                        description: `${fmtQty(qty)} cuotapartes de ${state.fund.name} corregida.`,
+                        variant: 'default',
+                    })
+                } else {
+                    await createMovement.mutateAsync(movPayload)
+                    toast({
+                        title: 'Suscripción registrada',
+                        description: `${fmtQty(qty)} cuotapartes de ${state.fund.name} por ${fmtMoney(gross, fundCurrency)}`,
+                        variant: 'default',
+                    })
+                }
             } else {
                 // --- SELL: atomic SELL + DEPOSIT ---
                 const groupId = crypto.randomUUID()
@@ -536,12 +730,13 @@ export function FciBuySellWizard({
                     source: 'user',
                     notes: state.notes || `Rescate de ${fmtQty(qty)} cuotapartes`,
                     meta: {
-                        fci: {
-                            nameSnapshot: state.fund.name,
-                            managerSnapshot: state.fund.manager,
-                            categorySnapshot: state.fund.category,
-                            vcpAsOf: state.fund.date,
-                        },
+                        ...fciMeta,
+                        costingMethod: state.costingMethod,
+                        allocations: saleAllocation?.allocations.map(a => ({
+                            lotId: a.lotId,
+                            qty: a.qty,
+                            costUsd: a.costUsd,
+                        })),
                     },
                 }
 
@@ -594,15 +789,19 @@ export function FciBuySellWizard({
         <div className="bg-slate-950/50 p-1 rounded-lg inline-flex w-full sm:w-auto border border-white/5 mb-4">
             <button
                 onClick={() => setMode('buy')}
+                disabled={isEditMode}
                 className={cn('flex-1 sm:flex-none px-8 py-2 rounded-md text-sm font-medium transition-all',
-                    isBuy ? 'bg-indigo-500 text-white shadow-[0_0_20px_-5px_rgba(99,102,241,0.3)]' : 'text-slate-400 hover:text-white')}
+                    isBuy ? 'bg-indigo-500 text-white shadow-[0_0_20px_-5px_rgba(99,102,241,0.3)]' : 'text-slate-400 hover:text-white',
+                    isEditMode && 'opacity-60 cursor-not-allowed')}
             >
                 Suscripción
             </button>
             <button
                 onClick={() => setMode('sell')}
+                disabled={isEditMode}
                 className={cn('flex-1 sm:flex-none px-8 py-2 rounded-md text-sm font-medium transition-all',
-                    !isBuy ? 'bg-rose-500 text-white shadow-[0_0_20px_-5px_rgba(244,63,94,0.3)]' : 'text-slate-400 hover:text-white')}
+                    !isBuy ? 'bg-rose-500 text-white shadow-[0_0_20px_-5px_rgba(244,63,94,0.3)]' : 'text-slate-400 hover:text-white',
+                    isEditMode && 'opacity-60 cursor-not-allowed')}
             >
                 Rescate
             </button>
@@ -617,6 +816,41 @@ export function FciBuySellWizard({
 
         return (
             <div className="max-w-xl mx-auto space-y-6 pt-2 animate-in fade-in slide-in-from-right-4 duration-300">
+                {/* Edit mode: consumed lot warning */}
+                {isEditBuy && consumedInfo.consumed && (
+                    <div className="p-5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3 animate-in fade-in duration-200">
+                        <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                            <div className="text-sm text-amber-300 font-medium">Este lote fue parcialmente consumido</div>
+                            <div className="text-xs text-slate-400 mt-1">
+                                Ya se rescataron {fmtQty(consumedInfo.consumedQty)} cuotapartes de este lote.
+                                No se puede editar directamente. Usá <strong>Corregir</strong> para generar un ajuste contable.
+                            </div>
+                            <button
+                                onClick={() => {
+                                    // TODO: Open correction flow (FCI_ADJUST) - Phase C
+                                    toast({
+                                        title: 'Próximamente',
+                                        description: 'La corrección contable (ajuste FCI) estará disponible pronto.',
+                                        variant: 'default',
+                                    })
+                                }}
+                                className="mt-3 px-4 py-2 rounded-lg bg-amber-500 text-slate-900 text-sm font-bold hover:bg-amber-400 transition"
+                            >
+                                Corregir
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Edit mode indicator */}
+                {isEditMode && !consumedInfo.consumed && (
+                    <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center gap-2 text-sm text-indigo-300">
+                        <Info className="w-4 h-4 shrink-0" />
+                        Editando movimiento existente. Los cambios se guardarán sobre el registro original.
+                    </div>
+                )}
+
                 {/* Account */}
                 <div className={cn('space-y-2', noHoldings && 'opacity-50 pointer-events-none')}>
                     <label className="text-xs font-mono uppercase text-slate-400 ml-1">
@@ -724,7 +958,7 @@ export function FciBuySellWizard({
     }
 
     // ---------------------------------------------------------------------------
-    // STEP 2: Details (bidirectional inputs)
+    // STEP 2: Details (bidirectional inputs + lot costing for sell)
     // ---------------------------------------------------------------------------
     const renderStep2 = () => {
         const noMarketPrice = state.price <= 0 && !state.priceManual
@@ -896,6 +1130,44 @@ export function FciBuySellWizard({
                         </div>
                     )}
 
+                    {/* Sell: Lot-based costing section */}
+                    {!isBuy && fifoLots.length > 0 && (
+                        <div className="space-y-3 p-4 rounded-xl bg-slate-900/30 border border-white/5">
+                            <h3 className="text-xs font-mono uppercase text-slate-400">
+                                Método de costeo (Lotes)
+                            </h3>
+                            <CostMethodPicker
+                                value={state.costingMethod}
+                                onChange={method => setState(s => ({
+                                    ...s,
+                                    costingMethod: method,
+                                    manualAllocations: [],
+                                }))}
+                                exclude={FCI_COSTING_EXCLUDED}
+                                accent="rose"
+                            />
+
+                            {/* Lot Table */}
+                            <LotTable
+                                lots={fifoLots}
+                                qty={safeFloat(state.sellQtyStr)}
+                                costingMethod={state.costingMethod}
+                                manualAllocations={state.manualAllocations}
+                                onManualChange={allocs => setState(s => ({ ...s, manualAllocations: allocs }))}
+                                currSymbol={currencySymbol(fundCurrency)}
+                                allowDecimalQty
+                                qtyFractionDigits={4}
+                            />
+
+                            {/* Manual mode summary */}
+                            {state.costingMethod === 'MANUAL' && state.manualAllocations.length > 0 && (
+                                <p className="text-xs text-slate-400">
+                                    Seleccionado: {fmtQty(state.manualAllocations.reduce((s, a) => s + a.qty, 0))} cuotapartes
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     {/* Datetime */}
                     <div className="space-y-2">
                         <label className="text-xs font-mono uppercase text-slate-400 ml-1">Fecha y Hora</label>
@@ -961,6 +1233,41 @@ export function FciBuySellWizard({
                             </div>
                         </div>
 
+                        {/* P&L for Sell */}
+                        {!isBuy && computed.costBasis > 0 && (
+                            <div className="p-4 rounded-lg border border-white/5 bg-slate-900/50 space-y-2">
+                                <div className="text-xs font-mono uppercase text-slate-500 mb-1">Resultado (P&L)</div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-400">Costo ({COSTING_METHODS.find(m => m.value === state.costingMethod)?.short || state.costingMethod})</span>
+                                    <span className="text-slate-300 font-mono">{fmtMoney(computed.costBasis, fundCurrency)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-400">Neto rescate</span>
+                                    <span className="text-slate-300 font-mono">{fmtMoney(computed.net, fundCurrency)}</span>
+                                </div>
+                                <div className="h-px bg-white/10" />
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 text-sm">Resultado</span>
+                                    <span className={cn(
+                                        'text-lg font-mono font-bold',
+                                        computed.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400',
+                                    )}>
+                                        {computed.pnl >= 0 ? '+' : ''}{fmtMoney(computed.pnl, fundCurrency)}
+                                    </span>
+                                </div>
+                                {computed.costBasis > 0 && (
+                                    <div className="text-right">
+                                        <span className={cn(
+                                            'text-xs font-mono px-2 py-0.5 rounded',
+                                            computed.pnl >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400',
+                                        )}>
+                                            {computed.pnl >= 0 ? '+' : ''}{((computed.pnl / computed.costBasis) * 100).toFixed(2)}%
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Equivalences */}
                         <div className="bg-slate-900/50 rounded-lg p-4 space-y-2 border border-white/5">
                             <div className="text-xs text-slate-500 font-mono uppercase mb-1">Equivalencias (FX Oficial)</div>
@@ -1005,10 +1312,15 @@ export function FciBuySellWizard({
 
             <div>
                 <h2 className="text-3xl font-display font-bold text-white mb-2">
-                    Confirmar {isBuy ? 'Suscripción' : 'Rescate'}
+                    {isEditMode ? 'Confirmar Edición' : `Confirmar ${isBuy ? 'Suscripción' : 'Rescate'}`}
                 </h2>
                 <p className="text-slate-400 text-sm">
-                    {isBuy ? 'Se registrará la compra de cuotapartes.' : 'Se actualizarán posiciones y liquidez al instante.'}
+                    {isEditMode
+                        ? 'Se actualizará el movimiento existente.'
+                        : isBuy
+                            ? 'Se registrará la compra de cuotapartes.'
+                            : 'Se actualizarán posiciones y liquidez al instante.'
+                    }
                 </p>
             </div>
 
@@ -1040,6 +1352,17 @@ export function FciBuySellWizard({
                         <span className="text-rose-400 font-mono">{fmtMoney(computed.fee, fundCurrency)}</span>
                     </div>
                 )}
+
+                {/* Costing method for sell */}
+                {!isBuy && (
+                    <div className="flex justify-between">
+                        <span className="text-slate-500">Método costeo</span>
+                        <span className="font-mono text-slate-300 text-xs">
+                            {COSTING_METHODS.find(m => m.value === state.costingMethod)?.label || state.costingMethod}
+                        </span>
+                    </div>
+                )}
+
                 <div className="w-full h-px bg-white/10 my-2" />
                 <div className="flex justify-between items-center">
                     <span className="text-slate-500">{isBuy ? 'Total a Pagar' : 'Total a Recibir'}</span>
@@ -1047,6 +1370,23 @@ export function FciBuySellWizard({
                         {fmtMoney(isBuy ? computed.totalPaid : computed.net, fundCurrency)}
                     </span>
                 </div>
+
+                {/* P&L for sell */}
+                {!isBuy && computed.costBasis > 0 && (
+                    <>
+                        <div className="w-full h-px bg-white/10 my-2" />
+                        <div className="flex justify-between items-center">
+                            <span className="text-slate-500">Resultado (P&L)</span>
+                            <span className={cn(
+                                'text-lg font-mono font-bold',
+                                computed.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400',
+                            )}>
+                                {computed.pnl >= 0 ? '+' : ''}{fmtMoney(computed.pnl, fundCurrency)}
+                            </span>
+                        </div>
+                    </>
+                )}
+
                 {!isBuy && (
                     <div className="flex justify-between items-center text-xs mt-1">
                         <span className="text-slate-500">Acreditación</span>
@@ -1075,6 +1415,13 @@ export function FciBuySellWizard({
     // ---------------------------------------------------------------------------
     // RENDER
     // ---------------------------------------------------------------------------
+    const editBlocked = isEditBuy && consumedInfo.consumed
+    const primaryLabel = editBlocked
+        ? 'Edición bloqueada'
+        : state.step < 3
+            ? 'Siguiente'
+            : isEditMode ? 'Guardar cambios' : 'Confirmar'
+
     return (
         <>
             {/* Body */}
@@ -1089,10 +1436,10 @@ export function FciBuySellWizard({
             <WizardFooter
                 onBack={state.step > 1 ? prevStep : (onBackToAssetType ?? onClose)}
                 onCancel={onClose}
-                primaryLabel={state.step < 3 ? 'Siguiente' : 'Confirmar'}
+                primaryLabel={primaryLabel}
                 onPrimary={nextStep}
                 primaryVariant={state.step < 3 ? 'indigo' : 'emerald'}
-                primaryDisabled={!canAdvance}
+                primaryDisabled={!canAdvance || editBlocked}
             />
         </>
     )
