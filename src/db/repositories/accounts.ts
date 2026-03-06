@@ -20,8 +20,8 @@ export const accountsRepo = {
         if (isRemoteSyncEnabled()) {
             try {
                 await syncRemoteAccountCreate(account)
-            } catch {
-                // Fallback local-only when offline/read-only.
+            } catch (error) {
+                console.warn('[accountsRepo] D1 sync failed for create:', account.id, error)
             }
         }
         return db.accounts.put(account)
@@ -32,8 +32,8 @@ export const accountsRepo = {
         if (isRemoteSyncEnabled() && existing) {
             try {
                 await syncRemoteAccountUpdate({ ...existing, ...updates, id })
-            } catch {
-                // Fallback local-only when offline/read-only.
+            } catch (error) {
+                console.warn('[accountsRepo] D1 sync failed for update:', id, error)
             }
         }
         await db.accounts.update(id, updates)
@@ -43,8 +43,8 @@ export const accountsRepo = {
         if (isRemoteSyncEnabled()) {
             try {
                 await syncRemoteAccountDelete(id)
-            } catch {
-                // Fallback local-only when offline/read-only.
+            } catch (error) {
+                console.warn('[accountsRepo] D1 sync failed for delete:', id, error)
             }
         }
         await db.accounts.delete(id)

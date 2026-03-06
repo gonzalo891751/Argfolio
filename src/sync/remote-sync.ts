@@ -147,9 +147,9 @@ function handleRemoteSyncError(error: unknown): void {
     }
 
     emitSyncStatus({
-        title: 'Sin conexión',
-        description: 'Usando datos locales (Dexie).',
-        variant: 'info',
+        title: 'Sync no disponible',
+        description: 'Los cambios se guardaron localmente pero no se sincronizaron. Otros dispositivos no verán estos datos hasta reconectar.',
+        variant: 'error',
     })
 }
 
@@ -367,4 +367,103 @@ export async function syncRemoteAccountDelete(id: string): Promise<void> {
         handleRemoteSyncError(error)
         throw error
     }
+}
+
+// ---------------------------------------------------------------------------
+// Batch sync — push multiple movements to D1 via /api/sync/push.
+// Used by code paths that write directly to Dexie (transfers, FCI, accrual).
+// Returns { ok, failedCount } so callers can show feedback.
+// ---------------------------------------------------------------------------
+
+export async function syncMovementsBatch(
+    movements: Movement[],
+): Promise<{ ok: boolean; failedCount: number }> {
+    if (!isRemoteSyncEnabled()) return { ok: true, failedCount: 0 }
+    if (movements.length === 0) return { ok: true, failedCount: 0 }
+
+    const token = readSyncToken()
+    if (token.length === 0) {
+        console.log('[movements-batch-sync] skip: no sync token')
+        return { ok: false, failedCount: movements.length }
+    }
+
+    try {
+        await requestJson('/api/sync/push', {
+            method: 'POST',
+            body: toJsonBody({
+                version: 1,
+                exportedAtISO: new Date().toISOString(),
+                data: {
+                    accounts: [],
+                    instruments: [],
+                    movements,
+                    snapshots: [],
+                    manualPrices: [],
+                    preferences: {},
+                },
+            }),
+        })
+        console.log('[movements-batch-sync] pushed', { count: movements.length })
+        return { ok: true, failedCount: 0 }
+    } catch (error) {
+        console.warn('[movements-batch-sync] push failed', error)
+        handleRemoteSyncError(error)
+        return { ok: false, failedCount: movements.length }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Budget (Finance Express) push — pushes localStorage budget data to D1.
+// Called from useBudget on every persist so other devices see the changes.
+// ---------------------------------------------------------------------------
+
+const BUDGET_PUSH_DEBOUNCE_MS = 3000
+let budgetPushTimeout: ReturnType<typeof setTimeout> | null = null
+
+export function syncBudgetPush(): void {
+    if (!isRemoteSyncEnabled()) return
+
+    const token = readSyncToken()
+    if (token.length === 0) return
+
+    const payload = window.localStorage.getItem(FINANCE_EXPRESS_STORAGE_KEY)
+    if (typeof payload !== 'string' || payload.length === 0) return
+
+    if (budgetPushTimeout != null) {
+        clearTimeout(budgetPushTimeout)
+    }
+
+    budgetPushTimeout = setTimeout(async () => {
+        budgetPushTimeout = null
+        try {
+            const result = await requestJson<{ saved?: boolean; updated_at?: string }>(
+                '/api/sync/push',
+                {
+                    method: 'POST',
+                    body: toJsonBody({
+                        version: 1,
+                        exportedAtISO: new Date().toISOString(),
+                        data: {
+                            accounts: [],
+                            instruments: [],
+                            movements: [],
+                            snapshots: [],
+                            manualPrices: [],
+                            preferences: {},
+                            financeExpress: payload,
+                        },
+                    }),
+                },
+            )
+            if (typeof result?.updated_at === 'string') {
+                window.localStorage.setItem(
+                    FINANCE_EXPRESS_UPDATED_AT_STORAGE_KEY,
+                    result.updated_at,
+                )
+            }
+            console.log('[budget-sync] pushed')
+        } catch (error) {
+            console.warn('[budget-sync] push failed', error)
+        }
+    }, BUDGET_PUSH_DEBOUNCE_MS)
 }
