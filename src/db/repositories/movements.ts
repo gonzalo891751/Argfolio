@@ -44,8 +44,9 @@ export const movementsRepo = {
         if (isRemoteSyncEnabled()) {
             try {
                 await syncRemoteMovementCreate(movement)
-            } catch {
-                // Fallback local-only when offline/read-only.
+            } catch (error) {
+                console.warn('[movementsRepo] D1 sync failed for create:', movement.id, error)
+                // handleRemoteSyncError already emitted user-visible toast via event
             }
         }
         return db.movements.put(movement)
@@ -56,8 +57,8 @@ export const movementsRepo = {
         if (isRemoteSyncEnabled() && existing) {
             try {
                 await syncRemoteMovementUpdate({ ...existing, ...updates, id })
-            } catch {
-                // Fallback local-only when offline/read-only.
+            } catch (error) {
+                console.warn('[movementsRepo] D1 sync failed for update:', id, error)
             }
         }
         await db.movements.update(id, updates)
@@ -81,8 +82,8 @@ export const movementsRepo = {
                 idsToDelete.map(async (movementId) => {
                     try {
                         await syncRemoteMovementDelete(movementId)
-                    } catch {
-                        // Fallback local-only when offline/read-only.
+                    } catch (error) {
+                        console.warn('[movementsRepo] D1 sync failed for delete:', movementId, error)
                     }
                 })
             )

@@ -4,6 +4,7 @@ import { useMovements } from '@/hooks/use-movements'
 import { useFxRates } from '@/hooks/use-fx-rates'
 import { derivePFPositions } from '@/domain/pf/processor'
 import { db } from '@/db'
+import { syncMovementsBatch } from '@/sync/remote-sync'
 import { useToast } from '@/components/ui/toast'
 import { useAutoSettleFixedTerms } from '@/hooks/use-preferences'
 import type { Movement } from '@/domain/types'
@@ -140,6 +141,13 @@ export function usePFSettlement(): UsePFSettlementReturn {
 
         if (newMovements.length > 0) {
             await db.movements.bulkAdd(newMovements)
+
+            // Sync to D1 (non-blocking)
+            syncMovementsBatch(newMovements).then(({ ok }) => {
+                if (!ok) {
+                    console.warn('[pf-settlement] D1 sync failed for', newMovements.length, 'movements')
+                }
+            })
 
             if (showToast) {
                 const banksStr = Array.from(settledBanks).join(', ')

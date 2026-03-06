@@ -3556,3 +3556,131 @@ count == 0 → sección oculta
 ### Validación
 - `npm run build` → OK
 - Cálculos no modificados (solo template/render)
+
+---
+
+# CHECKPOINT: Auditoría Sync Cross-Device (2026-03-06)
+
+## Fase 0 — Diagnóstico
+
+**Problema reportado:** Datos inconsistentes entre dispositivos (PC vs celular). Presupuestos y movimientos a veces no guardan o muestran valores distintos.
+
+**Arquitectura encontrada:**
+- **Dexie (IndexedDB)**: almacén local principal (movements, accounts, instruments, snapshots)
+- **localStorage**: presupuestos (`budget_fintech`), preferencias, price cache
+- **D1 (Cloudflare)**: backend remoto (accounts, movements, instruments, snapshots, finance_express_data)
+- **Sync**: bootstrap al cargar (D1→Dexie), write-through en repos (Dexie+D1), feature flag `VITE_ARGFOLIO_REMOTE_SYNC=1`
+
+**Causas raíz identificadas:**
+1. **CR1 (CRITICA)**: WalletCashWizard transfers, FciBuySellWizard, useAccrualScheduler, use-pf-settlement escriben directo a `db.movements.bulkAdd/bulkPut` sin sync D1
+2. **CR2 (CRITICA)**: Errores de sync en repos se tragan silenciosamente — usuario no sabe que D1 falló
+3. **CR3 (CRITICA)**: `useBudget()` solo persiste en localStorage, sin push a D1
+4. **CR4 (MODERADA)**: `useBudget()` no setea `budget_fintech_updated_at` → bootstrap sobreescribe ediciones locales
+5. **CR5 (MODERADA)**: Account updates en WalletCashWizard y useAccrualScheduler bypasean `accountsRepo`
+6. **CR6 (POSIBLE)**: Sin `.env` en repo — si `VITE_ARGFOLIO_REMOTE_SYNC` no está en build, todo sync deshabilitado
+
+**Fixes planificados:**
+- F1: `syncMovementsBatch()` en remote-sync.ts + aplicar en 4 rutas bypass
+- F2: `useBudget()` setea `budget_fintech_updated_at` al persistir
+- F3: Feedback visible (toast) cuando sync falla en repos
+- F4: Account updates pasan por `accountsRepo` o sync explícito
+
+**Archivos a tocar:**
+- `src/sync/remote-sync.ts`
+- `src/db/repositories/movements.ts`
+- `src/db/repositories/accounts.ts`
+- `src/pages/movements/components/wallet/WalletCashWizard.tsx`
+- `src/pages/movements/components/fci/FciBuySellWizard.tsx`
+- `src/features/yield/useAccrualScheduler.ts`
+- `src/hooks/use-pf-settlement.ts`
+- `src/features/finanzas-express/use-budget.ts`
+
+## Fase 1+2 — Implementación (2026-03-06)
+
+### F1: `syncMovementsBatch` + fix bypass paths
+
+**Nuevo en `src/sync/remote-sync.ts`:**
+- `syncMovementsBatch(movements)` — push batch de movimientos a D1 via `/api/sync/push`. Non-blocking, devuelve `{ ok, failedCount }`.
+- `syncBudgetPush()` — push debounceado (3s) de `budget_fintech` a D1. Setea `updated_at` del server.
+
+**Bypass paths corregidos:**
+| Archivo | Antes | Después |
+|---------|-------|---------|
+| `WalletCashWizard.tsx` (transfers) | `db.movements.bulkAdd` sin sync | + `syncMovementsBatch` + toast warning on fail |
+| `FciBuySellWizard.tsx` (rescate FCI) | `db.movements.bulkAdd` sin sync | + `syncMovementsBatch` + toast warning on fail |
+| `useAccrualScheduler.ts` (intereses) | `db.movements.bulkPut` sin sync | + `syncMovementsBatch` (background, warn log) |
+| `use-pf-settlement.ts` (liquidación PF) | `db.movements.bulkAdd` sin sync | + `syncMovementsBatch` (background, warn log) |
+| `importer.ts` (CSV import) | `db.movements.bulkPut` sin sync | + `syncMovementsBatch` (background) |
+
+### F2: Budget sync automático
+
+**Cambio en `src/features/finanzas-express/use-budget.ts`:**
+- `persist()` ahora setea `budget_fintech_updated_at` con ISO timestamp
+- Llama `syncBudgetPush()` (debounced 3s) para push automático a D1
+- Esto complementa (no reemplaza) el push sofisticado de `finanzas-express.tsx`
+- Fuente de verdad: localStorage + push a D1 en cada cambio. Bootstrap usa LWW con timestamps correctos.
+
+### F3: Feedback visible en sync errors
+
+**Cambios en `src/db/repositories/movements.ts` y `accounts.ts`:**
+- Catches ya no son silenciosos — loguean `console.warn` con context
+- `handleRemoteSyncError` (en remote-sync.ts) ya emitía eventos → toasts via `useRemoteSync`
+
+**Cambio en `src/sync/remote-sync.ts`:**
+- Fallback genérico ahora dice "Sync no disponible / Los cambios se guardaron localmente pero no se sincronizaron" con `variant: 'error'` (antes era "info")
+
+### F4: Account updates via repo
+
+| Archivo | Antes | Después |
+|---------|-------|---------|
+| `WalletCashWizard.tsx` (cashYield) | `db.accounts.update()` directo | `accountsRepo.update()` (con D1 sync) |
+| `useAccrualScheduler.ts` (lastAccruedDate) | `db.accounts.update()` directo | `accountsRepo.update()` (con D1 sync) |
+
+### CR6: VITE_ARGFOLIO_REMOTE_SYNC — Documentación
+
+**Dónde se configura:**
+- Es una variable de entorno de **build-time** (Vite la inyecta via `import.meta.env`)
+- Se configura en **Cloudflare Pages > Settings > Environment Variables**
+- NO hay `.env` en el repo (no debería haber, contiene secrets)
+
+**Variables necesarias en Cloudflare:**
+
+| Variable | Dónde | Valor | Descripción |
+|----------|-------|-------|-------------|
+| `VITE_ARGFOLIO_REMOTE_SYNC` | Pages Build ENV | `1` | Habilita sync D1 en el cliente |
+| `ARGFOLIO_SYNC_TOKEN` | Pages Secrets | (token secreto) | Bearer token para auth de sync |
+| `ARGFOLIO_SYNC_WRITE_ENABLED` | Pages ENV | `1` | Habilita escritura en D1 |
+
+**Qué pasa si `VITE_ARGFOLIO_REMOTE_SYNC` no está o no es `1`:**
+- `isRemoteSyncEnabled()` retorna `false`
+- TODA la sincronización se desactiva: sin bootstrap, sin push, sin sync de movimientos ni budget
+- La app funciona 100% local (Dexie + localStorage), cada dispositivo es isla
+- Los repos no intentan sync, los batch push se saltan
+- Esto explica la inconsistencia cross-device si la variable no está configurada
+
+**Cómo detectar sin ambigüedad:**
+1. Abrir la app en producción
+2. Ir a Settings → sección "Sync"
+3. Si dice "Sync remoto desactivado" → la variable NO está configurada
+4. También: en DevTools Console buscar `[sync/bootstrap]` — si no aparece, sync está OFF
+5. Si dice "Sync remoto sin token" → la variable sí está pero falta el token en localStorage
+
+### Validación
+
+```
+npx tsc --noEmit    → 0 errors
+npm run build       → ✅ built in ~13s
+```
+
+### Archivos modificados
+
+1. `src/sync/remote-sync.ts` — +`syncMovementsBatch`, +`syncBudgetPush`, error message mejorado
+2. `src/db/repositories/movements.ts` — console.warn en catch (no más silencio)
+3. `src/db/repositories/accounts.ts` — console.warn en catch (no más silencio)
+4. `src/pages/movements/components/wallet/WalletCashWizard.tsx` — +sync transfers, +accountsRepo para cashYield
+5. `src/pages/movements/components/fci/FciBuySellWizard.tsx` — +sync rescate FCI
+6. `src/features/yield/useAccrualScheduler.ts` — +sync intereses, +accountsRepo
+7. `src/hooks/use-pf-settlement.ts` — +sync liquidación PF
+8. `src/features/finanzas-express/use-budget.ts` — +updated_at, +syncBudgetPush
+9. `src/domain/import/importer.ts` — +sync imported movements
+10. `docs/AI_HANDOFF.md` — checkpoint completo

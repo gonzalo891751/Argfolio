@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import type { BudgetState, Card, Service, PlannedExpense, Income } from './types'
+import { FINANCE_EXPRESS_UPDATED_AT_STORAGE_KEY, syncBudgetPush } from '@/sync/remote-sync'
 
 const STORAGE_KEY = 'budget_fintech'
 
@@ -39,6 +40,9 @@ export function useBudget() {
         setStateRaw(next)
         const { fxLoading: _, ...toSave } = next
         localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+        localStorage.setItem(FINANCE_EXPRESS_UPDATED_AT_STORAGE_KEY, new Date().toISOString())
+        // Debounced push to D1 for cross-device sync
+        syncBudgetPush()
     }, [])
 
     const update = useCallback((fn: (s: BudgetState) => BudgetState) => {

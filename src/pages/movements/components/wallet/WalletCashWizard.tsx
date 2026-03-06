@@ -12,6 +12,8 @@ import { computeCashBalances } from '@/domain/portfolio/cash-ledger'
 import { formatMoneyARS, formatMoneyUSD } from '@/lib/format'
 import { computeTEA } from '@/domain/yield/accrual'
 import { db } from '@/db'
+import { syncMovementsBatch } from '@/sync/remote-sync'
+import { accountsRepo } from '@/db/repositories/accounts'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -350,7 +352,7 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
                 if (acc) {
                     const needsUpdate = (acc.cashYield?.enabled !== state.isRemunerada) || (state.isRemunerada && acc.cashYield?.tna !== state.tna)
                     if (needsUpdate) {
-                        await db.accounts.update(state.accountId, {
+                        await accountsRepo.update(state.accountId, {
                             cashYield: {
                                 enabled: state.isRemunerada,
                                 tna: state.tna || 0,
@@ -438,6 +440,13 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
                 // Atomic write via Dexie transaction
                 await db.transaction('rw', db.movements, async () => {
                     await db.movements.bulkAdd([movOut, movIn])
+                })
+
+                // Sync to D1 (non-blocking — warn user on failure)
+                syncMovementsBatch([movOut, movIn]).then(({ ok }) => {
+                    if (!ok) {
+                        toast({ title: 'Sync pendiente', description: 'La transferencia se guardó localmente pero no se sincronizó al servidor.', variant: 'error' })
+                    }
                 })
 
                 // Manual invalidation (since we bypassed the hook)

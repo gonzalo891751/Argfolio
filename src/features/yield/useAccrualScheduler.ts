@@ -16,6 +16,8 @@ import { useAccounts } from '@/hooks/use-instruments'
 import { useMovements } from '@/hooks/use-movements'
 import { generateAccrualMovements } from '@/domain/yield/accrual'
 import { db } from '@/db'
+import { accountsRepo } from '@/db/repositories/accounts'
+import { syncMovementsBatch } from '@/sync/remote-sync'
 import { useToast } from '@/components/ui/toast'
 import { useAutoAccrueWalletInterest } from '@/hooks/use-preferences'
 import type { Movement } from '@/domain/types'
@@ -156,8 +158,8 @@ export function useAccrualScheduler(options: UseAccrualSchedulerOptions = {}): U
             if (newMovs.length > 0) {
                 allMovs.push(...newMovs)
 
-                // Update account's lastAccruedDate
-                await db.accounts.update(acc.id, {
+                // Update account's lastAccruedDate (via repo for D1 sync)
+                await accountsRepo.update(acc.id, {
                     cashYield: {
                         ...acc.cashYield,
                         lastAccruedDate: newLastAccrued
@@ -171,6 +173,13 @@ export function useAccrualScheduler(options: UseAccrualSchedulerOptions = {}): U
         // Bulk insert all movements
         if (allMovs.length > 0) {
             await db.movements.bulkPut(allMovs)
+
+            // Sync to D1 (non-blocking)
+            syncMovementsBatch(allMovs).then(({ ok }) => {
+                if (!ok) {
+                    console.warn('[accrual] D1 sync failed for', allMovs.length, 'movements')
+                }
+            })
 
             if (showToast) {
                 toast({

@@ -29,6 +29,7 @@ import { useCreateMovement, useUpdateMovement } from '@/hooks/use-movements'
 import { useCreateInstrument } from '@/hooks/use-instruments'
 import { useToast } from '@/components/ui/toast'
 import { db } from '@/db'
+import { syncMovementsBatch } from '@/sync/remote-sync'
 import { useQueryClient } from '@tanstack/react-query'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
 import { formatMoneyARS, formatMoneyUSD } from '@/lib/format'
@@ -761,6 +762,13 @@ export function FciBuySellWizard({
                 // Atomic write
                 await db.transaction('rw', db.movements, async () => {
                     await db.movements.bulkAdd([sellMov, depositMov])
+                })
+
+                // Sync to D1 (non-blocking — warn user on failure)
+                syncMovementsBatch([sellMov, depositMov]).then(({ ok }) => {
+                    if (!ok) {
+                        toast({ title: 'Sync pendiente', description: 'El rescate se guardó localmente pero no se sincronizó al servidor.', variant: 'error' })
+                    }
                 })
 
                 // Manual query invalidation (bypassed the hook)

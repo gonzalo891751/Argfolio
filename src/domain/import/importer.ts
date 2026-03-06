@@ -2,6 +2,7 @@ import { db } from '@/db/schema'
 import type { MappedRow } from './mapper'
 import type { Movement, Instrument, Account, AssetCategory, Currency } from '@/domain/types'
 import { suggestInstrumentId, suggestAccountId } from './validator'
+import { syncMovementsBatch } from '@/sync/remote-sync'
 
 export interface ImportResult {
     batchId: string
@@ -137,6 +138,10 @@ export async function importMovements(
     if (movements.length > 0) {
         await db.movements.bulkPut(movements)
         result.movementsCreated = movements.length
+        // Sync to D1 (non-blocking)
+        syncMovementsBatch(movements).catch(() => {
+            console.warn('[importer] D1 sync failed for', movements.length, 'movements')
+        })
     }
 
     return result
