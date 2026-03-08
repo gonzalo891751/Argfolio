@@ -23,6 +23,7 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 ---
 
 # Current Focus (WIP)
+- **[P0] PF Auto-Settlement Duplication Bug:** ✅ FASE 1 COMPLETADA (2026-03-07). Ver checkpoint abajo.
 - ~~Implementar fixes de auditoría de Liquidez:~~ ✅ COMPLETADO
 - ~~WalletCashWizard (Ingreso/Egreso/Transferencia):~~ ✅ IMPLEMENTADO (2026-02-07)
 - ~~CryptoBuySellWizard (Compra/Venta Cripto):~~ ✅ MVP IMPLEMENTADO (2026-02-07)
@@ -47,6 +48,48 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 8. **[P2] RT6 Missing Items:** Ajuste por inflación incompleto en flujo de inventario.
 9. **[P2] Performance:** Renderizado lento en tablas con historial extenso.
 10. **[Debt] Lint Warnings:** ~100 warnings por `no-explicit-any`.
+
+---
+
+# CHECKPOINT: PF Auto-Settlement Duplication Bug Fix (2026-03-07)
+
+**Bug:** El auto-settlement de Plazo Fijo generaba múltiples pares SELL+DEPOSIT duplicados, inflando el saldo líquido de Banco del Sol de ~205K ARS a >2.2M ARS.
+
+**Causa raíz (3 factores confirmados):**
+1. `executeSettlement()` hacía `db.movements.bulkAdd()` pero NO invalidaba el cache de react-query `['movements']`. El hook `useMovements()` usa react-query (no live-query de Dexie), así que `derivePFPositions()` seguía recibiendo movements stale donde el PF aparecía como "matured, not redeemed" en cada tick.
+2. `usePFSettlement()` se instanciaba en DOS lugares independientes (`AppLayout` + `useAutomationTrigger` en assets-v2), cada uno con su propio `isProcessing` ref. No se bloqueaban mutuamente.
+3. El tick de 5 minutos re-disparaba el auto-effect, multiplicando los duplicados (~2 instancias × 12 ticks/hora).
+
+**Fix (FASE 1):**
+- `src/hooks/use-pf-settlement.ts`:
+  - **Idempotency guard**: Antes de crear movements por PF, consulta DB directamente (`db.movements.filter(...)`) buscando SELL con `pf.pfId === pf.id && pf.action === 'SETTLE'`. Si existe, skip.
+  - **Query invalidation**: Después de `bulkAdd`, invalida `['movements']` y `['portfolio']`.
+  - **`autoEffect` option**: Nuevo parámetro `{ autoEffect?: boolean }` (default `true`). Permite desactivar el auto-effect cuando se usa solo para manual trigger.
+  - **settledCount fix**: Ahora retorna `newMovements.length / 2` (real) en vez de `maturedToSettle.length` (que no descontaba los ya settled).
+- `src/hooks/use-automation-trigger.ts`:
+  - Pasa `{ autoEffect: false }` a `usePFSettlement()` para que solo `AppLayout` corra el auto-effect.
+
+**Hardening (FASE 2):**
+- `globalSettlementLock` (module-level): previene ejecución concurrente entre auto-effect y manual trigger, doble-click, cualquier combinación de instancias.
+- Tick interval solo se activa cuando `autoEffect: true` (no gasta timers en la instancia de `useAutomationTrigger`).
+
+**Repair Utility (FASE 3):**
+- `src/domain/pf/repair-duplicates.ts`:
+  - `diagnoseDuplicates()` — dry-run read-only que detecta SELL+DEPOSIT duplicados, agrupa por `pf.pfId`, y reporta antes/después.
+  - `repairDuplicates()` — llama diagnóstico y luego borra duplicados via `movementsRepo.delete()` (con sync a D1).
+  - Criterio: para cada `pf.pfId`, se mantiene el SELL más antiguo; los demás son duplicados. DEPOSIT pareados por bank + amount + accountId + meta.pfGroupId.
+  - Uso: `import { diagnoseDuplicates } from '@/domain/pf/repair-duplicates'; diagnoseDuplicates()`
+
+**Validación:**
+- `npm run build`: ✅ OK (FASE 1 + 2 + 3)
+- Idempotencia: 4 niveles de defensa (DB guard, query invalidation, globalSettlementLock, single auto-effect).
+
+**Procedimiento para reparar datos:**
+1. Abrir la app en dev (`npm run dev`)
+2. Abrir consola del browser
+3. Ejecutar: `import('@/domain/pf/repair-duplicates').then(m => m.diagnoseDuplicates())` — ver reporte
+4. Si el reporte es correcto: `import('@/domain/pf/repair-duplicates').then(m => m.repairDuplicates())` — ejecutar limpieza
+5. Refresh y verificar saldo en Mis Activos
 
 ---
 
