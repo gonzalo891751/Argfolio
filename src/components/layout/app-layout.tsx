@@ -5,6 +5,9 @@ import { ArgfolioHeader } from '@/components/layout/ArgfolioHeader'
 import { usePFSettlement } from '@/hooks/use-pf-settlement'
 import { usePFModelMigration } from '@/hooks/use-pf-model-migration'
 import { useScrollCondense } from '@/hooks/useScrollCondense'
+// Side-effect import: exposes diagnoseDuplicates() / repairDuplicates() on window for DevTools
+// TODO: Remove after duplicate data cleanup is confirmed
+import '@/domain/pf/repair-duplicates'
 
 function LayoutContent() {
     // Sidebar collapse is MANUAL ONLY (via Colapsar button)
