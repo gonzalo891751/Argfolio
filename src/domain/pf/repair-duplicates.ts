@@ -193,3 +193,10 @@ export async function repairDuplicates(): Promise<DiagnosisResult> {
 
     return diagnosis
 }
+
+// ── Expose on window for DevTools access ──
+// Allows running diagnoseDuplicates() and repairDuplicates() directly from browser console.
+// Safe: these are read/repair utilities, not app logic.
+// TODO: Remove after confirming all duplicate data is cleaned up.
+;(window as any).diagnoseDuplicates = diagnoseDuplicates
+;(window as any).repairDuplicates = repairDuplicates
