@@ -31,7 +31,7 @@ export interface UseAutomationTriggerReturn {
 
 export function useAutomationTrigger(): UseAutomationTriggerReturn {
     const { runAccrualNow, isRunning: isAccrualRunning } = useAccrualScheduler()
-    const { runSettlementNow, isRunning: isPFRunning } = usePFSettlement()
+    const { runSettlementNow, isRunning: isPFRunning } = usePFSettlement({ autoEffect: false })
     const { toast } = useToast()
     const queryClient = useQueryClient()
 

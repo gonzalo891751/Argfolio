@@ -7,9 +7,14 @@ import { db } from '@/db'
 import { syncMovementsBatch } from '@/sync/remote-sync'
 import { useToast } from '@/components/ui/toast'
 import { useAutoSettleFixedTerms } from '@/hooks/use-preferences'
+import { useQueryClient } from '@tanstack/react-query'
 import type { Movement } from '@/domain/types'
 import { v4 as uuidv4 } from 'uuid'
 import { formatMoneyARS } from '@/lib/format'
+
+// Module-level lock: prevents concurrent executeSettlement across ALL hook instances
+// (e.g., manual trigger from useAutomationTrigger while auto-effect runs in AppLayout)
+let globalSettlementLock = false
 
 export interface PFSettlementResult {
     settledCount: number
@@ -25,21 +30,24 @@ export interface UsePFSettlementReturn {
     getPendingMatured: () => Promise<{ id: string; bank: string; amount: number }[]>
 }
 
-export function usePFSettlement(): UsePFSettlementReturn {
+export function usePFSettlement(options?: { autoEffect?: boolean }): UsePFSettlementReturn {
+    const enableAutoEffect = options?.autoEffect ?? true
     const { data: movements } = useMovements()
     const { data: fxRates } = useFxRates()
     const { toast } = useToast()
     const { autoSettleEnabled } = useAutoSettleFixedTerms()
+    const queryClient = useQueryClient()
 
     // State for manual trigger
     const [isRunning, setIsRunning] = useState(false)
 
-    // Interval to force re-check (every 5 minutes)
+    // Interval to force re-check (every 5 minutes) — only when auto-effect is active
     const [tick, setTick] = useState(0)
     useEffect(() => {
+        if (!enableAutoEffect) return
         const interval = setInterval(() => setTick(t => t + 1), 5 * 60 * 1000)
         return () => clearInterval(interval)
-    }, [])
+    }, [enableAutoEffect])
 
     // Ref to prevent double-firing strict mode or rapid re-renders
     const isProcessing = useRef(false)
@@ -50,6 +58,14 @@ export function usePFSettlement(): UsePFSettlementReturn {
             return { settledCount: 0, totalAmount: 0 }
         }
 
+        // Global lock: prevent concurrent runs across hook instances (double-click, manual+auto overlap)
+        if (globalSettlementLock) {
+            console.info('[pf-settlement] Skipping: another settlement is already in progress')
+            return { settledCount: 0, totalAmount: 0 }
+        }
+        globalSettlementLock = true
+
+        try {
         const state = derivePFPositions(movements, fxRates)
         const maturedToSettle = state.matured
 
@@ -62,6 +78,16 @@ export function usePFSettlement(): UsePFSettlementReturn {
         const settledBanks = new Set<string>()
 
         for (const pf of maturedToSettle) {
+            // ── Idempotency guard: query DB directly (not stale react-query cache) ──
+            const alreadySettled = await db.movements
+                .filter(m => m.assetClass === 'pf' && m.type === 'SELL'
+                    && m.pf?.pfId === pf.id && m.pf?.action === 'SETTLE')
+                .count()
+            if (alreadySettled > 0) {
+                console.info(`[pf-settlement] PF ${pf.id} already settled (${alreadySettled} SELL found), skipping`)
+                continue
+            }
+
             const settlementDate = new Date().toISOString()
             const settlementAmount = pf.expectedTotalARS
 
@@ -142,6 +168,12 @@ export function usePFSettlement(): UsePFSettlementReturn {
         if (newMovements.length > 0) {
             await db.movements.bulkAdd(newMovements)
 
+            // Invalidate react-query cache so subsequent runs see the new SELL movements
+            // ['movements'] — so derivePFPositions gets fresh data and isRedeemed() works
+            // ['portfolio'] — so UI reflects updated balances
+            queryClient.invalidateQueries({ queryKey: ['movements'] })
+            queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+
             // Sync to D1 (non-blocking)
             syncMovementsBatch(newMovements).then(({ ok }) => {
                 if (!ok) {
@@ -159,8 +191,11 @@ export function usePFSettlement(): UsePFSettlementReturn {
             }
         }
 
-        return { settledCount: maturedToSettle.length, totalAmount: totalSettledAmount }
-    }, [movements, fxRates, toast])
+        return { settledCount: newMovements.length / 2, totalAmount: totalSettledAmount }
+        } finally {
+            globalSettlementLock = false
+        }
+    }, [movements, fxRates, toast, queryClient])
 
     // Manual trigger function
     const runSettlementNow = useCallback(async (): Promise<PFSettlementResult> => {
@@ -188,8 +223,10 @@ export function usePFSettlement(): UsePFSettlementReturn {
         }))
     }, [movements, fxRates])
 
-    // Auto-run effect (respects preference)
+    // Auto-run effect (respects preference + enableAutoEffect flag)
     useEffect(() => {
+        if (!enableAutoEffect) return
+
         const runSettlement = async () => {
             if (!movements || !fxRates || isProcessing.current) return
             if (!autoSettleEnabled) return // Respect user preference
@@ -205,7 +242,7 @@ export function usePFSettlement(): UsePFSettlementReturn {
         }
 
         runSettlement()
-    }, [movements, fxRates, tick, autoSettleEnabled, executeSettlement])
+    }, [enableAutoEffect, movements, fxRates, tick, autoSettleEnabled, executeSettlement])
 
     return { runSettlementNow, isRunning, getPendingMatured }
 }
