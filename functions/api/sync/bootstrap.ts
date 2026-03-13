@@ -40,6 +40,8 @@ function createBootstrapPayload({
     snapshots,
     financeExpress,
     financeExpressUpdatedAt,
+    preferences,
+    preferencesUpdatedAt,
     durationMs,
     degraded = false,
 }: {
@@ -50,6 +52,8 @@ function createBootstrapPayload({
     snapshots?: unknown[]
     financeExpress?: string | null
     financeExpressUpdatedAt?: string | null
+    preferences?: string | null
+    preferencesUpdatedAt?: string | null
     durationMs: number
     degraded?: boolean
 }) {
@@ -66,6 +70,8 @@ function createBootstrapPayload({
         snapshots: Array.isArray(snapshots) ? snapshots : [],
         financeExpress: typeof financeExpress === 'string' ? financeExpress : null,
         financeExpressUpdatedAt: typeof financeExpressUpdatedAt === 'string' ? financeExpressUpdatedAt : null,
+        preferences: typeof preferences === 'string' ? preferences : null,
+        preferencesUpdatedAt: typeof preferencesUpdatedAt === 'string' ? preferencesUpdatedAt : null,
     }
 }
 
@@ -155,13 +161,28 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
         let financeExpressUpdatedAt: string | null = null
         try {
             const feRow = await db.prepare(
-                'SELECT data, updated_at FROM finance_express_data ORDER BY updated_at DESC LIMIT 1'
+                "SELECT data, updated_at FROM finance_express_data WHERE id = 'default' LIMIT 1"
             ).first<{ data?: string; updated_at?: string }>()
             if (typeof feRow?.data === 'string') {
                 financeExpress = feRow.data
             }
             if (typeof feRow?.updated_at === 'string') {
                 financeExpressUpdatedAt = feRow.updated_at
+            }
+        } catch {
+            // Table may not exist yet — ignore
+        }
+
+        // Preferences (synced cross-device)
+        let preferences: string | null = null
+        let preferencesUpdatedAt: string | null = null
+        try {
+            const prefRow = await db.prepare(
+                "SELECT data, updated_at FROM finance_express_data WHERE id = 'preferences' LIMIT 1"
+            ).first<{ data?: string; updated_at?: string }>()
+            if (typeof prefRow?.data === 'string') {
+                preferences = prefRow.data
+                preferencesUpdatedAt = typeof prefRow.updated_at === 'string' ? prefRow.updated_at : null
             }
         } catch {
             // Table may not exist yet — ignore
@@ -176,6 +197,7 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             snapshots: snapshots.length,
             financeExpress: financeExpress != null,
             financeExpressUpdatedAt,
+            preferences: preferences != null,
             degraded: false,
         })
         console.info('[sync/bootstrap] snapshot served', {
@@ -195,6 +217,8 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             snapshots,
             financeExpress,
             financeExpressUpdatedAt,
+            preferences,
+            preferencesUpdatedAt,
             durationMs,
         })), {
             headers: {

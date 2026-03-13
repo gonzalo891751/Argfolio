@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTrackCash } from '@/hooks/use-preferences'
 import { exportLocalBackup, importLocalBackup, parseBackupJson } from '@/domain/sync/local-backup'
-import { getSyncToken, isRemoteSyncEnabled, setSyncToken } from '@/sync/remote-sync'
+import { getSyncToken, isRemoteSyncEnabled, setSyncToken, markPreferencesModified, forceReconcile, getLastSyncISO, computeSyncFingerprint, type SyncFingerprint } from '@/sync/remote-sync'
 
 type FxPreference = 'MEP' | 'CCL'
 
@@ -45,12 +45,15 @@ export function SettingsPage() {
     const [isExporting, setIsExporting] = useState(false)
     const [isImporting, setIsImporting] = useState(false)
     const [isPushingToCloud, setIsPushingToCloud] = useState(false)
+    const [isReconciling, setIsReconciling] = useState(false)
     const [syncTokenInput, setSyncTokenInput] = useState(() => getSyncToken())
+    const [fingerprint, setFingerprint] = useState<SyncFingerprint | null>(null)
     const importInputRef = useRef<HTMLInputElement | null>(null)
 
     const handleFxChange = (pref: FxPreference) => {
         setFxPreference(pref)
         localStorage.setItem('argfolio-fx-preference', pref)
+        markPreferencesModified()
         // Invalidate portfolio to recalculate with new FX
         queryClient.invalidateQueries({ queryKey: ['portfolio'] })
     }
@@ -251,6 +254,33 @@ export function SettingsPage() {
         } finally {
             setIsPushingToCloud(false)
         }
+    }
+
+    const handleForceReconcile = async () => {
+        setIsReconciling(true)
+        try {
+            const result = await forceReconcile()
+            if (result.ok) {
+                queryClient.invalidateQueries()
+                alert(
+                    `Reconciliación completa.\n` +
+                    `Remotos procesados: ${result.pulled}\n` +
+                    `Locales enviados: ${result.pushed}`
+                )
+            } else {
+                alert('No se pudo reconciliar. Verificá token y conexión.')
+            }
+        } catch (error) {
+            console.error('Force reconcile failed:', error)
+            alert('Error durante la reconciliación.')
+        } finally {
+            setIsReconciling(false)
+        }
+    }
+
+    const handleComputeFingerprint = async () => {
+        const fp = await computeSyncFingerprint()
+        setFingerprint(fp)
     }
 
     return (
@@ -459,6 +489,38 @@ export function SettingsPage() {
                             {isPushingToCloud ? 'Subiendo todo...' : 'Subir todo a D1'}
                         </Button>
                     </div>
+                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-3 space-y-2">
+                        <p className="text-sm font-medium">Reconciliación cross-device</p>
+                        <p className="text-xs text-muted-foreground">
+                            Descarga datos remotos + sube datos locales faltantes. Garantiza que PC y móvil converjan al mismo dataset.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                variant="default"
+                                onClick={handleForceReconcile}
+                                disabled={isReconciling || isPushingToCloud || !isRemoteSyncEnabled()}
+                            >
+                                <RefreshCw className={cn('h-4 w-4 mr-2', isReconciling && 'animate-spin')} />
+                                {isReconciling ? 'Reconciliando...' : 'Forzar reconciliación'}
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={handleComputeFingerprint}
+                            >
+                                Fingerprint local
+                            </Button>
+                        </div>
+                        {fingerprint && (
+                            <div className="text-xs font-mono text-muted-foreground bg-background rounded px-2 py-1 border">
+                                Movimientos: {fingerprint.movementCount} | Cuentas: {fingerprint.accountCount} | Hash: {fingerprint.hash}
+                            </div>
+                        )}
+                        {getLastSyncISO() && (
+                            <p className="text-xs text-muted-foreground">
+                                Último sync: {new Date(getLastSyncISO()!).toLocaleString()}
+                            </p>
+                        )}
+                    </div>
                     <p className="text-xs text-muted-foreground">
                         Importación en modo merge seguro: upsert por `id` (sin duplicar).
                     </p>
@@ -529,6 +591,7 @@ function CedearToggle() {
     const handleToggle = (checked: boolean) => {
         setEnabled(checked)
         localStorage.setItem('argfolio-settings-cedear-auto', String(checked))
+        markPreferencesModified()
         queryClient.invalidateQueries({ queryKey: ['portfolio'] })
         queryClient.invalidateQueries({ queryKey: ['cedears'] })
     }
