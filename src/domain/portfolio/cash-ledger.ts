@@ -71,8 +71,12 @@ function getMovementCashDeltas(mov: Movement): CashDelta[] {
     const deltas: CashDelta[] = []
     const tradeCurrency = resolveTradeCurrency(mov)
 
+    // Skip PF SELL cash effect when a paired DEPOSIT handles the cash inflow.
+    // settlementMode is set for both 'auto' and 'manual' settlements that create
+    // a separate DEPOSIT movement. Legacy PF SELLs without settlementMode still
+    // contribute to cash (no paired DEPOSIT exists for those).
     const settlementMode = mov.meta?.fixedDeposit?.settlementMode
-    const skipPfSellCash = mov.assetClass === 'pf' && mov.type === 'SELL' && settlementMode === 'manual'
+    const skipPfSellCash = mov.assetClass === 'pf' && mov.type === 'SELL' && !!settlementMode
 
     switch (mov.type) {
         case 'DEPOSIT': {
