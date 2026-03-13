@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react'
-import { Sun, Moon, Monitor, RefreshCw, DollarSign, AlertTriangle, RotateCcw, Download, Upload, Cloud } from 'lucide-react'
+import { Sun, Moon, Monitor, RefreshCw, DollarSign, AlertTriangle, RotateCcw, Download, Upload, Cloud, Bug } from 'lucide-react'
 import { useTheme } from '@/lib/theme'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { resetDatabase } from '@/db'
@@ -33,10 +33,16 @@ interface ApiErrorBody {
     hint?: string
 }
 
+function useDebugMode(): boolean {
+    if (typeof window === 'undefined') return false
+    return new URLSearchParams(window.location.search).get('debug') === '1'
+}
+
 export function SettingsPage() {
     const { theme, setTheme } = useTheme()
     const { isAutoRefreshEnabled, setAutoRefreshEnabled } = useAutoRefresh()
     const queryClient = useQueryClient()
+    const debugMode = useDebugMode()
 
     const [fxPreference, setFxPreference] = useState<FxPreference>(() => {
         return (localStorage.getItem('argfolio-fx-preference') as FxPreference) || 'MEP'
@@ -51,7 +57,6 @@ export function SettingsPage() {
     const handleFxChange = (pref: FxPreference) => {
         setFxPreference(pref)
         localStorage.setItem('argfolio-fx-preference', pref)
-        // Invalidate portfolio to recalculate with new FX
         queryClient.invalidateQueries({ queryKey: ['portfolio'] })
     }
 
@@ -63,7 +68,6 @@ export function SettingsPage() {
         setIsResetting(true)
         try {
             await resetDatabase()
-            // Invalidate all queries
             queryClient.invalidateQueries()
             alert('Datos reiniciados correctamente')
         } catch (error) {
@@ -372,130 +376,6 @@ export function SettingsPage() {
                 </CardContent>
             </Card>
 
-            {/* Backup + Sync */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                        <Cloud className="h-4 w-4" />
-                        Backup y sincronización
-                    </CardTitle>
-                    <CardDescription>
-                        Exportá/Importá tus datos locales y controlá el estado del sync remoto.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-                        <p className="text-sm font-medium">
-                            Sync remoto: {isRemoteSyncEnabled() ? 'Activado' : 'Desactivado'}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            Flag: `VITE_ARGFOLIO_REMOTE_SYNC=1` para bootstrap desde API + escritura remota con fallback local.
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-3 space-y-2">
-                        <p className="text-sm font-medium">Token de Sync</p>
-                        <p className="text-xs text-muted-foreground">
-                            Se envÃ­a como `Authorization: Bearer &lt;token&gt;` en `/api/sync/*`.
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                            <Input
-                                type="password"
-                                value={syncTokenInput}
-                                onChange={(event) => setSyncTokenInput(event.target.value)}
-                                placeholder="PegÃ¡ ARGFOLIO_SYNC_TOKEN"
-                                className="min-w-[240px] flex-1"
-                            />
-                            <Button
-                                variant="outline"
-                                onClick={handleSaveSyncToken}
-                                disabled={isPushingToCloud}
-                            >
-                                Guardar token
-                            </Button>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-3">
-                        <Button
-                            variant="outline"
-                            onClick={handleExportBackup}
-                            disabled={isExporting}
-                        >
-                            <Download className={cn('h-4 w-4 mr-2', isExporting && 'animate-pulse')} />
-                            {isExporting ? 'Exportando...' : 'Exportar JSON'}
-                        </Button>
-                        <Button
-                            variant="outline"
-                            onClick={() => importInputRef.current?.click()}
-                            disabled={isImporting}
-                        >
-                            <Upload className={cn('h-4 w-4 mr-2', isImporting && 'animate-pulse')} />
-                            {isImporting ? 'Importando...' : 'Importar JSON'}
-                        </Button>
-                    </div>
-                    <input
-                        ref={importInputRef}
-                        type="file"
-                        accept="application/json,.json"
-                        className="hidden"
-                        onChange={handleImportBackup}
-                    />
-                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-3 space-y-2">
-                        <p className="text-sm font-medium">Sync a la nube (D1)</p>
-                        <p className="text-xs text-muted-foreground">
-                            Empuja todo el backup local a D1 en una sola operacion.
-                            Requiere `ARGFOLIO_SYNC_WRITE_ENABLED=1`.
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                            Nota: localhost y producción no comparten IndexedDB/origin. Si en producción aparece vacío,
-                            exportá JSON en localhost e importalo acá antes de subir a D1.
-                        </p>
-                        <Button
-                            variant="default"
-                            onClick={handlePushAllToD1}
-                            disabled={isPushingToCloud || isExporting || isImporting}
-                        >
-                            <Cloud className={cn('h-4 w-4 mr-2', isPushingToCloud && 'animate-spin')} />
-                            {isPushingToCloud ? 'Subiendo todo...' : 'Subir todo a D1'}
-                        </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        Importación en modo merge seguro: upsert por `id` (sin duplicar).
-                    </p>
-                </CardContent>
-            </Card>
-
-            {/* Reset Data */}
-            <Card className="border-destructive/30">
-                <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2 text-destructive">
-                        <AlertTriangle className="h-4 w-4" />
-                        Zona de peligro
-                    </CardTitle>
-                    <CardDescription>
-                        Acciones irreversibles que afectan todos tus datos
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-medium">Reiniciar datos de demo</p>
-                            <p className="text-sm text-muted-foreground">
-                                Elimina todos los movimientos, snapshots y deudas, y recarga los datos de demo
-                            </p>
-                        </div>
-                        <Button
-                            variant="destructive"
-                            onClick={handleResetData}
-                            disabled={isResetting}
-                        >
-                            <RotateCcw className={cn('h-4 w-4 mr-2', isResetting && 'animate-spin')} />
-                            {isResetting ? 'Reiniciando...' : 'Reiniciar'}
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-
             {/* About */}
             <Card>
                 <CardHeader>
@@ -503,17 +383,149 @@ export function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-2 text-sm text-muted-foreground">
-                        <p>Versión: 0.2.0 (Phase 2)</p>
+                        <p>Versión: 0.3.0</p>
                         <p>
                             Argfolio es un tracker de inversiones diseñado para el mercado argentino. Seguí tus
                             Cedears, criptomonedas, stablecoins, FCIs, plazos fijos y deudas en un solo lugar.
                         </p>
                         <p className="pt-2 text-xs">
-                            Phase 2: Movements CRUD + Portfolio Engine + Local Persistence (IndexedDB)
+                            Tus datos se sincronizan automáticamente con la nube. Abrí la app en cualquier dispositivo para ver lo mismo.
                         </p>
                     </div>
                 </CardContent>
             </Card>
+
+            {/* ============================================================ */}
+            {/* Debug panel — only visible with ?debug=1 in URL              */}
+            {/* ============================================================ */}
+            {debugMode && (
+                <>
+                    <div className="pt-4 border-t border-dashed border-muted-foreground/30">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5 mb-4">
+                            <Bug className="h-3.5 w-3.5" />
+                            Herramientas de debug (visibles porque ?debug=1 está en la URL)
+                        </p>
+                    </div>
+
+                    {/* Sync Token + Push */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <Cloud className="h-4 w-4" />
+                                Sync remoto (debug)
+                            </CardTitle>
+                            <CardDescription>
+                                Token de autenticación y push manual a D1.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                                <p className="text-sm font-medium">
+                                    Sync remoto: {isRemoteSyncEnabled() ? 'Activado' : 'Desactivado'}
+                                </p>
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-sm font-medium">Token de Sync</p>
+                                <div className="flex flex-wrap gap-2">
+                                    <Input
+                                        type="password"
+                                        value={syncTokenInput}
+                                        onChange={(event) => setSyncTokenInput(event.target.value)}
+                                        placeholder="Pegá ARGFOLIO_SYNC_TOKEN"
+                                        className="min-w-[240px] flex-1"
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleSaveSyncToken}
+                                        disabled={isPushingToCloud}
+                                    >
+                                        Guardar token
+                                    </Button>
+                                </div>
+                            </div>
+                            <Button
+                                variant="default"
+                                onClick={handlePushAllToD1}
+                                disabled={isPushingToCloud || isExporting || isImporting}
+                            >
+                                <Cloud className={cn('h-4 w-4 mr-2', isPushingToCloud && 'animate-spin')} />
+                                {isPushingToCloud ? 'Subiendo todo...' : 'Subir todo a D1'}
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Export / Import */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <Download className="h-4 w-4" />
+                                Backup local (debug)
+                            </CardTitle>
+                            <CardDescription>
+                                Exportar/importar datos locales como JSON.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex flex-wrap gap-3">
+                                <Button
+                                    variant="outline"
+                                    onClick={handleExportBackup}
+                                    disabled={isExporting}
+                                >
+                                    <Download className={cn('h-4 w-4 mr-2', isExporting && 'animate-pulse')} />
+                                    {isExporting ? 'Exportando...' : 'Exportar JSON'}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => importInputRef.current?.click()}
+                                    disabled={isImporting}
+                                >
+                                    <Upload className={cn('h-4 w-4 mr-2', isImporting && 'animate-pulse')} />
+                                    {isImporting ? 'Importando...' : 'Importar JSON'}
+                                </Button>
+                            </div>
+                            <input
+                                ref={importInputRef}
+                                type="file"
+                                accept="application/json,.json"
+                                className="hidden"
+                                onChange={handleImportBackup}
+                            />
+                        </CardContent>
+                    </Card>
+
+                    {/* Reset Data */}
+                    <Card className="border-destructive/30">
+                        <CardHeader>
+                            <CardTitle className="text-base flex items-center gap-2 text-destructive">
+                                <AlertTriangle className="h-4 w-4" />
+                                Zona de peligro (debug)
+                            </CardTitle>
+                            <CardDescription>
+                                Acciones irreversibles que afectan todos tus datos
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-medium">Reiniciar datos locales</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Elimina la base de datos local. Al recargar, se restaura desde D1.
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="destructive"
+                                    onClick={handleResetData}
+                                    disabled={isResetting}
+                                >
+                                    <RotateCcw className={cn('h-4 w-4 mr-2', isResetting && 'animate-spin')} />
+                                    {isResetting ? 'Reiniciando...' : 'Reiniciar'}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </>
+            )}
         </div>
     )
 }

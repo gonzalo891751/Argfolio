@@ -57,12 +57,6 @@ function toJsonBody(value: unknown): BodyInit {
     return JSON.stringify(value)
 }
 
-function toTimestampMs(value: string | null | undefined): number | null {
-    if (typeof value !== 'string' || value.trim().length === 0) return null
-    const parsed = Date.parse(value)
-    return Number.isFinite(parsed) ? parsed : null
-}
-
 function readSyncToken(): string {
     if (typeof window === 'undefined') return ''
     return (window.localStorage.getItem(SYNC_TOKEN_STORAGE_KEY) ?? '').trim()
@@ -173,56 +167,31 @@ export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean;
                 return typeof snapshot?.dateLocal === 'string' && snapshot.dateLocal.length > 0
             })
 
+            // D1 is the single source of truth — replace local DB entirely.
             await db.transaction('rw', [db.accounts, db.movements, db.instruments, db.snapshots], async () => {
+                await db.accounts.clear()
+                await db.movements.clear()
+                await db.instruments.clear()
+                await db.snapshots.clear()
+
                 if (accounts.length > 0) await db.accounts.bulkPut(accounts)
-                if (movements.length > 0) {
-                    // Only add movements that don't already exist locally.
-                    // Using bulkPut would silently overwrite local-only edits/deletions
-                    // and re-inject duplicates that were repaired locally but whose
-                    // D1 deletion may have failed.
-                    const existingIds = new Set(
-                        (await db.movements.toCollection().primaryKeys()) as string[]
-                    )
-                    const newMovements = movements.filter(m => !existingIds.has(m.id))
-                    if (newMovements.length > 0) {
-                        await db.movements.bulkAdd(newMovements)
-                    }
-                    if (newMovements.length < movements.length) {
-                        console.info(
-                            `[bootstrap] Skipped ${movements.length - newMovements.length} movements already present locally`
-                        )
-                    }
-                }
+                if (movements.length > 0) await db.movements.bulkPut(movements)
                 if (instruments.length > 0) await db.instruments.bulkPut(instruments)
-                if (snapshotsToPersist.length > 0) {
-                    const snapshotDates = Array.from(new Set(snapshotsToPersist.map((snapshot) => snapshot.dateLocal)))
-                    if (snapshotDates.length > 0) {
-                        await db.snapshots.where('dateLocal').anyOf(snapshotDates).delete()
-                    }
-                    await db.snapshots.bulkPut(snapshotsToPersist)
-                }
+                if (snapshotsToPersist.length > 0) await db.snapshots.bulkPut(snapshotsToPersist)
+
+                console.info('[bootstrap] Replaced local DB from D1', {
+                    accounts: accounts.length,
+                    movements: movements.length,
+                    instruments: instruments.length,
+                    snapshots: snapshotsToPersist.length,
+                })
             })
 
-            // Last-write-wins restore for Finance Express data.
+            // D1 is authoritative — always restore Finance Express from remote.
             if (typeof payload.financeExpress === 'string' && payload.financeExpress.length > 0) {
-                const localFinanceExpress = localStorage.getItem(FINANCE_EXPRESS_STORAGE_KEY)
-                const localUpdatedAt = localStorage.getItem(FINANCE_EXPRESS_UPDATED_AT_STORAGE_KEY)
-                const remoteUpdatedAt = typeof payload.financeExpressUpdatedAt === 'string'
-                    ? payload.financeExpressUpdatedAt
-                    : null
-                const localUpdatedAtMs = toTimestampMs(localUpdatedAt)
-                const remoteUpdatedAtMs = toTimestampMs(remoteUpdatedAt)
-                const shouldRestore =
-                    typeof localFinanceExpress !== 'string' ||
-                    localFinanceExpress.length === 0 ||
-                    localUpdatedAtMs == null ||
-                    (remoteUpdatedAtMs != null && remoteUpdatedAtMs > localUpdatedAtMs)
-
-                if (shouldRestore) {
-                    localStorage.setItem(FINANCE_EXPRESS_STORAGE_KEY, payload.financeExpress)
-                    if (remoteUpdatedAt && remoteUpdatedAtMs != null) {
-                        localStorage.setItem(FINANCE_EXPRESS_UPDATED_AT_STORAGE_KEY, remoteUpdatedAt)
-                    }
+                localStorage.setItem(FINANCE_EXPRESS_STORAGE_KEY, payload.financeExpress)
+                if (typeof payload.financeExpressUpdatedAt === 'string') {
+                    localStorage.setItem(FINANCE_EXPRESS_UPDATED_AT_STORAGE_KEY, payload.financeExpressUpdatedAt)
                 }
             }
 

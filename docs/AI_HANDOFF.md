@@ -3835,3 +3835,52 @@ npm run build       → ✅ built in ~13s
 8. `src/features/finanzas-express/use-budget.ts` — +updated_at, +syncBudgetPush
 9. `src/domain/import/importer.ts` — +sync imported movements
 10. `docs/AI_HANDOFF.md` — checkpoint completo
+
+---
+
+## Checkpoint: D1 Authoritative + Settings Simplification (2026-03-13)
+
+### Problema resuelto
+
+**Divergencia cross-device persistente** (PC: ~8M ARS, Móvil: ~9.1M ARS). Causa raíz: el bootstrap usaba `bulkAdd` (additive-only) para movements — nunca limpiaba datos locales contaminados (PF duplicados reparados en consola F12, settlement bugs, etc.). Cada dispositivo acumulaba basura diferente → patrimonios distintos.
+
+### Cambio arquitectónico: D1 = única fuente de verdad
+
+**Antes:**
+- Bootstrap = additive merge: solo agrega movements que no existen localmente
+- Local DB = "autoritativa" — reparaciones F12, borrados locales nunca se propagaban
+- Finance Express: last-write-wins comparando timestamps locales vs remotos
+
+**Después:**
+- Bootstrap = REPLACE total: `clear()` + `bulkPut()` para accounts, movements, instruments, snapshots
+- D1 es autoritativo — al abrir la app, local se descarta y se reemplaza desde D1
+- Finance Express: siempre se restaura desde D1 sin comparar timestamps
+- Función `toTimestampMs()` eliminada (ya no necesaria)
+
+### Simplificación de Settings
+
+**Antes:** Settings exponía token de sync, push manual a D1, export/import JSON, estado de sync, reset DB — todo visible al usuario.
+
+**Después:**
+- Settings muestra solo: Tema, Tipo de cambio, Auto-refresh, CEDEAR, Track cash, About
+- Herramientas de debug (token, push D1, export/import, reset) ocultas detrás de `?debug=1` en la URL
+- Versión actualizada a 0.3.0
+- Texto de About refleja sync automático con la nube
+
+### Archivos modificados
+
+1. `src/sync/remote-sync.ts` — bootstrap ahora hace `clear()` + `bulkPut()` en vez de additive `bulkAdd()`. Finance Express restore simplificado. `toTimestampMs()` eliminada.
+2. `src/pages/settings.tsx` — debug tools movidas detrás de `?debug=1`. UI limpia para usuario normal.
+
+### Validación
+
+```
+npm run build       → ✅ built in ~15s (mismos warnings pre-existentes)
+```
+
+### Impacto esperado
+
+- **Cross-device**: Ambos dispositivos verán exactamente los mismos datos al abrir la app
+- **PF duplicados**: Si fueron borrados de D1, ya no reaparecerán localmente
+- **Reparaciones F12**: Solo persisten si también se aplicaron a D1 (push manual o individual sync)
+- **UX**: Settings limpia, sin ruido técnico para el usuario
