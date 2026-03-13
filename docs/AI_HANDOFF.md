@@ -23,7 +23,7 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 ---
 
 # Current Focus (WIP)
-- **[P0] PF Auto-Settlement Duplication Bug:** ✅ FASE 1 COMPLETADA (2026-03-07). Ver checkpoint abajo.
+- **[P0] PF Auto-Settlement Duplication Bug:** ⚠️ KILL SWITCH ACTIVO — FASE 2 COMPLETADA (2026-03-12). Bug recurrió tras fix FASE 1. Ver checkpoint V2 abajo.
 - ~~Implementar fixes de auditoría de Liquidez:~~ ✅ COMPLETADO
 - ~~WalletCashWizard (Ingreso/Egreso/Transferencia):~~ ✅ IMPLEMENTADO (2026-02-07)
 - ~~CryptoBuySellWizard (Compra/Venta Cripto):~~ ✅ MVP IMPLEMENTADO (2026-02-07)
@@ -51,7 +51,115 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 
 ---
 
-# CHECKPOINT: PF Auto-Settlement Duplication Bug Fix (2026-03-07)
+# CHECKPOINT V2: PF Auto-Settlement Duplication Bug — Forensic Fix (2026-03-12)
+
+**Status:** KILL SWITCH ACTIVO. Fixes implementados, pendiente validación en browser y reparación de datos.
+
+## Resumen Ejecutivo
+
+El fix de FASE 1 (2026-03-07) no resolvió la causa raíz. El bug recurrió con un PF de ~682.940 ARS,
+inflando Banco del Sol a ~2.731.761 ARS. Se realizó auditoría forense completa y se implementaron 5 fixes:
+
+## Causas Raíz Reales Confirmadas (3 nuevas + 1 parcial de FASE 1)
+
+1. **CASH DOUBLE-COUNTING (causa raíz #1 — nueva)**
+   - `cash-ledger.ts` skippeaba PF SELLs solo cuando `settlementMode === 'manual'`
+   - Los SELLs auto (`settlementMode === 'auto'`) NO se skippeaban
+   - Resultado: cada settlement sumaba +monto dos veces (SELL + DEPOSIT) al cash
+   - Impacto: el saldo se inflaba con 1 sola liquidación, se multiplicaba con duplicados
+
+2. **GUARD CIEGO A SELLS LEGACY (causa raíz #2 — parcial de FASE 1)**
+   - El guard buscaba `m.pf?.pfId === pf.id && m.pf?.action === 'SETTLE'`
+   - Si las primeras liquidaciones se crearon sin esos campos exactos, count=0 y creaba nuevas
+   - El guard no cubría pfGroupId ni bank+amount heuristic
+
+3. **EFFECT FEEDBACK LOOP (causa raíz #3 — nueva)**
+   - `executeSettlement` estaba en las deps del useEffect
+   - Cada invalidación de queries recreaba el callback → re-disparaba el effect
+   - Con datos stale temporales, podía re-liquidar antes de que el cache se actualizara
+
+4. **BOOTSTRAP RE-INYECCIÓN (causa raíz #4 — nueva, crítica)**
+   - `bootstrapRemoteSync()` usaba `db.movements.bulkPut()` sin guards
+   - Si D1 tenía duplicados (D1 delete falló), bootstrap los re-inyectaba en cada startup
+   - Vector: repair local → D1 delete falla → bootstrap re-inject → duplicados vuelven
+
+## Fixes Implementados
+
+### Fix 1: cash-ledger.ts — Doble contabilización
+```diff
+- const skipPfSellCash = ... && settlementMode === 'manual'
++ const skipPfSellCash = ... && !!settlementMode
+```
+Ahora skip para CUALQUIER settlementMode (auto/manual). Legacy SELLs sin settlementMode siguen contando.
+
+### Fix 2: use-pf-settlement.ts — Reescritura completa
+- **Settlement key determinista**: `pf-settle-sell:{buyId}` / `pf-settle-dep:{buyId}`
+  - Mismo PF siempre genera mismos IDs → IndexedDB PK es guard final
+- **Transacción atómica**: `db.transaction('rw', db.movements, ...)` wrapping check + write
+  - IndexedDB serializa readwrite transactions cross-tab
+  - Previene TOCTOU: dos tabs no pueden ambas leer count=0 y ambas escribir
+- **Guard amplio**: busca por deterministic ID + pf.pfId + pfGroupId + bank+amount
+- **Refs para estabilidad**: executeSettlement lee de refs, no del closure
+  - Effect no se re-dispara por cambio de callback
+
+### Fix 3: repair-duplicates.ts — Reescritura completa
+- Detección amplia: busca TODOS los PF SELLs, no solo `isAuto && pf?.action`
+- Agrupamiento multi-criterio: pf.pfId → pfGroupId → bank+amount
+- Emparejamiento SELL↔DEPOSIT robusto
+- Separación clara: `diagnoseDuplicates()` (read-only) vs `repairDuplicates()` (diagnose + delete)
+- Reporte detallado por grupo + por cuenta + impacto patrimonio
+
+### Fix 4: remote-sync.ts — Bootstrap guard
+```diff
+- await db.movements.bulkPut(movements)
++ // Only add new movements, don't overwrite existing
++ const existingIds = new Set(await db.movements.toCollection().primaryKeys())
++ const newMovements = movements.filter(m => !existingIds.has(m.id))
++ await db.movements.bulkAdd(newMovements)
+```
+
+### Fix 5: app-layout.tsx — Side-effect removal
+- Eliminado `import '@/domain/pf/repair-duplicates'` (side-effect en cada render)
+- Reemplazado por `window.loadRepairTools()` (dynamic import, lazy)
+
+## Tests Agregados (5 nuevos)
+- PF manual settlement: SELL skipped, solo DEPOSIT cuenta
+- PF auto settlement: SELL auto skipped (BUG FIX principal)
+- Legacy PF SELL: backwards compatible
+- Duplicate regression: confirma inflación exacta
+- Orphaned SELL: data-consistent
+
+## Kill Switch
+- **Estado**: ACTIVO (`PF_SETTLEMENT_KILL_SWITCH = true`)
+- **Ubicación**: `src/hooks/use-pf-settlement.ts:22`
+- **Para reactivar**: cambiar a `false` DESPUÉS de validar en browser
+
+## Procedimiento de Reparación de Datos (PENDIENTE)
+1. Deploy o `npm run dev`
+2. Abrir DevTools console
+3. `await window.loadRepairTools()` — carga lazy tools
+4. `await window.diagnoseDuplicates()` — dry-run, ver reporte completo
+5. Verificar: grupos detectados, IDs a eliminar, impacto por cuenta
+6. Si correcto: `await window.repairDuplicates()` — ejecuta borrado
+7. Refresh y verificar saldo Banco del Sol
+8. Verificar patrimonio total
+
+## Para Reactivar Auto-Settlement
+1. Confirmar datos reparados (diagnoseDuplicates retorna 0 duplicados)
+2. Confirmar saldo Banco del Sol correcto
+3. Cambiar `PF_SETTLEMENT_KILL_SWITCH = false` en use-pf-settlement.ts
+4. Deploy
+5. Monitorear: un PF vencido debe generar exactamente 1 par SELL+DEPOSIT
+
+## Riesgos / Pendientes
+- D1: verificar que los duplicados en D1 también se borren (movementsRepo.delete hace sync)
+- Si D1 sync falla durante repair, el bootstrap guard (`bulkAdd` not `bulkPut`) previene re-inyección
+- `window.SIMULATE_FX_FAILURE` en use-fx-rates.ts sigue expuesto (dev tool, bajo riesgo)
+- Monitorear primer PF que venza post-fix para confirmar una sola liquidación
+
+---
+
+# CHECKPOINT V1 (OBSOLETO): PF Auto-Settlement Duplication Bug Fix (2026-03-07)
 
 **Bug:** El auto-settlement de Plazo Fijo generaba múltiples pares SELL+DEPOSIT duplicados, inflando el saldo líquido de Banco del Sol de ~205K ARS a >2.2M ARS.
 

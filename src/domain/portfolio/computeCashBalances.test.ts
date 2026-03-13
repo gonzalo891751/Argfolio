@@ -310,4 +310,266 @@ describe('cash ledger + portfolio integration', () => {
             expect(binance?.get('USD')).toBeCloseTo(200, 2)
         })
     })
+
+    // ═══════════════════════════════════════════════════════════════
+    // PF settlement cash-ledger tests — no double-counting
+    // Uses an initial DEPOSIT to avoid opening-balance inference effects.
+    // ═══════════════════════════════════════════════════════════════
+    describe('PF settlement cash accounting', () => {
+        const PF_PRINCIPAL = 682940.30
+        const INITIAL_CASH = 1000000
+
+        // Helper: creates initial DEPOSIT so the account starts with known cash
+        function initialDeposit(id: string): Movement {
+            return {
+                id,
+                datetimeISO: '2023-12-01T10:00:00Z',
+                type: 'DEPOSIT',
+                accountId: 'delsol',
+                tradeCurrency: 'ARS',
+                totalAmount: INITIAL_CASH,
+                quantity: INITIAL_CASH,
+                unitPrice: 1,
+            } as Movement
+        }
+
+        it('PF manual settlement: SELL (manual) skipped, only DEPOSIT counts', () => {
+            const movements: Movement[] = [
+                initialDeposit('init-1'),
+                {
+                    id: 'pf-buy-1',
+                    datetimeISO: '2024-01-01T10:00:00Z',
+                    type: 'BUY',
+                    assetClass: 'pf',
+                    instrumentId: 'pf-instrument',
+                    accountId: 'delsol',
+                    quantity: PF_PRINCIPAL,
+                    unitPrice: 1,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                } as Movement,
+                {
+                    id: 'pf-sell-manual',
+                    datetimeISO: '2024-02-01T10:00:00Z',
+                    type: 'SELL',
+                    assetClass: 'pf',
+                    instrumentId: 'pf-instrument',
+                    accountId: 'delsol',
+                    quantity: 1,
+                    unitPrice: PF_PRINCIPAL,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                    meta: { fixedDeposit: { settlementMode: 'manual', totalARS: PF_PRINCIPAL } },
+                    pf: { kind: 'redeem', pfId: 'pf-buy-1', action: 'SETTLE' },
+                } as Movement,
+                {
+                    id: 'pf-dep-manual',
+                    datetimeISO: '2024-02-01T10:00:01Z',
+                    type: 'DEPOSIT',
+                    instrumentId: 'ars-cash',
+                    accountId: 'delsol',
+                    quantity: PF_PRINCIPAL,
+                    unitPrice: 1,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                } as Movement,
+            ]
+
+            const ledger = computeCashLedger(movements)
+            const delsol = ledger.balances.get('delsol')
+            // INITIAL + (-BUY) + 0(SELL skipped) + DEP = INITIAL
+            expect(delsol?.get('ARS')).toBeCloseTo(INITIAL_CASH, 2)
+        })
+
+        it('PF auto settlement: SELL (auto) skipped, only DEPOSIT counts — NO double-counting', () => {
+            const movements: Movement[] = [
+                initialDeposit('init-2'),
+                {
+                    id: 'pf-buy-2',
+                    datetimeISO: '2024-01-01T10:00:00Z',
+                    type: 'BUY',
+                    assetClass: 'pf',
+                    instrumentId: 'pf-instrument',
+                    accountId: 'delsol',
+                    quantity: PF_PRINCIPAL,
+                    unitPrice: 1,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                } as Movement,
+                {
+                    id: 'pf-settle-sell:pf-buy-2',
+                    datetimeISO: '2024-02-01T10:00:00Z',
+                    type: 'SELL',
+                    assetClass: 'pf',
+                    instrumentId: 'pf-instrument',
+                    accountId: 'delsol',
+                    quantity: 1,
+                    unitPrice: PF_PRINCIPAL,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                    isAuto: true,
+                    meta: { fixedDeposit: { settlementMode: 'auto', totalARS: PF_PRINCIPAL } },
+                    pf: { kind: 'redeem', pfId: 'pf-buy-2', action: 'SETTLE' },
+                } as Movement,
+                {
+                    id: 'pf-settle-dep:pf-buy-2',
+                    datetimeISO: '2024-02-01T10:00:00Z',
+                    type: 'DEPOSIT',
+                    instrumentId: 'ars-cash',
+                    accountId: 'delsol',
+                    quantity: PF_PRINCIPAL,
+                    unitPrice: 1,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                    isAuto: true,
+                } as Movement,
+            ]
+
+            const ledger = computeCashLedger(movements)
+            const delsol = ledger.balances.get('delsol')
+            // INITIAL + (-BUY) + 0(SELL skipped) + DEP = INITIAL
+            // Before fix: INITIAL + (-BUY) + SELL + DEP = INITIAL + PRINCIPAL (WRONG!)
+            expect(delsol?.get('ARS')).toBeCloseTo(INITIAL_CASH, 2)
+        })
+
+        it('legacy PF SELL without settlementMode: SELL counts in cash (no paired DEPOSIT)', () => {
+            const movements: Movement[] = [
+                initialDeposit('init-3'),
+                {
+                    id: 'pf-buy-3',
+                    datetimeISO: '2024-01-01T10:00:00Z',
+                    type: 'BUY',
+                    assetClass: 'pf',
+                    instrumentId: 'pf-instrument',
+                    accountId: 'delsol',
+                    quantity: PF_PRINCIPAL,
+                    unitPrice: 1,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                } as Movement,
+                {
+                    id: 'pf-sell-legacy',
+                    datetimeISO: '2024-02-01T10:00:00Z',
+                    type: 'SELL',
+                    assetClass: 'pf',
+                    instrumentId: 'pf-instrument',
+                    accountId: 'delsol',
+                    quantity: 1,
+                    unitPrice: PF_PRINCIPAL,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                    // NO meta.fixedDeposit.settlementMode — legacy SELL
+                } as Movement,
+            ]
+
+            const ledger = computeCashLedger(movements)
+            const delsol = ledger.balances.get('delsol')
+            // INITIAL + (-BUY) + SELL(legacy counts) = INITIAL
+            expect(delsol?.get('ARS')).toBeCloseTo(INITIAL_CASH, 2)
+        })
+
+        it('duplicate auto settlements inflate balance (regression scenario)', () => {
+            const movements: Movement[] = [
+                initialDeposit('init-4'),
+                {
+                    id: 'pf-buy-dup',
+                    datetimeISO: '2024-01-01T10:00:00Z',
+                    type: 'BUY',
+                    assetClass: 'pf',
+                    instrumentId: 'pf-instrument',
+                    accountId: 'delsol',
+                    quantity: PF_PRINCIPAL,
+                    unitPrice: 1,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                } as Movement,
+                // Correct pair
+                {
+                    id: 'pf-settle-sell:pf-buy-dup',
+                    datetimeISO: '2024-02-01T10:00:00Z',
+                    type: 'SELL',
+                    assetClass: 'pf',
+                    accountId: 'delsol',
+                    totalAmount: PF_PRINCIPAL,
+                    tradeCurrency: 'ARS',
+                    isAuto: true,
+                    meta: { fixedDeposit: { settlementMode: 'auto', totalARS: PF_PRINCIPAL } },
+                    pf: { kind: 'redeem', pfId: 'pf-buy-dup', action: 'SETTLE' },
+                } as Movement,
+                {
+                    id: 'pf-settle-dep:pf-buy-dup',
+                    datetimeISO: '2024-02-01T10:00:00Z',
+                    type: 'DEPOSIT',
+                    accountId: 'delsol',
+                    totalAmount: PF_PRINCIPAL,
+                    tradeCurrency: 'ARS',
+                    isAuto: true,
+                } as Movement,
+                // DUPLICATE pair (bug — should be removed by repair)
+                {
+                    id: 'dup-sell-1',
+                    datetimeISO: '2024-02-01T10:05:00Z',
+                    type: 'SELL',
+                    assetClass: 'pf',
+                    accountId: 'delsol',
+                    totalAmount: PF_PRINCIPAL,
+                    tradeCurrency: 'ARS',
+                    isAuto: true,
+                    meta: { fixedDeposit: { settlementMode: 'auto', totalARS: PF_PRINCIPAL } },
+                    pf: { kind: 'redeem', pfId: 'pf-buy-dup', action: 'SETTLE' },
+                } as Movement,
+                {
+                    id: 'dup-dep-1',
+                    datetimeISO: '2024-02-01T10:05:00Z',
+                    type: 'DEPOSIT',
+                    accountId: 'delsol',
+                    totalAmount: PF_PRINCIPAL,
+                    tradeCurrency: 'ARS',
+                    isAuto: true,
+                } as Movement,
+            ]
+
+            const ledger = computeCashLedger(movements)
+            const delsol = ledger.balances.get('delsol')
+            // INITIAL + (-BUY) + 0(SELL skip) + DEP + 0(dup SELL skip) + dup DEP
+            // = INITIAL + PRINCIPAL (extra DEP from duplicate inflates by exactly 1x)
+            expect(delsol?.get('ARS')).toBeCloseTo(INITIAL_CASH + PF_PRINCIPAL, 2)
+        })
+
+        it('PF auto SELL without DEPOSIT: SELL still skipped (data-consistent)', () => {
+            const movements: Movement[] = [
+                initialDeposit('init-5'),
+                {
+                    id: 'pf-buy-orphan',
+                    datetimeISO: '2024-01-01T10:00:00Z',
+                    type: 'BUY',
+                    assetClass: 'pf',
+                    instrumentId: 'pf-instrument',
+                    accountId: 'delsol',
+                    quantity: PF_PRINCIPAL,
+                    unitPrice: 1,
+                    tradeCurrency: 'ARS',
+                    totalAmount: PF_PRINCIPAL,
+                } as Movement,
+                {
+                    id: 'pf-settle-sell:pf-buy-orphan',
+                    datetimeISO: '2024-02-01T10:00:00Z',
+                    type: 'SELL',
+                    assetClass: 'pf',
+                    accountId: 'delsol',
+                    totalAmount: PF_PRINCIPAL,
+                    tradeCurrency: 'ARS',
+                    isAuto: true,
+                    meta: { fixedDeposit: { settlementMode: 'auto', totalARS: PF_PRINCIPAL } },
+                    pf: { kind: 'redeem', pfId: 'pf-buy-orphan', action: 'SETTLE' },
+                } as Movement,
+                // No DEPOSIT — orphaned SELL
+            ]
+
+            const ledger = computeCashLedger(movements)
+            const delsol = ledger.balances.get('delsol')
+            // INITIAL + (-BUY) + 0(SELL skipped) = INITIAL - PRINCIPAL
+            expect(delsol?.get('ARS')).toBeCloseTo(INITIAL_CASH - PF_PRINCIPAL, 2)
+        })
+    })
 })

@@ -9,11 +9,32 @@ import { useToast } from '@/components/ui/toast'
 import { useAutoSettleFixedTerms } from '@/hooks/use-preferences'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Movement } from '@/domain/types'
-import { v4 as uuidv4 } from 'uuid'
 import { formatMoneyARS } from '@/lib/format'
 
-// Module-level lock: prevents concurrent executeSettlement across ALL hook instances
-// (e.g., manual trigger from useAutomationTrigger while auto-effect runs in AppLayout)
+// ══════════════════════════════════════════════════════════════════════════════
+// KILL SWITCH — Emergency disable for PF auto-settlement.
+// Set to `true` to prevent ANY settlement from running (auto or manual).
+// Context: Production duplicates detected 2026-03-12 (PF ~682k ARS inflated
+// Banco del Sol to ~2.7M ARS). Keep ON until root cause fix is validated.
+// To re-enable: set to `false` and verify with diagnoseDuplicates().
+// ══════════════════════════════════════════════════════════════════════════════
+const PF_SETTLEMENT_KILL_SWITCH = true
+
+// ── Deterministic settlement key ──
+// Generates stable, unique IDs for each settlement event based on the
+// BUY movement's ID. Two tabs / retries / re-renders will produce the
+// exact same IDs, so IndexedDB's primary key constraint is the ultimate
+// guard against duplicates.
+export function settlementSellId(buyMovementId: string): string {
+    return `pf-settle-sell:${buyMovementId}`
+}
+export function settlementDepositId(buyMovementId: string): string {
+    return `pf-settle-dep:${buyMovementId}`
+}
+
+// Module-level lock: prevents concurrent executeSettlement in the same tab.
+// NOTE: This is per-tab only. Cross-tab protection comes from the atomic
+// Dexie transaction (IndexedDB readwrite transactions are serialized).
 let globalSettlementLock = false
 
 export interface PFSettlementResult {
@@ -28,6 +49,150 @@ export interface UsePFSettlementReturn {
     isRunning: boolean
     /** Get list of matured but unsettled PFs */
     getPendingMatured: () => Promise<{ id: string; bank: string; amount: number }[]>
+}
+
+/**
+ * Settles a single matured PF inside an atomic Dexie transaction.
+ *
+ * Transaction guarantees:
+ * - Store: `db.movements` (single store, readwrite)
+ * - Read: checks if settlement SELL already exists (by deterministic ID AND by legacy metadata)
+ * - Write: adds SELL + DEPOSIT only if no prior settlement found
+ * - Why this prevents TOCTOU: IndexedDB readwrite transactions on the same
+ *   store are serialized even across tabs. While one transaction holds the
+ *   store, any other readwrite transaction on `db.movements` WAITS.
+ *   So two tabs cannot both read count=0 and both write.
+ *
+ * Returns the created movements (empty array if already settled).
+ */
+async function settleOnePF(pf: {
+    id: string
+    accountId: string
+    bank: string
+    expectedTotalARS: number
+    principalARS: number
+    expectedInterestARS: number
+    tna: number
+    termDays: number
+    startTs: string
+    maturityTs: string
+    pfGroupId?: string
+    pfCode?: string
+}): Promise<Movement[]> {
+    const sellId = settlementSellId(pf.id)
+    const depId = settlementDepositId(pf.id)
+
+    const created: Movement[] = []
+
+    await db.transaction('rw', db.movements, async () => {
+        // ── Guard 1: deterministic ID (fast, indexed primary key lookup) ──
+        const existingById = await db.movements.get(sellId)
+        if (existingById) {
+            console.info(`[pf-settlement] PF ${pf.id} already settled (deterministic ID found)`)
+            return // Transaction commits with no writes → no-op
+        }
+
+        // ── Guard 2: legacy SELLs (pre-fix movements without deterministic IDs) ──
+        // Searches by pf.pfId linkage, pfGroupId, or bank+amount heuristic
+        const legacyCount = await db.movements
+            .filter(m => {
+                if (m.assetClass !== 'pf' || m.type !== 'SELL') return false
+                // Exact linkage (post-fix movements)
+                if (m.pf?.pfId === pf.id) return true
+                // pfGroupId match (if set)
+                if (pf.pfGroupId && (
+                    m.meta?.pfGroupId === pf.pfGroupId ||
+                    m.meta?.fixedDeposit?.pfGroupId === pf.pfGroupId
+                )) return true
+                // Heuristic: same bank + same amount + auto flag
+                if (m.isAuto && m.bank === pf.bank &&
+                    Math.abs(m.totalAmount - pf.expectedTotalARS) < 0.01) return true
+                return false
+            })
+            .count()
+
+        if (legacyCount > 0) {
+            console.info(`[pf-settlement] PF ${pf.id} already settled (${legacyCount} legacy SELL found)`)
+            return
+        }
+
+        // ── No prior settlement found → create SELL + DEPOSIT ──
+        const settlementDate = new Date().toISOString()
+        const settlementAmount = pf.expectedTotalARS
+        const pfGroupId = pf.pfGroupId
+        const pfCode = pf.pfCode || 'PF-AUTO'
+
+        const settleMov: Movement = {
+            id: sellId, // Deterministic!
+            assetClass: 'pf',
+            instrumentId: 'pf-instrument',
+            assetName: 'Plazo Fijo',
+            type: 'SELL',
+            accountId: pf.accountId,
+            bank: pf.bank,
+            datetimeISO: settlementDate,
+            quantity: 1,
+            unitPrice: settlementAmount,
+            tradeCurrency: 'ARS',
+            totalAmount: settlementAmount,
+            notes: `Vencimiento PF (Auto-Liquidación) ${pfCode}`,
+            isAuto: true,
+            meta: {
+                pfGroupId: pfGroupId,
+                pfCode: pfCode,
+                fixedDeposit: {
+                    pfGroupId: pfGroupId,
+                    pfCode: pfCode,
+                    settlementMode: 'auto',
+                    redeemedAt: settlementDate,
+                    principalARS: pf.principalARS,
+                    interestARS: pf.expectedInterestARS || 0,
+                    totalARS: settlementAmount,
+                    tna: pf.tna,
+                    termDays: pf.termDays,
+                    startAtISO: pf.startTs,
+                    maturityDate: pf.maturityTs
+                } as any
+            },
+            pf: {
+                kind: 'redeem',
+                pfId: pf.id,
+                action: 'SETTLE',
+            },
+        }
+
+        const depositMov: Movement = {
+            id: depId, // Deterministic!
+            type: 'DEPOSIT',
+            instrumentId: 'ars-cash',
+            assetName: 'Pesos Argentinos',
+            accountId: pf.accountId,
+            tradeCurrency: 'ARS',
+            bank: pf.bank,
+            datetimeISO: settlementDate,
+            quantity: settlementAmount,
+            unitPrice: 1,
+            totalAmount: settlementAmount,
+            ticker: 'ARS',
+            notes: `Acreditación PF vencido (Auto): ${pfCode}`,
+            isAuto: true,
+            meta: {
+                pfGroupId: pfGroupId,
+                pfCode: pfCode,
+                fixedDeposit: {
+                    pfGroupId: pfGroupId,
+                    pfCode: pfCode,
+                    settlementMode: 'auto',
+                    totalARS: settlementAmount
+                } as any,
+            } as any,
+        }
+
+        await db.movements.bulkAdd([settleMov, depositMov])
+        created.push(settleMov, depositMov)
+    })
+
+    return created
 }
 
 export function usePFSettlement(options?: { autoEffect?: boolean }): UsePFSettlementReturn {
@@ -52,13 +217,30 @@ export function usePFSettlement(options?: { autoEffect?: boolean }): UsePFSettle
     // Ref to prevent double-firing strict mode or rapid re-renders
     const isProcessing = useRef(false)
 
-    // Core settlement logic (reusable)
+    // Store latest movements/fxRates in refs so executeSettlement doesn't
+    // need them in its dependency array (breaks the invalidation feedback loop).
+    const movementsRef = useRef(movements)
+    const fxRatesRef = useRef(fxRates)
+    useEffect(() => { movementsRef.current = movements }, [movements])
+    useEffect(() => { fxRatesRef.current = fxRates }, [fxRates])
+
+    // Core settlement logic — reads from refs, NOT from closure.
+    // This means executeSettlement is stable (doesn't change on every render).
     const executeSettlement = useCallback(async (showToast: boolean): Promise<PFSettlementResult> => {
-        if (!movements || !fxRates) {
+        // KILL SWITCH: block all settlement while investigating production duplicates
+        if (PF_SETTLEMENT_KILL_SWITCH) {
+            console.warn('[pf-settlement] KILL SWITCH active — settlement blocked. See use-pf-settlement.ts')
             return { settledCount: 0, totalAmount: 0 }
         }
 
-        // Global lock: prevent concurrent runs across hook instances (double-click, manual+auto overlap)
+        const currentMovements = movementsRef.current
+        const currentFxRates = fxRatesRef.current
+
+        if (!currentMovements || !currentFxRates) {
+            return { settledCount: 0, totalAmount: 0 }
+        }
+
+        // Global lock: prevent concurrent runs within same tab
         if (globalSettlementLock) {
             console.info('[pf-settlement] Skipping: another settlement is already in progress')
             return { settledCount: 0, totalAmount: 0 }
@@ -66,136 +248,55 @@ export function usePFSettlement(options?: { autoEffect?: boolean }): UsePFSettle
         globalSettlementLock = true
 
         try {
-        const state = derivePFPositions(movements, fxRates)
-        const maturedToSettle = state.matured
+            const state = derivePFPositions(currentMovements, currentFxRates)
+            const maturedToSettle = state.matured
 
-        if (maturedToSettle.length === 0) {
-            return { settledCount: 0, totalAmount: 0 }
-        }
-
-        const newMovements: Movement[] = []
-        let totalSettledAmount = 0
-        const settledBanks = new Set<string>()
-
-        for (const pf of maturedToSettle) {
-            // ── Idempotency guard: query DB directly (not stale react-query cache) ──
-            const alreadySettled = await db.movements
-                .filter(m => m.assetClass === 'pf' && m.type === 'SELL'
-                    && m.pf?.pfId === pf.id && m.pf?.action === 'SETTLE')
-                .count()
-            if (alreadySettled > 0) {
-                console.info(`[pf-settlement] PF ${pf.id} already settled (${alreadySettled} SELL found), skipping`)
-                continue
+            if (maturedToSettle.length === 0) {
+                return { settledCount: 0, totalAmount: 0 }
             }
 
-            const settlementDate = new Date().toISOString()
-            const settlementAmount = pf.expectedTotalARS
+            const allCreated: Movement[] = []
+            let totalSettledAmount = 0
+            const settledBanks = new Set<string>()
 
-            const pfGroupId = pf.pfGroupId
-            const pfCode = pf.pfCode || 'PF-AUTO'
-
-            const settleMov: Movement = {
-                id: uuidv4(),
-                assetClass: 'pf',
-                instrumentId: 'pf-instrument',
-                assetName: 'Plazo Fijo',
-                type: 'SELL',
-                accountId: pf.accountId,
-                bank: pf.bank,
-                datetimeISO: settlementDate,
-                quantity: 1,
-                unitPrice: settlementAmount,
-                tradeCurrency: 'ARS',
-                totalAmount: settlementAmount,
-                notes: `Vencimiento PF (Auto-Liquidación) ${pfCode}`,
-                isAuto: true,
-                meta: {
-                    pfGroupId: pfGroupId,
-                    pfCode: pfCode,
-                    fixedDeposit: {
-                        pfGroupId: pfGroupId,
-                        pfCode: pfCode,
-                        settlementMode: 'auto',
-                        redeemedAt: settlementDate,
-                        principalARS: pf.principalARS,
-                        interestARS: pf.expectedInterestARS || 0,
-                        totalARS: settlementAmount,
-                        tna: pf.tna,
-                        termDays: pf.termDays,
-                        startAtISO: pf.startTs,
-                        maturityDate: pf.maturityTs
-                    } as any
-                },
-                pf: {
-                    kind: 'redeem',
-                    pfId: pf.id,
-                    action: 'SETTLE',
-                },
-            }
-
-            const depositMov: Movement = {
-                id: uuidv4(),
-                type: 'DEPOSIT',
-                instrumentId: 'ars-cash',
-                assetName: 'Pesos Argentinos',
-                accountId: pf.accountId,
-                tradeCurrency: 'ARS',
-                bank: pf.bank,
-                datetimeISO: settlementDate,
-                quantity: settlementAmount,
-                unitPrice: 1,
-                totalAmount: settlementAmount,
-                ticker: 'ARS',
-                notes: `Acreditación PF vencido (Auto): ${pfCode}`,
-                isAuto: true,
-                meta: {
-                    pfGroupId: pfGroupId,
-                    pfCode: pfCode,
-                    fixedDeposit: {
-                        pfGroupId: pfGroupId,
-                        pfCode: pfCode,
-                        settlementMode: 'auto',
-                        totalARS: settlementAmount
-                    } as any,
-                } as any,
-            }
-
-            newMovements.push(settleMov, depositMov)
-            totalSettledAmount += settlementAmount
-            settledBanks.add(pf.bank || 'Desconocido')
-        }
-
-        if (newMovements.length > 0) {
-            await db.movements.bulkAdd(newMovements)
-
-            // Invalidate react-query cache so subsequent runs see the new SELL movements
-            // ['movements'] — so derivePFPositions gets fresh data and isRedeemed() works
-            // ['portfolio'] — so UI reflects updated balances
-            queryClient.invalidateQueries({ queryKey: ['movements'] })
-            queryClient.invalidateQueries({ queryKey: ['portfolio'] })
-
-            // Sync to D1 (non-blocking)
-            syncMovementsBatch(newMovements).then(({ ok }) => {
-                if (!ok) {
-                    console.warn('[pf-settlement] D1 sync failed for', newMovements.length, 'movements')
+            for (const pf of maturedToSettle) {
+                // Each PF is settled in its own atomic transaction
+                const created = await settleOnePF(pf)
+                if (created.length > 0) {
+                    allCreated.push(...created)
+                    totalSettledAmount += pf.expectedTotalARS
+                    settledBanks.add(pf.bank || 'Desconocido')
                 }
-            })
-
-            if (showToast) {
-                const banksStr = Array.from(settledBanks).join(', ')
-                toast({
-                    title: 'Liquidación Automática de PF',
-                    description: `Se liquidaron PFs vencidos por ${formatMoneyARS(totalSettledAmount)} en ${banksStr}.`,
-                    variant: 'default',
-                })
             }
-        }
 
-        return { settledCount: newMovements.length / 2, totalAmount: totalSettledAmount }
+            if (allCreated.length > 0) {
+                // Invalidate react-query cache so UI and subsequent runs see new data
+                queryClient.invalidateQueries({ queryKey: ['movements'] })
+                queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+
+                // Sync to D1 (non-blocking)
+                syncMovementsBatch(allCreated).then(({ ok }) => {
+                    if (!ok) {
+                        console.warn('[pf-settlement] D1 sync failed for', allCreated.length, 'movements')
+                    }
+                })
+
+                if (showToast) {
+                    const banksStr = Array.from(settledBanks).join(', ')
+                    toast({
+                        title: 'Liquidación Automática de PF',
+                        description: `Se liquidaron PFs vencidos por ${formatMoneyARS(totalSettledAmount)} en ${banksStr}.`,
+                        variant: 'default',
+                    })
+                }
+            }
+
+            return { settledCount: allCreated.length / 2, totalAmount: totalSettledAmount }
         } finally {
             globalSettlementLock = false
         }
-    }, [movements, fxRates, toast, queryClient])
+    // executeSettlement is stable — depends only on refs + queryClient + toast
+    }, [toast, queryClient])
 
     // Manual trigger function
     const runSettlementNow = useCallback(async (): Promise<PFSettlementResult> => {
@@ -224,12 +325,14 @@ export function usePFSettlement(options?: { autoEffect?: boolean }): UsePFSettle
     }, [movements, fxRates])
 
     // Auto-run effect (respects preference + enableAutoEffect flag)
+    // NOTE: executeSettlement is NOT in deps — it's stable (ref-based).
+    // Effect re-fires on: movements change, fxRates change, tick, preference toggle.
     useEffect(() => {
         if (!enableAutoEffect) return
 
         const runSettlement = async () => {
             if (!movements || !fxRates || isProcessing.current) return
-            if (!autoSettleEnabled) return // Respect user preference
+            if (!autoSettleEnabled) return
 
             isProcessing.current = true
             try {

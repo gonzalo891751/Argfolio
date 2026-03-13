@@ -175,7 +175,24 @@ export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean;
 
             await db.transaction('rw', [db.accounts, db.movements, db.instruments, db.snapshots], async () => {
                 if (accounts.length > 0) await db.accounts.bulkPut(accounts)
-                if (movements.length > 0) await db.movements.bulkPut(movements)
+                if (movements.length > 0) {
+                    // Only add movements that don't already exist locally.
+                    // Using bulkPut would silently overwrite local-only edits/deletions
+                    // and re-inject duplicates that were repaired locally but whose
+                    // D1 deletion may have failed.
+                    const existingIds = new Set(
+                        (await db.movements.toCollection().primaryKeys()) as string[]
+                    )
+                    const newMovements = movements.filter(m => !existingIds.has(m.id))
+                    if (newMovements.length > 0) {
+                        await db.movements.bulkAdd(newMovements)
+                    }
+                    if (newMovements.length < movements.length) {
+                        console.info(
+                            `[bootstrap] Skipped ${movements.length - newMovements.length} movements already present locally`
+                        )
+                    }
+                }
                 if (instruments.length > 0) await db.instruments.bulkPut(instruments)
                 if (snapshotsToPersist.length > 0) {
                     const snapshotDates = Array.from(new Set(snapshotsToPersist.map((snapshot) => snapshot.dateLocal)))
