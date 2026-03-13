@@ -343,17 +343,16 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             ? payload.data.financeExpress
             : null
         const hasFinanceExpress = typeof financeExpress === 'string' && financeExpress.length > 0
-        const hasPreferences =
+        const preferences = (
             payload.data.preferences != null &&
             typeof payload.data.preferences === 'object' &&
             Object.keys(payload.data.preferences).length > 0
+        ) ? payload.data.preferences as Record<string, unknown> : null
+        const hasPreferences = preferences != null
 
         const ignored: string[] = []
         if (manualPrices.length > 0) {
             ignored.push(`manualPrices (${manualPrices.length})`)
-        }
-        if (hasPreferences) {
-            ignored.push('preferences')
         }
 
         if (
@@ -361,7 +360,8 @@ export const onRequest: PagesFunction<SyncEnv> = async (context) => {
             movements.length === 0 &&
             instruments.length === 0 &&
             snapshots.length === 0 &&
-            !hasFinanceExpress
+            !hasFinanceExpress &&
+            !hasPreferences
         ) {
             const durationMs = toDurationMs(startedAtMs)
             console.log('[sync][push] no-op payload', {
@@ -472,6 +472,26 @@ ON CONFLICT(id) DO UPDATE SET
             }
         }
 
+        // Preferences (synced cross-device via finance_express_data with id='preferences')
+        let preferencesSaved = false
+        if (hasPreferences && preferences != null) {
+            try {
+                const updatedAt = toIsoNow()
+                const prefsJson = JSON.stringify(preferences)
+                await db.prepare(`
+INSERT INTO finance_express_data (id, data, updated_at)
+VALUES ('preferences', ?1, ?2)
+ON CONFLICT(id) DO UPDATE SET
+  data = excluded.data,
+  updated_at = excluded.updated_at
+`).bind(prefsJson, updatedAt).run()
+                preferencesSaved = true
+                console.log('[sync][push] preferences saved', { size: prefsJson.length })
+            } catch (error: any) {
+                ignored.push(`preferences (${error?.message || 'table missing or unavailable'})`)
+            }
+        }
+
         const counts: PushCounts = {
             accounts: accounts.length,
             movements: movements.length,
@@ -485,6 +505,7 @@ ON CONFLICT(id) DO UPDATE SET
             ignored: ignored.length,
             financeExpressSaved: financeExpressResult.saved,
             financeExpressSize: financeExpressResult.size,
+            preferencesSaved,
         })
 
         return jsonResponse({
@@ -494,6 +515,7 @@ ON CONFLICT(id) DO UPDATE SET
             saved: financeExpressResult.saved,
             updated_at: financeExpressResult.updated_at,
             size: financeExpressResult.size,
+            preferencesSaved,
             durationMs,
         })
     } catch (error) {

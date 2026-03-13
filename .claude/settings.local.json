@@ -16,7 +16,9 @@
       "Bash(node -e:*)",
       "Bash(git log:*)",
       "WebFetch(domain:iol.invertironline.com)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(find /d/Git/Argfolio -type f \\\\\\(-name *service-worker* -o -name sw.js -o -name workbox* \\\\\\))",
+      "Bash(find /d/Git/Argfolio/migrations -type f -name *.ts -o -name *.js -o -name *.json)"
     ]
   }
 }
