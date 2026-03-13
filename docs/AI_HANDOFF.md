@@ -23,6 +23,7 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 ---
 
 # Current Focus (WIP)
+- **[P0] Cross-Device Sync Divergence Fix:** ✅ IMPLEMENTADO (2026-03-13). Ver CHECKPOINT V3 abajo.
 - **[P0] PF Auto-Settlement Duplication Bug:** ⚠️ KILL SWITCH ACTIVO — FASE 2 COMPLETADA (2026-03-12). Bug recurrió tras fix FASE 1. Ver checkpoint V2 abajo.
 - ~~Implementar fixes de auditoría de Liquidez:~~ ✅ COMPLETADO
 - ~~WalletCashWizard (Ingreso/Egreso/Transferencia):~~ ✅ IMPLEMENTADO (2026-02-07)
@@ -48,6 +49,95 @@ Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosi
 8. **[P2] RT6 Missing Items:** Ajuste por inflación incompleto en flujo de inventario.
 9. **[P2] Performance:** Renderizado lento en tablas con historial extenso.
 10. **[Debt] Lint Warnings:** ~100 warnings por `no-explicit-any`.
+
+---
+
+# CHECKPOINT V3: Cross-Device Sync Divergence Fix (2026-03-13)
+
+**Status:** IMPLEMENTADO. Pendiente validación cross-device manual.
+
+## Causa Raíz Confirmada
+
+La divergencia entre PC y móvil tenía 3 causas raíz concurrentes:
+
+### 1. Bootstrap solo PULL, nunca PUSH (causa raíz principal)
+- `bootstrapRemoteSync()` descargaba de D1 y agregaba movimientos faltantes a local.
+- Pero NUNCA subía movimientos locales que D1 no tenía.
+- Si un push individual falló silenciosamente (fire-and-forget), ese movimiento quedaba solo en local.
+- Resultado: D1 incompleto → otros dispositivos bootstrapean datos parciales → patrimonio/exposure/distribución distintos.
+
+### 2. Preferences son localStorage-only, no sincronizadas
+- `argfolio-fx-preference` (MEP vs OFICIAL), `argfolio.trackCash`, `argfolio.cryptoCostingMethod`, etc.
+- Todas guardadas solo en localStorage por dispositivo.
+- Si el usuario cambió una preferencia en PC pero no en móvil → cálculos distintos.
+
+### 3. Push failures son silenciosos sin retry
+- Los pushes individuales capturaban errores con `console.warn` y continuaban.
+- No había retry queue ni indicador de sync pendiente.
+- El usuario no sabía que D1 tenía datos incompletos.
+
+## Fixes Implementados
+
+### Fix 1: Auto-reconciliation push después del bootstrap (`remote-sync.ts`)
+Después de descargar de D1, el bootstrap ahora computa los movimientos "local-only" (presentes en local pero no en la respuesta de D1) y los sube a D1 automáticamente vía el endpoint existente `/api/sync/push` (UPSERT, idempotente).
+
+### Fix 2: Sincronización de preferences a D1 (`remote-sync.ts` + `push.ts` + `bootstrap.ts`)
+- Las preferences se sincronizan a D1 usando la tabla existente `finance_express_data` con `id = 'preferences'` (sin nueva migración D1).
+- Push: Cada cambio de preferencia llama `markPreferencesModified()` → debounced push a D1.
+- Pull: El bootstrap aplica preferences remotas si son más recientes (Last-Write-Wins por `updated_at`).
+- Keys sincronizadas: `argfolio-fx-preference`, `argfolio.trackCash`, `argfolio.cryptoCostingMethod`, `argfolio-settings-cedear-auto`, `argfolio.autoAccrueWalletInterest`, `argfolio.autoSettleFixedTerms`.
+
+### Fix 3: Force Reconcile manual (`remote-sync.ts` + `settings.tsx`)
+- Nueva función `forceReconcile()`: Pull completo → Push completo → Invalida queries.
+- UI: Botón "Forzar reconciliación" en Settings > Backup y sincronización.
+- Para uso manual cuando se sospecha divergencia.
+
+### Fix 4: Sync fingerprint y observabilidad (`remote-sync.ts` + `settings.tsx`)
+- `computeSyncFingerprint()`: Genera hash determinista de los IDs de movimientos locales.
+- UI: Botón "Fingerprint local" en Settings, muestra count + hash.
+- Permite comparar entre dispositivos para verificar convergencia.
+- `getLastSyncISO()`: Timestamp de último sync exitoso mostrado en UI.
+
+### Fix 5: Preference change hooks (`use-preferences.ts` + `settings.tsx`)
+- Todos los setters de preferences ahora llaman `markPreferencesModified()`.
+- Esto triggerea un debounced push de preferences a D1.
+- Incluye: trackCash, costingMethod, autoAccrue, autoSettle, fxPreference, cedearAuto.
+
+## Archivos Tocados
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/sync/remote-sync.ts` | Reconciliation push, preference sync, forceReconcile, fingerprint, lastSync |
+| `src/hooks/use-preferences.ts` | Import + `markPreferencesModified()` en cada setter |
+| `src/pages/settings.tsx` | Import sync functions, reconcile button, fingerprint UI, lastSync display |
+| `functions/api/sync/push.ts` | Almacenar preferences en `finance_express_data` (id='preferences') |
+| `functions/api/sync/bootstrap.ts` | Retornar preferences desde D1, fix query FE a filtrar por id='default' |
+| `docs/AI_HANDOFF.md` | Este checkpoint |
+
+## Validación
+
+- `npx tsc --noEmit` → 0 errores
+- `npm run build` → ✅ Passing
+- `npx eslint` → 0 errores (1 warning preexistente)
+
+## QA Manual Recomendado
+
+1. Abrir app en PC → Settings → copiar fingerprint (count + hash)
+2. Abrir app en móvil → Settings → copiar fingerprint
+3. Si difieren: click "Forzar reconciliación" en el dispositivo con más datos
+4. Esperar que complete → Abrir el otro dispositivo → "Forzar reconciliación"
+5. Comparar fingerprints → deben coincidir
+6. Comparar patrimonio, exposición, distribución, posiciones → deben coincidir
+7. Cambiar una preferencia (ej. FX) en un dispositivo → verificar que el otro la adopta tras bootstrap
+8. Verificar que el warning "saldo inicial inferido" sea idéntico en ambos dispositivos
+
+## Pendientes / Límites
+
+- [ ] No hay retry queue persistente para pushes fallidos (el reconciliation push compensa esto)
+- [ ] No hay sync de movimientos ELIMINADOS (si se borra en device A, D1 aún lo tiene y lo re-inyecta en A; requeriría tombstones)
+- [ ] No hay indicador visual de sync pendiente en la UI de Mis Activos
+- [ ] PF settlement kill switch sigue activo (bug separado)
+- [ ] Si ambos dispositivos modifican la misma preferencia simultáneamente, gana el último push (LWW sin detección de conflicto)
 
 ---
 

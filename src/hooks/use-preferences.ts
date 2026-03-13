@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { CostingMethod } from '@/domain/portfolio/lot-allocation'
+import { markPreferencesModified } from '@/sync/remote-sync'
 
 const STORAGE_KEY = 'argfolio.trackCash'
 const COSTING_KEY = 'argfolio.cryptoCostingMethod'
@@ -21,6 +22,7 @@ export function useTrackCash() {
     const setTrackCash = (value: boolean) => {
         setTrackCashState(value)
         localStorage.setItem(STORAGE_KEY, String(value))
+        markPreferencesModified()
 
         // Invalidate relevant queries to trigger re-computation
         queryClient.invalidateQueries({ queryKey: ['portfolio'] })
@@ -43,6 +45,7 @@ export function useCostingMethod() {
     const setMethod = (value: CostingMethod) => {
         setMethodState(value)
         localStorage.setItem(COSTING_KEY, value)
+        markPreferencesModified()
     }
 
     return { method, setMethod }
@@ -64,6 +67,7 @@ export function useAutoAccrueWalletInterest() {
     const setEnabled = useCallback((value: boolean) => {
         setEnabledState(value)
         localStorage.setItem(AUTO_ACCRUE_KEY, String(value))
+        markPreferencesModified()
         // Invalidate portfolio to reflect changes
         queryClient.invalidateQueries({ queryKey: ['portfolio'] })
     }, [queryClient])
@@ -88,6 +92,7 @@ export function useAutoSettleFixedTerms() {
     const setEnabled = useCallback((value: boolean) => {
         setEnabledState(value)
         localStorage.setItem(AUTO_SETTLE_PF_KEY, String(value))
+        markPreferencesModified()
         // Invalidate portfolio to reflect changes
         queryClient.invalidateQueries({ queryKey: ['portfolio'] })
     }, [queryClient])

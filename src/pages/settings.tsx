@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTrackCash } from '@/hooks/use-preferences'
 import { exportLocalBackup, importLocalBackup, parseBackupJson } from '@/domain/sync/local-backup'
-import { getSyncToken, isRemoteSyncEnabled, setSyncToken } from '@/sync/remote-sync'
+import { getSyncToken, isRemoteSyncEnabled, setSyncToken, markPreferencesModified, forceReconcile, getLastSyncISO, computeSyncFingerprint, type SyncFingerprint } from '@/sync/remote-sync'
 
 type FxPreference = 'MEP' | 'CCL'
 
@@ -51,12 +51,19 @@ export function SettingsPage() {
     const [isExporting, setIsExporting] = useState(false)
     const [isImporting, setIsImporting] = useState(false)
     const [isPushingToCloud, setIsPushingToCloud] = useState(false)
+    const [isReconciling, setIsReconciling] = useState(false)
     const [syncTokenInput, setSyncTokenInput] = useState(() => getSyncToken())
+    const [fingerprint, setFingerprint] = useState<SyncFingerprint | null>(null)
     const importInputRef = useRef<HTMLInputElement | null>(null)
 
     const handleFxChange = (pref: FxPreference) => {
         setFxPreference(pref)
         localStorage.setItem('argfolio-fx-preference', pref)
+<<<<<<< HEAD
+=======
+        markPreferencesModified()
+        // Invalidate portfolio to recalculate with new FX
+>>>>>>> 7262d8101d6692d54190207b9ef61bba374f353a
         queryClient.invalidateQueries({ queryKey: ['portfolio'] })
     }
 
@@ -257,6 +264,33 @@ export function SettingsPage() {
         }
     }
 
+    const handleForceReconcile = async () => {
+        setIsReconciling(true)
+        try {
+            const result = await forceReconcile()
+            if (result.ok) {
+                queryClient.invalidateQueries()
+                alert(
+                    `Reconciliación completa.\n` +
+                    `Remotos procesados: ${result.pulled}\n` +
+                    `Locales enviados: ${result.pushed}`
+                )
+            } else {
+                alert('No se pudo reconciliar. Verificá token y conexión.')
+            }
+        } catch (error) {
+            console.error('Force reconcile failed:', error)
+            alert('Error durante la reconciliación.')
+        } finally {
+            setIsReconciling(false)
+        }
+    }
+
+    const handleComputeFingerprint = async () => {
+        const fp = await computeSyncFingerprint()
+        setFingerprint(fp)
+    }
+
     return (
         <div className="space-y-6 max-w-2xl">
             {/* Page header */}
@@ -376,6 +410,165 @@ export function SettingsPage() {
                 </CardContent>
             </Card>
 
+<<<<<<< HEAD
+=======
+            {/* Backup + Sync */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <Cloud className="h-4 w-4" />
+                        Backup y sincronización
+                    </CardTitle>
+                    <CardDescription>
+                        Exportá/Importá tus datos locales y controlá el estado del sync remoto.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                        <p className="text-sm font-medium">
+                            Sync remoto: {isRemoteSyncEnabled() ? 'Activado' : 'Desactivado'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Flag: `VITE_ARGFOLIO_REMOTE_SYNC=1` para bootstrap desde API + escritura remota con fallback local.
+                        </p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-3 space-y-2">
+                        <p className="text-sm font-medium">Token de Sync</p>
+                        <p className="text-xs text-muted-foreground">
+                            Se envÃ­a como `Authorization: Bearer &lt;token&gt;` en `/api/sync/*`.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <Input
+                                type="password"
+                                value={syncTokenInput}
+                                onChange={(event) => setSyncTokenInput(event.target.value)}
+                                placeholder="PegÃ¡ ARGFOLIO_SYNC_TOKEN"
+                                className="min-w-[240px] flex-1"
+                            />
+                            <Button
+                                variant="outline"
+                                onClick={handleSaveSyncToken}
+                                disabled={isPushingToCloud}
+                            >
+                                Guardar token
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                        <Button
+                            variant="outline"
+                            onClick={handleExportBackup}
+                            disabled={isExporting}
+                        >
+                            <Download className={cn('h-4 w-4 mr-2', isExporting && 'animate-pulse')} />
+                            {isExporting ? 'Exportando...' : 'Exportar JSON'}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => importInputRef.current?.click()}
+                            disabled={isImporting}
+                        >
+                            <Upload className={cn('h-4 w-4 mr-2', isImporting && 'animate-pulse')} />
+                            {isImporting ? 'Importando...' : 'Importar JSON'}
+                        </Button>
+                    </div>
+                    <input
+                        ref={importInputRef}
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={handleImportBackup}
+                    />
+                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-3 space-y-2">
+                        <p className="text-sm font-medium">Sync a la nube (D1)</p>
+                        <p className="text-xs text-muted-foreground">
+                            Empuja todo el backup local a D1 en una sola operacion.
+                            Requiere `ARGFOLIO_SYNC_WRITE_ENABLED=1`.
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            Nota: localhost y producción no comparten IndexedDB/origin. Si en producción aparece vacío,
+                            exportá JSON en localhost e importalo acá antes de subir a D1.
+                        </p>
+                        <Button
+                            variant="default"
+                            onClick={handlePushAllToD1}
+                            disabled={isPushingToCloud || isExporting || isImporting}
+                        >
+                            <Cloud className={cn('h-4 w-4 mr-2', isPushingToCloud && 'animate-spin')} />
+                            {isPushingToCloud ? 'Subiendo todo...' : 'Subir todo a D1'}
+                        </Button>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/20 px-3 py-3 space-y-2">
+                        <p className="text-sm font-medium">Reconciliación cross-device</p>
+                        <p className="text-xs text-muted-foreground">
+                            Descarga datos remotos + sube datos locales faltantes. Garantiza que PC y móvil converjan al mismo dataset.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                variant="default"
+                                onClick={handleForceReconcile}
+                                disabled={isReconciling || isPushingToCloud || !isRemoteSyncEnabled()}
+                            >
+                                <RefreshCw className={cn('h-4 w-4 mr-2', isReconciling && 'animate-spin')} />
+                                {isReconciling ? 'Reconciliando...' : 'Forzar reconciliación'}
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={handleComputeFingerprint}
+                            >
+                                Fingerprint local
+                            </Button>
+                        </div>
+                        {fingerprint && (
+                            <div className="text-xs font-mono text-muted-foreground bg-background rounded px-2 py-1 border">
+                                Movimientos: {fingerprint.movementCount} | Cuentas: {fingerprint.accountCount} | Hash: {fingerprint.hash}
+                            </div>
+                        )}
+                        {getLastSyncISO() && (
+                            <p className="text-xs text-muted-foreground">
+                                Último sync: {new Date(getLastSyncISO()!).toLocaleString()}
+                            </p>
+                        )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Importación en modo merge seguro: upsert por `id` (sin duplicar).
+                    </p>
+                </CardContent>
+            </Card>
+
+            {/* Reset Data */}
+            <Card className="border-destructive/30">
+                <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2 text-destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        Zona de peligro
+                    </CardTitle>
+                    <CardDescription>
+                        Acciones irreversibles que afectan todos tus datos
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-medium">Reiniciar datos de demo</p>
+                            <p className="text-sm text-muted-foreground">
+                                Elimina todos los movimientos, snapshots y deudas, y recarga los datos de demo
+                            </p>
+                        </div>
+                        <Button
+                            variant="destructive"
+                            onClick={handleResetData}
+                            disabled={isResetting}
+                        >
+                            <RotateCcw className={cn('h-4 w-4 mr-2', isResetting && 'animate-spin')} />
+                            {isResetting ? 'Reiniciando...' : 'Reiniciar'}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+>>>>>>> 7262d8101d6692d54190207b9ef61bba374f353a
             {/* About */}
             <Card>
                 <CardHeader>
@@ -541,6 +734,7 @@ function CedearToggle() {
     const handleToggle = (checked: boolean) => {
         setEnabled(checked)
         localStorage.setItem('argfolio-settings-cedear-auto', String(checked))
+        markPreferencesModified()
         queryClient.invalidateQueries({ queryKey: ['portfolio'] })
         queryClient.invalidateQueries({ queryKey: ['cedears'] })
     }
