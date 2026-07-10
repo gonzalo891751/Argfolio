@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { ArrowLeftRight, RefreshCw, Repeat2, Scale, ShoppingCart, Banknote } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Movement, Currency, Account, Instrument, MovementType, MovementFee } from '@/domain/types'
 import { CryptoTypeahead, type CryptoOption } from '../CryptoTypeahead'
@@ -15,11 +15,17 @@ import type { LotDetail } from '@/features/portfolioV2/types'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
 import { WizardFooter } from '../ui/WizardFooter'
 import { isMovementActive } from '@/domain/operations/operation'
+import { CryptoTransferDialog } from './CryptoTransferDialog'
+import { CryptoSwapDialog } from './CryptoSwapDialog'
+import { CryptoBalanceAdjustmentDialog } from './CryptoBalanceAdjustmentDialog'
+import { CRYPTO_OPERATION_MODES, type MovementWizardPrefill } from '../../movement-wizard-prefill'
+import { shouldCreateAutoUsdtBalance } from '@/domain/operations/auto-usdt-balance'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 type Mode = 'buy' | 'sell'
+type CryptoOperationMode = 'buy' | 'sell' | 'transfer' | 'swap' | 'adjust_balance'
 type Step = 1 | 2 | 3
 
 interface CryptoWizardState {
@@ -42,6 +48,8 @@ interface CryptoWizardState {
     feeValue: string
     datetime: string
     autoBalanceUsdt: boolean
+    settlementCurrency: '' | 'ARS' | 'USD'
+    settlementArs: string
     notes: string
 }
 
@@ -50,6 +58,7 @@ interface CryptoBuySellWizardProps {
     movements: Movement[]
     instruments: Instrument[]
     prefillMovement?: Movement | null
+    prefill?: MovementWizardPrefill | null
     onClose: () => void
     onBackToAssetType?: () => void
     onStepChange?: (step: number) => void
@@ -74,11 +83,11 @@ export function CryptoBuySellWizard({
     movements,
     instruments,
     prefillMovement: _prefillMovement,
+    prefill,
     onClose,
     onBackToAssetType,
     onStepChange,
 }: CryptoBuySellWizardProps) {
-    void _prefillMovement // reserved for future edit-mode
     const createMovement = useCreateMovement()
     const createInstrument = useCreateInstrument()
     const { data: fxRates } = useFxRates()
@@ -100,15 +109,30 @@ export function CryptoBuySellWizard({
     const now = new Date()
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
 
+    const prefillInstrument = instruments.find(i => i.id === prefill?.instrumentId)
+        ?? instruments.find(i => i.symbol === prefill?.symbol)
+        ?? (_prefillMovement?.instrumentId ? instruments.find(i => i.id === _prefillMovement.instrumentId) : undefined)
+    const initialMode: Mode = prefill?.operationMode === 'sell' || _prefillMovement?.type === 'SELL' ? 'sell' : 'buy'
+    const requestedMode = prefill?.operationMode
+    const [operationMode, setOperationMode] = useState<CryptoOperationMode | null>(
+        requestedMode && ['buy', 'sell', 'transfer', 'swap', 'adjust_balance'].includes(requestedMode)
+            ? requestedMode as CryptoOperationMode
+            : (_prefillMovement ? initialMode : null),
+    )
     const [state, setState] = useState<CryptoWizardState>({
-        mode: 'buy',
+        mode: initialMode,
         step: 1,
-        asset: null,
-        accountId: '',
+        asset: prefillInstrument ? {
+            ticker: prefillInstrument.symbol,
+            name: prefillInstrument.name,
+            category: prefillInstrument.category === 'STABLE' ? 'STABLE' : 'CRYPTO',
+            coingeckoId: prefillInstrument.coingeckoId ?? prefillInstrument.symbol.toLowerCase(),
+        } : null,
+        accountId: prefill?.accountId ?? _prefillMovement?.accountId ?? '',
         buyMode: 'amount',
         buyAmount: '',
         buyQty: '',
-        sellQty: '',
+        sellQty: prefill?.quantity != null ? String(prefill.quantity) : (_prefillMovement?.quantity ? String(_prefillMovement.quantity) : ''),
         costingMethod: 'FIFO',
         manualAllocations: [],
         price: 0,
@@ -117,8 +141,31 @@ export function CryptoBuySellWizard({
         feeValue: '0.1',
         datetime: now.toISOString().slice(0, 16),
         autoBalanceUsdt: true,
-        notes: '',
+        settlementCurrency: '',
+        settlementArs: '',
+        notes: prefill?.note ?? _prefillMovement?.notes ?? '',
     })
+
+    useEffect(() => {
+        if (!prefill) return
+        const instrument = instruments.find(i => i.id === prefill.instrumentId)
+            ?? instruments.find(i => i.symbol === prefill.symbol)
+        if (instrument) {
+            setState(current => current.asset ? current : {
+                ...current,
+                asset: {
+                    ticker: instrument.symbol,
+                    name: instrument.name,
+                    category: instrument.category === 'STABLE' ? 'STABLE' : 'CRYPTO',
+                    coingeckoId: instrument.coingeckoId ?? instrument.symbol.toLowerCase(),
+                },
+                accountId: current.accountId || prefill.accountId || '',
+            })
+        }
+        if (prefill.operationMode && CRYPTO_OPERATION_MODES.includes(prefill.operationMode as typeof CRYPTO_OPERATION_MODES[number])) {
+            setOperationMode(current => current ?? prefill.operationMode as CryptoOperationMode)
+        }
+    }, [prefill, instruments])
 
     const isBuy = state.mode === 'buy'
 
@@ -291,6 +338,9 @@ export function CryptoBuySellWizard({
             if (computed.qty <= 0) return false
             if (state.price <= 0) return false
             if (!isBuy) {
+                const isStableSale = !!state.asset && ['USDT', 'USDC', 'DAI', 'BUSD'].includes(state.asset.ticker.toUpperCase())
+                if (isStableSale && !state.settlementCurrency) return false
+                if (isStableSale && state.settlementCurrency === 'ARS' && safeFloat(state.settlementArs) <= 0) return false
                 if (computed.qty > availableQty + 0.00000001) return false
                 if (state.costingMethod === 'MANUAL') {
                     const sumManual = state.manualAllocations.reduce((s, a) => s + a.qty, 0)
@@ -331,6 +381,8 @@ export function CryptoBuySellWizard({
             manualAllocations: [],
             priceManual: false,
             price: 0,
+            settlementCurrency: '',
+            settlementArs: '',
         }))
     }
 
@@ -406,18 +458,29 @@ export function CryptoBuySellWizard({
                     asOf: new Date().toISOString(),
                 },
                 notes: state.notes || undefined,
-                meta: !isBuy ? {
-                    costingMethod: state.costingMethod,
-                    allocations: alloc?.allocations.map(a => ({
-                        lotId: a.lotId,
-                        qty: a.qty,
-                        costUsd: a.costUsd,
-                    })),
-                    // Stablecoin settlement
-                    ...(ticker === 'USDT' || ticker === 'USDC' || ticker === 'DAI' ? {
-                        settlementCurrency: 'ARS' as Currency,
+                groupId: movementId,
+                meta: {
+                    operationId: movementId,
+                    operationKind: 'trade',
+                    operationStatus: 'posted',
+                    legRole: 'asset',
+                    ...(!isBuy ? {
+                        costingMethod: state.costingMethod,
+                        allocations: alloc?.allocations.map(a => ({
+                            lotId: a.lotId,
+                            qty: a.qty,
+                            costUsd: a.costUsd,
+                        })),
+                    // A stablecoin sale is cash-producing only when the user
+                    // explicitly chose the fiat destination.
+                        ...(['USDT', 'USDC', 'DAI', 'BUSD'].includes(ticker) ? {
+                            settlementCurrency: state.settlementCurrency as Currency,
+                            ...(state.settlementCurrency === 'ARS'
+                                ? { settlementArs: safeFloat(state.settlementArs) }
+                                : {}),
+                        } : {}),
                     } : {}),
-                } : undefined,
+                },
             }
 
             await createMovement.mutateAsync(movementPayload)
@@ -425,9 +488,13 @@ export function CryptoBuySellWizard({
             // Auto-balance USDT
             const account = accounts.find(a => a.id === state.accountId)
             const isExchange = account?.kind === 'EXCHANGE'
-            const isNotStable = !['USDT', 'USDC', 'DAI'].includes(ticker)
 
-            if (isExchange && isNotStable && state.autoBalanceUsdt) {
+            if (shouldCreateAutoUsdtBalance({
+                enabled: state.autoBalanceUsdt,
+                isExchange,
+                ticker,
+                operationKind: 'trade',
+            })) {
                 const autoType: MovementType = isBuy ? 'SELL' : 'BUY'
                 const autoQty = netAmount
 
@@ -453,6 +520,13 @@ export function CryptoBuySellWizard({
                         isAuto: true,
                         linkedMovementId: movementId,
                         reason: 'auto_usdt_balance',
+                        groupId: movementId,
+                        meta: {
+                            operationId: movementId,
+                            operationKind: 'trade',
+                            operationStatus: 'posted',
+                            legRole: isBuy ? 'source' : 'destination',
+                        },
                     }
                     await createMovement.mutateAsync(autoMovement)
                 }
@@ -473,6 +547,48 @@ export function CryptoBuySellWizard({
     // ---------------------------------------------------------------------------
     // Mode Tabs
     // ---------------------------------------------------------------------------
+    const operationOptions: Array<{
+        mode: CryptoOperationMode
+        label: string
+        description: string
+        icon: typeof ShoppingCart
+        color: string
+    }> = [
+        { mode: 'buy', label: 'Comprar', description: 'Sumá cripto mediante una compra.', icon: ShoppingCart, color: 'text-indigo-400 bg-indigo-500/10' },
+        { mode: 'sell', label: 'Vender', description: 'Elegí dónde recibís el producido.', icon: Banknote, color: 'text-rose-400 bg-rose-500/10' },
+        { mode: 'transfer', label: 'Transferir', description: 'Mové el mismo activo entre cuentas propias sin resultado.', icon: ArrowLeftRight, color: 'text-sky-400 bg-sky-500/10' },
+        { mode: 'swap', label: 'Convertir', description: 'Entregá uno o más activos y recibí otro.', icon: Repeat2, color: 'text-violet-400 bg-violet-500/10' },
+        { mode: 'adjust_balance', label: 'Ajustar saldo', description: 'Conciliá Argfolio con el saldo real del exchange.', icon: Scale, color: 'text-amber-400 bg-amber-500/10' },
+    ]
+
+    const selectOperation = (mode: CryptoOperationMode) => {
+        setOperationMode(mode)
+        if (mode === 'buy' || mode === 'sell') setMode(mode)
+    }
+
+    const OperationSelector = () => (
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#0F172A]">
+            <div className="mx-auto max-w-3xl space-y-5">
+                <div>
+                    <h3 className="text-xl font-display font-semibold text-white">¿Qué operación querés registrar?</h3>
+                    <p className="mt-1 text-sm text-slate-400">Todas usan el mismo ledger y dejan trazabilidad auditable.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                    {operationOptions.map(option => {
+                        const Icon = option.icon
+                        return (
+                            <button key={option.mode} type="button" onClick={() => selectOperation(option.mode)} className="group rounded-xl border border-white/10 bg-white/[0.025] p-5 text-left transition hover:border-indigo-400/50 hover:bg-white/[0.05] last:sm:col-span-2">
+                                <span className={`mb-4 flex h-10 w-10 items-center justify-center rounded-lg ${option.color}`}><Icon className="h-5 w-5" /></span>
+                                <span className="block font-medium text-white">{option.label}</span>
+                                <span className="mt-1 block text-xs leading-relaxed text-slate-400">{option.description}</span>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+        </div>
+    )
+
     const ModeTabs = () => (
         <div className="bg-slate-950/50 p-1 rounded-lg inline-flex w-full sm:w-auto border border-white/5 mb-4">
             <button
@@ -789,6 +905,25 @@ export function CryptoBuySellWizard({
                         </div>
                     </div>
 
+                    {state.asset && ['USDT', 'USDC', 'DAI', 'BUSD'].includes(state.asset.ticker.toUpperCase()) && (
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4 space-y-3">
+                            <div>
+                                <p className="text-sm font-medium text-amber-200">¿Dónde recibís el producido?</p>
+                                <p className="text-xs text-slate-400">Una conversión a otra cripto debe registrarse como Convertir, no como venta.</p>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                <button type="button" onClick={() => setState(s => ({ ...s, settlementCurrency: 'ARS' }))} className={cn('rounded-lg border px-3 py-2 text-sm', state.settlementCurrency === 'ARS' ? 'border-amber-400 bg-amber-500/15 text-white' : 'border-white/10 text-slate-400')}>Cobro en ARS</button>
+                                <button type="button" onClick={() => setState(s => ({ ...s, settlementCurrency: 'USD', settlementArs: '' }))} className={cn('rounded-lg border px-3 py-2 text-sm', state.settlementCurrency === 'USD' ? 'border-amber-400 bg-amber-500/15 text-white' : 'border-white/10 text-slate-400')}>Cobro en fiat USD</button>
+                            </div>
+                            {state.settlementCurrency === 'ARS' && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs text-slate-400">ARS reales acreditados</label>
+                                    <input type="text" inputMode="decimal" value={state.settlementArs} onChange={e => setState(s => ({ ...s, settlementArs: e.target.value }))} placeholder="0,00" className="w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 font-mono text-white focus:border-amber-400 focus:outline-none" />
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Price & Fee */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -1073,6 +1208,36 @@ export function CryptoBuySellWizard({
     // ---------------------------------------------------------------------------
     // RENDER
     // ---------------------------------------------------------------------------
+    if (operationMode == null || operationMode === 'transfer' || operationMode === 'swap' || operationMode === 'adjust_balance') {
+        return (
+            <>
+                <OperationSelector />
+                <WizardFooter
+                    onBack={onBackToAssetType ?? onClose}
+                    onCancel={onClose}
+                    primaryLabel="Elegí una operación"
+                    onPrimary={() => undefined}
+                    primaryDisabled
+                />
+                <CryptoTransferDialog
+                    open={operationMode === 'transfer'}
+                    onOpenChange={open => { if (!open) setOperationMode(null) }}
+                    prefill={{ accountId: prefill?.accountId, instrumentId: prefill?.instrumentId, symbol: prefill?.symbol }}
+                />
+                <CryptoSwapDialog
+                    open={operationMode === 'swap'}
+                    onOpenChange={open => { if (!open) setOperationMode(null) }}
+                    prefill={{ accountId: prefill?.accountId, sourceInstrumentId: prefill?.instrumentId }}
+                />
+                <CryptoBalanceAdjustmentDialog
+                    open={operationMode === 'adjust_balance'}
+                    onOpenChange={open => { if (!open) setOperationMode(null) }}
+                    prefill={{ accountId: prefill?.accountId, instrumentId: prefill?.instrumentId, symbol: prefill?.symbol, realBalance: prefill?.realBalance }}
+                />
+            </>
+        )
+    }
+
     return (
         <>
             {/* Body */}
@@ -1085,7 +1250,7 @@ export function CryptoBuySellWizard({
 
             {/* Footer */}
             <WizardFooter
-                onBack={state.step > 1 ? prevStep : (onBackToAssetType ?? onClose)}
+                onBack={state.step > 1 ? prevStep : () => setOperationMode(null)}
                 onCancel={onClose}
                 primaryLabel={state.step < 3 ? 'Siguiente' : 'Confirmar'}
                 onPrimary={nextStep}

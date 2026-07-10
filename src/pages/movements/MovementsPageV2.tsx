@@ -20,6 +20,7 @@ import {
 } from './components/movements-view'
 import { findOperationLegs } from '@/domain/operations/operation'
 import type { Movement } from '@/domain/types'
+import type { MovementWizardPrefill } from './movement-wizard-prefill'
 
 export function MovementsPageV2() {
     const navigate = useNavigate()
@@ -36,16 +37,24 @@ export function MovementsPageV2() {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
     const [selectedMovement, setSelectedMovement] = useState<Movement | null>(null)
     const [editingMovement, setEditingMovement] = useState<Movement | null>(null)
+    const [wizardPrefill, setWizardPrefill] = useState<MovementWizardPrefill | null>(null)
     const deleteMovement = useDeleteMovement()
 
     // Handle incoming prefill/filters from navigation state
     useEffect(() => {
         const state = location.state as {
             prefillMovement?: Movement
+            movementWizardPrefill?: MovementWizardPrefill
             movementFilters?: Partial<MovementsFilterState>
         } | null
-        if (state?.prefillMovement) {
+        if (state?.movementWizardPrefill) {
+            setWizardPrefill(state.movementWizardPrefill)
+            setEditingMovement(null)
+            setIsWizardOpen(true)
+            navigate(location.pathname, { replace: true, state: {} })
+        } else if (state?.prefillMovement) {
             setEditingMovement(state.prefillMovement as Movement)
+            setWizardPrefill(null)
             setIsWizardOpen(true)
             navigate(location.pathname, { replace: true, state: {} })
         } else if (state?.movementFilters) {
@@ -229,9 +238,13 @@ export function MovementsPageV2() {
                 open={isWizardOpen}
                 onOpenChange={(open: boolean) => {
                     setIsWizardOpen(open)
-                    if (!open) setEditingMovement(null)
+                    if (!open) {
+                        setEditingMovement(null)
+                        setWizardPrefill(null)
+                    }
                 }}
                 prefillMovement={editingMovement}
+                prefill={wizardPrefill}
             />
         </div>
     )

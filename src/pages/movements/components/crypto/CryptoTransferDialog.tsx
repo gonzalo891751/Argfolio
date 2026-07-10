@@ -31,6 +31,7 @@ import { computeAverageCost } from '@/domain/portfolio/average-cost'
 import { buildCryptoTransferMovements, CryptoTransferError } from '@/domain/operations/crypto-transfer'
 import { formatMoneyUSD, formatQty } from '@/lib/format'
 import type { Movement } from '@/domain/types'
+import { WizardStepper } from '../ui/WizardStepper'
 
 export interface CryptoTransferPrefill {
     accountId?: string
@@ -168,12 +169,13 @@ export function CryptoTransferDialog({ open, onOpenChange, prefill }: CryptoTran
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-4xl max-h-[92vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Transferir cripto entre cuentas</DialogTitle>
                     <DialogDescription>
                         Cambio de custodia: conserva el costo y no genera resultado (no es una venta).
                     </DialogDescription>
+                    <WizardStepper currentStep={sentQty > 0 ? 3 : (fromAccountId && toAccountId ? 2 : 1)} totalSteps={4} className="pt-2" />
                 </DialogHeader>
 
                 <div className="grid gap-4 py-2">
@@ -194,8 +196,8 @@ export function CryptoTransferDialog({ open, onOpenChange, prefill }: CryptoTran
                     </div>
 
                     {/* Accounts */}
-                    <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                        <div className="grid gap-1.5">
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-end gap-3">
+                        <div className="grid gap-1.5 rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-4">
                             <Label htmlFor="ct-from">Cuenta origen</Label>
                             <select
                                 id="ct-from"
@@ -209,8 +211,8 @@ export function CryptoTransferDialog({ open, onOpenChange, prefill }: CryptoTran
                                 ))}
                             </select>
                         </div>
-                        <ArrowRight className="h-4 w-4 mb-3 text-muted-foreground" />
-                        <div className="grid gap-1.5">
+                        <ArrowRight className="h-5 w-5 mb-7 text-sky-400 mx-auto rotate-90 md:rotate-0" />
+                        <div className="grid gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
                             <Label htmlFor="ct-to">Cuenta destino</Label>
                             <select
                                 id="ct-to"
@@ -275,6 +277,15 @@ export function CryptoTransferDialog({ open, onOpenChange, prefill }: CryptoTran
                         </div>
                     )}
 
+                    {selectedInstrument && sentQty > 0 && (
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 grid gap-3 sm:grid-cols-2 text-sm">
+                            <div><p className="text-xs text-muted-foreground">Ruta</p><p className="font-medium">{accounts.find(a => a.id === fromAccountId)?.name ?? 'Origen'} → {accounts.find(a => a.id === toAccountId)?.name ?? 'Destino'}</p></div>
+                            <div><p className="text-xs text-muted-foreground">Activo</p><p className="font-mono font-medium">{selectedInstrument.symbol}</p></div>
+                            <div><p className="text-xs text-muted-foreground">Enviás / recibís</p><p className="font-mono">{formatQty(sentQty, 'CRYPTO')} / {formatQty(receivedQty, 'CRYPTO')}</p></div>
+                            <div><p className="text-xs text-muted-foreground">Impacto contable</p><p className="text-emerald-400">Costo transferido · PnL: no genera</p></div>
+                        </div>
+                    )}
+
                     {/* Date + tx hash */}
                     <div className="grid grid-cols-2 gap-3">
                         <div className="grid gap-1.5">
@@ -315,7 +326,7 @@ export function CryptoTransferDialog({ open, onOpenChange, prefill }: CryptoTran
                     )}
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="sticky bottom-0 bg-background/95 pt-4 backdrop-blur">
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
                         Cancelar
                     </Button>

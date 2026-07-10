@@ -6,9 +6,39 @@ export interface CashLedgerResult {
     openingBalances: Map<string, Map<Currency, number>>
 }
 
-interface CashDelta {
+export interface CashDelta {
     currency: Currency
     amount: number
+}
+
+export type CashContributionReason =
+    | 'deposit'
+    | 'withdraw'
+    | 'trade_settlement'
+    | 'legacy_trade'
+    | 'swap_leg'
+    | 'transfer'
+    | 'fee'
+    | 'adjustment'
+    | 'unknown'
+
+export type CashContributionIssue =
+    | 'possible_swap_residue'
+    | 'legacy_settlement'
+    | 'missing_settlement_metadata'
+
+export interface CashContribution {
+    movementId: string
+    operationId?: string
+    datetimeISO: string
+    type: Movement['type']
+    assetClass?: Movement['assetClass']
+    symbol?: string
+    amount: number
+    currency: Currency
+    reason: CashContributionReason
+    issue?: CashContributionIssue
+    synthetic?: 'opening_balance'
 }
 
 const EPSILON = 1e-8
@@ -87,11 +117,31 @@ function isInKindAssetMovement(mov: Movement): boolean {
     return false
 }
 
-function getMovementCashDeltas(mov: Movement): CashDelta[] {
+function isExplicitCashNeutralOperation(mov: Movement): boolean {
+    return mov.meta?.operationKind === 'swap'
+        || (mov.assetClass === 'crypto' && mov.meta?.operationKind === 'transfer')
+        || (mov.assetClass === 'crypto' && mov.meta?.operationKind === 'balance_adjustment')
+        || (mov.assetClass === 'crypto' && (
+            mov.meta?.operationKind === 'income'
+            || mov.meta?.operationKind === 'fee'
+        ))
+}
+
+function isStablecoinSale(mov: Movement): boolean {
+    const symbol = (mov.ticker ?? mov.assetName ?? '').toUpperCase()
+    return mov.assetClass === 'crypto'
+        && mov.type === 'SELL'
+        && ['USDT', 'USDC', 'DAI', 'BUSD'].includes(symbol)
+}
+
+export function getMovementCashDeltas(mov: Movement): CashDelta[] {
     const deltas: CashDelta[] = []
     const tradeCurrency = resolveTradeCurrency(mov)
 
-    if (isInKindAssetMovement(mov)) return deltas
+    // Compound crypto operations are cash-neutral by contract. Do not rely on
+    // SELL and BUY legs cancelling exactly: rounding and incomplete legacy legs
+    // must never manufacture fiat cash.
+    if (isExplicitCashNeutralOperation(mov) || isInKindAssetMovement(mov)) return deltas
 
     // Skip PF SELL cash effect when a paired DEPOSIT handles the cash inflow.
     // settlementMode is set for both 'auto' and 'manual' settlements that create
@@ -137,6 +187,16 @@ function getMovementCashDeltas(mov: Movement): CashDelta[] {
             // When selling stables in Argentina, proceeds are typically ARS not USD fiat.
             const settlementCurrency = mov.meta?.settlementCurrency
             const settlementArs = mov.meta?.settlementArs
+
+            // The old crypto wizard wrote settlementCurrency=ARS for stable
+            // sales without recording the actual ARS received. Treating the
+            // nominal USD gross as ARS created balances such as ARS 119.31.
+            // Invalid legacy metadata is reviewable through the trace helper,
+            // but cannot affect cash until a real settlement is supplied.
+            if (isStablecoinSale(mov) && settlementCurrency === 'ARS'
+                && (!Number.isFinite(settlementArs) || (settlementArs ?? 0) <= 0)) {
+                break
+            }
 
             if (settlementCurrency && settlementCurrency !== tradeCurrency) {
                 // Use explicit settlement currency and amount
@@ -189,6 +249,90 @@ function getMovementCashDeltas(mov: Movement): CashDelta[] {
     }
 
     return deltas.filter(delta => Number.isFinite(delta.amount) && Math.abs(delta.amount) > EPSILON)
+}
+
+function contributionReason(mov: Movement): CashContributionReason {
+    if (mov.meta?.operationKind === 'swap') return 'swap_leg'
+    if (mov.meta?.operationKind === 'transfer' || mov.type === 'TRANSFER_IN' || mov.type === 'TRANSFER_OUT') return 'transfer'
+    if (mov.meta?.operationKind === 'balance_adjustment') return 'adjustment'
+    if (mov.meta?.operationKind === 'fee' || mov.type === 'FEE') return 'fee'
+    if (mov.type === 'DEPOSIT' || mov.type === 'INTEREST' || mov.type === 'DIVIDEND') return 'deposit'
+    if (mov.type === 'WITHDRAW') return 'withdraw'
+    if ((mov.type === 'BUY' || mov.type === 'SELL') && mov.meta?.settlementCurrency) return 'trade_settlement'
+    if (mov.type === 'BUY' || mov.type === 'SELL') return 'legacy_trade'
+    return 'unknown'
+}
+
+function contributionIssue(mov: Movement): CashContributionIssue | undefined {
+    if (mov.meta?.operationKind === 'swap') return 'possible_swap_residue'
+    if (isStablecoinSale(mov) && mov.meta?.settlementCurrency === 'ARS'
+        && (!Number.isFinite(mov.meta?.settlementArs) || (mov.meta?.settlementArs ?? 0) <= 0)) {
+        return 'missing_settlement_metadata'
+    }
+    if (isStablecoinSale(mov) && !mov.meta?.settlementCurrency) return 'legacy_settlement'
+    return undefined
+}
+
+/**
+ * Explain every movement considered for one account/currency. Cash-neutral or
+ * invalid legacy rows are kept with amount=0 so a suspicious balance can be
+ * audited without mutating history.
+ */
+export function traceCashBalanceContributions({
+    movements,
+    accountId,
+    currency,
+}: {
+    movements: Movement[]
+    accountId: string
+    currency: Currency
+}): CashContribution[] {
+    const contributions = filterActiveMovements(movements)
+        .filter(mov => mov.accountId === accountId)
+        .sort((a, b) => a.datetimeISO.localeCompare(b.datetimeISO))
+        .flatMap((mov): CashContribution[] => {
+            const matching = getMovementCashDeltas(mov).filter(delta => delta.currency === currency)
+            const issue = contributionIssue(mov)
+            const cashNeutralForCurrency = isExplicitCashNeutralOperation(mov)
+                && resolveTradeCurrency(mov) === currency
+            const invalidSettlementForCurrency = issue === 'missing_settlement_metadata' && currency === 'ARS'
+
+            if (matching.length === 0 && !cashNeutralForCurrency && !invalidSettlementForCurrency) return []
+
+            const deltas = matching.length > 0 ? matching : [{ currency, amount: 0 }]
+            return deltas.map(delta => ({
+                movementId: mov.id,
+                operationId: mov.meta?.operationId ?? mov.groupId ?? mov.meta?.transferGroupId,
+                datetimeISO: mov.datetimeISO,
+                type: mov.type,
+                assetClass: mov.assetClass,
+                symbol: mov.ticker ?? mov.assetName,
+                amount: delta.amount,
+                currency: delta.currency,
+                reason: contributionReason(mov),
+                issue,
+            }))
+        })
+
+    let running = 0
+    let minimum = 0
+    for (const row of contributions) {
+        running += row.amount
+        minimum = Math.min(minimum, running)
+    }
+    if (minimum < 0) {
+        contributions.unshift({
+            movementId: `opening:${accountId}:${currency}`,
+            datetimeISO: contributions[0]?.datetimeISO ?? new Date(0).toISOString(),
+            type: 'DEPOSIT',
+            amount: -minimum,
+            currency,
+            reason: 'unknown',
+            symbol: 'Saldo inicial inferido',
+            synthetic: 'opening_balance',
+        })
+    }
+    return contributions
 }
 
 export function computeCashLedger(movements: Movement[]): CashLedgerResult {

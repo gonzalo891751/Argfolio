@@ -14,13 +14,14 @@
 
 import { useMemo, useState, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Bitcoin, ArrowUpDown, ChevronUp, ChevronDown, Info, PencilLine } from 'lucide-react'
+import { ArrowLeft, Bitcoin, ArrowUpDown, ChevronUp, ChevronDown, Info, PencilLine, BriefcaseBusiness, ShoppingCart, Banknote, ArrowLeftRight, Repeat2, Scale } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD, formatDeltaMoneyUSD, formatQty } from '@/lib/format'
 import { usePortfolioV2 } from '@/features/portfolioV2'
 import type { CryptoDetail, LotDetail, ItemV2, ProviderV2 } from '@/features/portfolioV2/types'
 import { ManualPriceDialog } from '@/components/assets/ManualPriceDialog'
-import { CryptoTransferDialog, CryptoSwapDialog } from '@/pages/movements/components/crypto'
+import { cryptoMovementPrefill, type MovementWizardOperationMode } from '@/pages/movements/movement-wizard-prefill'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useManualPrices } from '@/hooks/use-manual-prices'
 import { useCostingMethod } from '@/hooks/use-preferences'
 import {
@@ -88,10 +89,6 @@ export function CryptoDetailPage() {
     // Manual price dialog state
     const [isManualPriceOpen, setIsManualPriceOpen] = useState(false)
     const { entryMap: manualPriceEntries } = useManualPrices()
-
-    // Transfer / Swap dialogs (Fase 4/5)
-    const [isTransferOpen, setIsTransferOpen] = useState(false)
-    const [isSwapOpen, setIsSwapOpen] = useState(false)
 
     // Find the item + provider in the crypto rubro
     const found = useMemo((): { item: ItemV2; provider: ProviderV2; detail: CryptoDetail } | null => {
@@ -364,6 +361,17 @@ export function CryptoDetailPage() {
     const priceMissing = detail.valueMissing === true
     const manualEntry = item.instrumentId ? manualPriceEntries.get(item.instrumentId) : undefined
     const isManualPrice = detail.priceResult?.source === 'manual'
+    const openOperation = (operationMode: Extract<MovementWizardOperationMode, 'buy' | 'sell' | 'transfer' | 'swap' | 'adjust_balance'>) => {
+        navigate('/movements', {
+            state: {
+                movementWizardPrefill: cryptoMovementPrefill(operationMode, {
+                    accountId: item.accountId,
+                    instrumentId: item.instrumentId,
+                    symbol: item.symbol,
+                }),
+            },
+        })
+    }
 
     return (
         <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -390,18 +398,21 @@ export function CryptoDetailPage() {
                     <div className="px-3 py-1 rounded bg-background border border-border text-[10px] font-mono text-muted-foreground">
                         TC Venta: <span className="text-sky-400 font-bold">${criptoSellRate.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
                     </div>
-                    <button
-                        onClick={() => setIsTransferOpen(true)}
-                        className="px-3 py-2 rounded-lg text-sky-400 border border-sky-500/30 hover:bg-sky-500/10 transition text-xs font-medium"
-                    >
-                        Transferir
-                    </button>
-                    <button
-                        onClick={() => setIsSwapOpen(true)}
-                        className="px-3 py-2 rounded-lg text-violet-400 border border-violet-500/30 hover:bg-violet-500/10 transition text-xs font-medium"
-                    >
-                        Convertir
-                    </button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90">
+                                <BriefcaseBusiness className="h-4 w-4" /> Operar <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem onClick={() => openOperation('buy')}><ShoppingCart className="mr-2 h-4 w-4" /> Comprar</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openOperation('sell')}><Banknote className="mr-2 h-4 w-4" /> Vender</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => openOperation('transfer')}><ArrowLeftRight className="mr-2 h-4 w-4" /> Transferir</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openOperation('swap')}><Repeat2 className="mr-2 h-4 w-4" /> Convertir</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openOperation('adjust_balance')}><Scale className="mr-2 h-4 w-4" /> Ajustar saldo</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     {(priceMissing || isManualPrice) && (
                         <button
                             onClick={() => setIsManualPriceOpen(true)}
@@ -907,18 +918,6 @@ export function CryptoDetailPage() {
                     isManual={isManualPrice}
                 />
             )}
-
-            {/* Transfer / Swap dialogs */}
-            <CryptoTransferDialog
-                open={isTransferOpen}
-                onOpenChange={setIsTransferOpen}
-                prefill={{ accountId: item.accountId, instrumentId: item.instrumentId, symbol: item.symbol }}
-            />
-            <CryptoSwapDialog
-                open={isSwapOpen}
-                onOpenChange={setIsSwapOpen}
-                prefill={{ accountId: item.accountId, sourceInstrumentId: item.instrumentId }}
-            />
         </div>
     )
 }

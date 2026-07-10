@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeCashLedger } from './cash-ledger'
+import { computeCashLedger, traceCashBalanceContributions } from './cash-ledger'
 import { computeHoldings } from './computeHoldings'
 import { computeTotals } from './computeTotals'
 import { computeAssetMetrics } from '@/domain/assets/valuation'
@@ -284,6 +284,35 @@ describe('cash ledger + portfolio integration', () => {
             expect(binance?.get('USD')).toBeCloseTo(200, 2)
             // Should NOT have ARS balance from this sale
             expect(binance?.get('ARS') ?? 0).toBe(0)
+        })
+
+        it('invalid legacy ARS settlement without settlementArs is cash-neutral and traceable', () => {
+            const movement = {
+                id: 'usdt-sell-invalid-ars',
+                datetimeISO: '2024-01-15T10:00:00Z',
+                type: 'SELL',
+                assetClass: 'crypto',
+                instrumentId: 'USDT',
+                ticker: 'USDT',
+                accountId: 'Binance',
+                quantity: 119.31,
+                unitPrice: 1,
+                tradeCurrency: 'USD',
+                totalAmount: 119.31,
+                meta: { settlementCurrency: 'ARS' },
+            } as Movement
+
+            const ledger = computeCashLedger([movement])
+            expect(ledger.balances.get('Binance')?.get('ARS') ?? 0).toBe(0)
+
+            expect(traceCashBalanceContributions({
+                movements: [movement], accountId: 'Binance', currency: 'ARS',
+            })).toEqual([expect.objectContaining({
+                movementId: movement.id,
+                amount: 0,
+                reason: 'trade_settlement',
+                issue: 'missing_settlement_metadata',
+            })])
         })
 
         it('SELL USDT without settlementCurrency defaults to tradeCurrency (backwards compatible)', () => {

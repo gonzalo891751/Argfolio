@@ -60,8 +60,8 @@ import {
     DropdownMenuItem,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { CryptoTransferDialog, CryptoSwapDialog } from '@/pages/movements/components/crypto'
 import { ManualPriceDialog } from '@/components/assets/ManualPriceDialog'
+import { cryptoMovementPrefill, walletMovementPrefill } from '@/pages/movements/movement-wizard-prefill'
 import { useManualPrices } from '@/hooks/use-manual-prices'
 import { useAutomationTrigger } from '@/hooks/use-automation-trigger'
 import { PreferencesSheet } from '@/components/PreferencesSheet'
@@ -150,6 +150,9 @@ export type CryptoQuickAction =
     | 'sell'
     | 'transfer'
     | 'swap'
+    | 'adjust-balance'
+    | 'deposit'
+    | 'withdraw'
     | 'manual-price'
 
 const CryptoQuickActionsContext = createContext<((action: CryptoQuickAction, item: ItemV2) => void) | null>(null)
@@ -171,8 +174,6 @@ export function AssetsPageV2() {
 
     // Crypto quick actions (Fase 6)
     const { entryMap: manualPriceEntries } = useManualPrices()
-    const [transferPrefill, setTransferPrefill] = useState<{ accountId?: string; instrumentId?: string; symbol?: string } | null>(null)
-    const [swapPrefill, setSwapPrefill] = useState<{ accountId?: string; sourceInstrumentId?: string } | null>(null)
     const [manualPriceItem, setManualPriceItem] = useState<ItemV2 | null>(null)
     const { data: snapshots = [] } = useSnapshots()
 
@@ -383,12 +384,16 @@ export function AssetsPageV2() {
         setSelectedProvider(null)
     }
 
-    // Crypto quick actions dispatcher (Fase 6)
+    // Unified row actions: every path opens the same MovementWizard contract.
     const handleCryptoQuickAction = (action: CryptoQuickAction, item: ItemV2) => {
         const accountId = item.accountId
+        const isWallet = item.kind === 'wallet_yield' || item.kind === 'cash_ars' || item.kind === 'cash_usd'
+        const walletCurrency = item.kind === 'cash_usd' ? 'USD' : 'ARS'
         switch (action) {
             case 'detail':
-                navigate(`/mis-activos-v2/cripto/${accountId}/${item.symbol}`)
+                navigate(isWallet
+                    ? `/mis-activos-v2/billeteras/${accountId}?kind=${item.kind}`
+                    : `/mis-activos-v2/cripto/${accountId}/${item.symbol}`)
                 break
             case 'movements':
                 navigate('/movements', {
@@ -403,34 +408,29 @@ export function AssetsPageV2() {
                 break
             case 'buy':
             case 'sell': {
-                const priceUsd = (!item.valueMissing && item.qty && item.qty > 0)
-                    ? item.valUsd / item.qty
-                    : 0
                 navigate('/movements', {
                     state: {
-                        prefillMovement: {
-                            id: '',
-                            type: action === 'buy' ? 'BUY' : 'SELL',
-                            assetClass: 'crypto',
-                            accountId,
-                            instrumentId: item.instrumentId || '',
-                            ticker: item.symbol,
-                            assetName: item.label,
-                            quantity: 0,
-                            unitPrice: priceUsd,
-                            tradeCurrency: 'USD',
-                            totalAmount: 0,
-                            datetimeISO: new Date().toISOString(),
-                        },
+                        movementWizardPrefill: cryptoMovementPrefill(action, {
+                            accountId, instrumentId: item.instrumentId, symbol: item.symbol,
+                        }),
                     },
                 })
                 break
             }
-            case 'transfer':
-                setTransferPrefill({ accountId, instrumentId: item.instrumentId, symbol: item.symbol })
-                break
             case 'swap':
-                setSwapPrefill({ accountId, sourceInstrumentId: item.instrumentId })
+            case 'adjust-balance':
+            case 'transfer': {
+                const mode = action === 'adjust-balance' ? 'adjust_balance' : action
+                navigate('/movements', { state: { movementWizardPrefill: isWallet
+                    ? walletMovementPrefill(mode === 'transfer' ? 'transfer' : 'adjust_balance', {
+                        accountId, currency: walletCurrency,
+                    })
+                    : cryptoMovementPrefill(mode, { accountId, instrumentId: item.instrumentId, symbol: item.symbol }) } })
+                break
+            }
+            case 'deposit':
+            case 'withdraw':
+                navigate('/movements', { state: { movementWizardPrefill: walletMovementPrefill(action, { accountId, currency: walletCurrency }) } })
                 break
             case 'manual-price':
                 setManualPriceItem(item)
@@ -953,17 +953,6 @@ export function AssetsPageV2() {
             {/* Preferences Sheet */}
             <PreferencesSheet open={showPreferences} onOpenChange={setShowPreferences} />
 
-            {/* Crypto quick action dialogs (Fase 6) */}
-            <CryptoTransferDialog
-                open={transferPrefill != null}
-                onOpenChange={(open) => { if (!open) setTransferPrefill(null) }}
-                prefill={transferPrefill ?? undefined}
-            />
-            <CryptoSwapDialog
-                open={swapPrefill != null}
-                onOpenChange={(open) => { if (!open) setSwapPrefill(null) }}
-                prefill={swapPrefill ?? undefined}
-            />
             {manualPriceItem?.instrumentId && (
                 <ManualPriceDialog
                     instrumentId={manualPriceItem.instrumentId}
@@ -1415,6 +1404,9 @@ function CryptoQuickActionsMenu({
                 <DropdownMenuItem onClick={() => onQuickAction('swap', item)}>
                     <Repeat2 className="h-4 w-4 mr-2" /> Convertir / Swap
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickAction('adjust-balance', item)}>
+                    <Zap className="h-4 w-4 mr-2" /> Ajustar saldo
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => onQuickAction('manual-price', item)}>
                     <PencilLine className="h-4 w-4 mr-2" /> Precio manual
@@ -1424,11 +1416,32 @@ function CryptoQuickActionsMenu({
     )
 }
 
+function WalletQuickActionsMenu({ item, onQuickAction, className }: { item: ItemV2; onQuickAction: (action: CryptoQuickAction, item: ItemV2) => void; className?: string }) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <span role="button" tabIndex={0} onClick={e => e.stopPropagation()} className={cn("p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer", className)} title="Acciones rápidas">
+                    <MoreVertical className="h-4 w-4" />
+                </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52" onClick={e => e.stopPropagation()}>
+                <DropdownMenuItem onClick={() => onQuickAction('detail', item)}><Eye className="h-4 w-4 mr-2" /> Ver detalle</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickAction('movements', item)}><ListFilter className="h-4 w-4 mr-2" /> Ver movimientos</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onQuickAction('deposit', item)}><ShoppingCart className="h-4 w-4 mr-2" /> Ingresar</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickAction('withdraw', item)}><Banknote className="h-4 w-4 mr-2" /> Retirar / Gasto</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickAction('transfer', item)}><ArrowLeftRight className="h-4 w-4 mr-2" /> Transferir</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickAction('adjust-balance', item)}><Zap className="h-4 w-4 mr-2" /> Ajustar saldo</DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
 function ItemRow({ item, onClick, onOpenFxOverride, providerName, results }: ItemRowProps) {
     const onQuickAction = useContext(CryptoQuickActionsContext)
     const isCryptoKind = item.kind === 'crypto' || item.kind === 'stable'
-    const showQuickActions = isCryptoKind && onQuickAction != null
     const isWalletOrCash = item.kind === 'wallet_yield' || item.kind === 'cash_ars' || item.kind === 'cash_usd'
+    const showQuickActions = (isCryptoKind || isWalletOrCash) && onQuickAction != null
     const isUsdCash = item.kind === 'cash_usd'
     const isUsdNative = item.kind === 'crypto' || item.kind === 'stable'
     const hasTna = item.yieldMeta?.tna && item.yieldMeta.tna > 0
@@ -1537,11 +1550,9 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName, results }: Ite
                     </p>
                 </div>
                 {showQuickActions && (
-                    <CryptoQuickActionsMenu
-                        item={item}
-                        onQuickAction={onQuickAction!}
-                        className="ml-auto md:hidden"
-                    />
+                    isWalletOrCash
+                        ? <WalletQuickActionsMenu item={item} onQuickAction={onQuickAction!} className="ml-auto md:hidden" />
+                        : <CryptoQuickActionsMenu item={item} onQuickAction={onQuickAction!} className="ml-auto md:hidden" />
                 )}
             </div>
             {/* Col: Balance */}
@@ -1595,7 +1606,9 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName, results }: Ite
             <div className="hidden md:flex md:col-span-4 justify-end items-center gap-2 pl-4 border-l border-border/50">
                 {results && <ResultsCell pnl={results.byItemId[item.id]} level={2} />}
                 {showQuickActions && (
-                    <CryptoQuickActionsMenu item={item} onQuickAction={onQuickAction!} />
+                    isWalletOrCash
+                        ? <WalletQuickActionsMenu item={item} onQuickAction={onQuickAction!} />
+                        : <CryptoQuickActionsMenu item={item} onQuickAction={onQuickAction!} />
                 )}
             </div>
         </button>

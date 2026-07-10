@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FxRates, Movement } from '@/domain/types'
 import { computeAverageCost } from '@/domain/portfolio/average-cost'
 import { computeRealizedPnL } from '@/domain/portfolio/computePnL'
+import { computeCashLedger } from '@/domain/portfolio/cash-ledger'
 import { buildCryptoBalanceAdjustmentMovement, reclassifyCryptoBalanceAdjustment } from './crypto-balance-adjustment'
 
 const fxRates: FxRates = {
@@ -66,6 +67,18 @@ describe('crypto balance adjustments', () => {
         expect(fee.meta?.operationKind).toBe('fee')
         expect(computeAverageCost([buy, fee]).quantity).toBeCloseTo(0.01999219, 10)
         expect(computeRealizedPnL([buy, fee], fxRates).realizedUsd).toBe(0)
+        expect(computeCashLedger([fee]).balances.get('nexo')?.get('USD') ?? 0).toBe(0)
+    })
+
+    it('reduces USDT through an adjustment without cash or sale PnL', () => {
+        const adjustment = buildCryptoBalanceAdjustmentMovement({
+            accountId: 'binance', instrumentId: 'usdt', symbol: 'USDT', diffQty: -0.08,
+            reason: 'rounding', costPolicy: 'preserve_average', unitCostUsd: 1,
+        })
+        expect(adjustment.type).toBe('WITHDRAW')
+        expect(adjustment.meta?.operationKind).toBe('balance_adjustment')
+        expect(computeCashLedger([adjustment]).balances.get('binance')?.get('USD') ?? 0).toBe(0)
+        expect(computeRealizedPnL([adjustment], fxRates).realizedUsd).toBe(0)
     })
 
     it('rejects sign-incompatible reward and fee classifications', () => {

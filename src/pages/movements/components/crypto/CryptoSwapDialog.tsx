@@ -33,6 +33,7 @@ import { buildCryptoSwapMovements, CryptoSwapError } from '@/domain/operations/c
 import { getCoingeckoId } from '@/data/providers/crypto-coingecko'
 import { formatMoneyUSD, formatDeltaMoneyUSD, formatQty } from '@/lib/format'
 import type { Instrument, Movement } from '@/domain/types'
+import { WizardStepper } from '../ui/WizardStepper'
 
 export interface CryptoSwapPrefill {
     accountId?: string
@@ -245,13 +246,14 @@ export function CryptoSwapDialog({ open, onOpenChange, prefill }: CryptoSwapDial
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-5xl max-h-[92vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Convertir / Swap cripto</DialogTitle>
                     <DialogDescription>
                         Entregás uno o más activos y recibís otro. El origen realiza resultado;
                         el destino nace con el costo de lo entregado.
                     </DialogDescription>
+                    <WizardStepper currentStep={destQty > 0 ? 3 : (parsedSources.some(s => s.qty > 0) ? 2 : 1)} totalSteps={4} className="pt-2" />
                 </DialogHeader>
 
                 <div className="grid gap-4 py-2">
@@ -282,7 +284,7 @@ export function CryptoSwapDialog({ open, onOpenChange, prefill }: CryptoSwapDial
                         {sources.map((src, idx) => {
                             const parsed = parsedSources[idx]
                             return (
-                                <div key={idx} className="grid grid-cols-[1fr_90px_110px_auto] gap-2 items-start">
+                                <div key={idx} className="grid grid-cols-1 sm:grid-cols-[minmax(140px,1fr)_110px_130px_auto] gap-2 items-start rounded-xl border border-white/10 bg-white/[0.025] p-3">
                                     <select
                                         value={src.instrumentId}
                                         onChange={e => updateSourceLeg(idx, { instrumentId: e.target.value })}
@@ -321,7 +323,7 @@ export function CryptoSwapDialog({ open, onOpenChange, prefill }: CryptoSwapDial
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                     {parsed?.instrument && parsed.position && (
-                                        <div className="col-span-4 -mt-1 text-[11px] text-muted-foreground font-mono px-1">
+                                        <div className="sm:col-span-4 -mt-1 text-[11px] text-muted-foreground font-mono px-1">
                                             Disponible: {formatQty(parsed.position.quantity, 'CRYPTO')} {parsed.instrument.symbol}
                                             {' · '}Costo prom.: {formatMoneyUSD(parsed.position.avgCostUsd)}
                                             {parsed.valueUsd > 0 && <> {' · '}Valor pata: {formatMoneyUSD(parsed.valueUsd)}</>}
@@ -335,7 +337,7 @@ export function CryptoSwapDialog({ open, onOpenChange, prefill }: CryptoSwapDial
                     {/* Destination */}
                     <div className="grid gap-2">
                         <Label>Destino (recibís)</Label>
-                        <div className="grid grid-cols-[1fr_120px] gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-2 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4">
                             <div className="grid gap-1.5">
                                 {destMode === 'existing' ? (
                                     <select
@@ -439,7 +441,7 @@ export function CryptoSwapDialog({ open, onOpenChange, prefill }: CryptoSwapDial
                     )}
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="sticky bottom-0 bg-background/95 pt-4 backdrop-blur">
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
                         Cancelar
                     </Button>

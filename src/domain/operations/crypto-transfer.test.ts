@@ -86,6 +86,18 @@ describe('buildCryptoTransferMovements — validaciones', () => {
     })
 })
 
+describe('Transferencia USDT cash-neutral', () => {
+    it('mueve USDT de Binance a Nexo sin crear caja', () => {
+        const transfer = buildCryptoTransferMovements({
+            instrumentId: 'usdt', symbol: 'USDT', fromAccountId: 'binance', toAccountId: 'nexo',
+            sentQty: 40.735376, receivedQty: 40.735376, avgCostUsd: 1, availableQty: 100,
+        })
+        const ledger = computeCashLedger([transfer.out, transfer.in])
+        expect(ledger.balances.get('binance')?.get('USD') ?? 0).toBe(0)
+        expect(ledger.balances.get('nexo')?.get('USD') ?? 0).toBe(0)
+    })
+})
+
 describe('Caso 1 — BUY 0.02 BTC @70k, TRANSFER 0.01 Binance → Nexo', () => {
     const buy = buyBtcBinance()
     const transfer = buildCryptoTransferMovements({

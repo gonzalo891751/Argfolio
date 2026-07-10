@@ -219,6 +219,8 @@ export interface Movement {
         rollbackOfRepairPlanId?: string
         /** Classification chosen for a balance reconciliation leg */
         adjustmentReason?: 'reward' | 'rounding' | 'fee' | 'manual_correction' | 'external_transfer' | 'unknown'
+        /** User classification for a wallet cash reconciliation. */
+        walletAdjustmentReason?: 'unregistered_expense' | 'unregistered_income' | 'interest' | 'commission' | 'correction' | 'other'
         /** How the adjustment cost basis was obtained */
         costPolicy?: 'zero_cost' | 'manual_cost' | 'preserve_average' | 'unknown'
         /** True while a proposed repair leg still needs an explicit user classification */

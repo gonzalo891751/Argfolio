@@ -127,9 +127,8 @@ describe('Caso 1 — SWAP 0.001 BTC → NEXO con BTC comprado a 70k y valuado a 
     it('es cash-neutral (no crea ni destruye USD de caja)', () => {
         const swapOnly: Movement[] = [...swap.sourceMovements, swap.destinationMovement]
         const ledger = computeCashLedger(swapOnly)
-        const nexoUsd = ledger.balances.get('nexo')?.get('USD') ?? 0
-        const opening = ledger.openingBalances.get('nexo')?.get('USD') ?? 0
-        expect(nexoUsd - opening).toBeCloseTo(0, 6)
+        expect(ledger.balances.get('nexo')?.get('USD') ?? 0).toBe(0)
+        expect(ledger.openingBalances.get('nexo')?.get('USD') ?? 0).toBe(0)
     })
 })
 
@@ -156,6 +155,12 @@ describe('Caso 2 — SWAP 80 USDT → NEXO', () => {
 
         const pnl = computeRealizedPnL(allMovements, fxRates)
         expect(pnl.realizedUsd).toBeCloseTo(0, 6)
+    })
+
+    it('no crea caja USD aunque las patas sean SELL/BUY', () => {
+        const ledger = computeCashLedger([...swap.sourceMovements, swap.destinationMovement])
+        expect(ledger.balances.get('nexo')?.get('USD') ?? 0).toBe(0)
+        expect(ledger.openingBalances.get('nexo')?.get('USD') ?? 0).toBe(0)
     })
 })
 
@@ -212,5 +217,13 @@ describe('Caso 3 — SWAP multi-origen BTC + USDT → NEXO (caso real Nexo)', ()
         expect(swap.destinationMovement.quantity).toBeCloseTo(162.22502272, 8)
         expect(swap.destinationMovement.totalUSD).toBeGreaterThan(0)
         expect(swap.destinationMovement.unitPrice).toBeGreaterThan(0)
+    })
+
+    it('es cash-neutral exacto y no depende de cancelación flotante', () => {
+        const legs = [...swap.sourceMovements, swap.destinationMovement]
+        legs[legs.length - 1] = { ...legs[legs.length - 1], totalAmount: swap.totalValueUsd + 0.00000031 }
+        const ledger = computeCashLedger(legs)
+        expect(ledger.balances.get('nexo')?.get('USD') ?? 0).toBe(0)
+        expect(ledger.openingBalances.get('nexo')?.get('USD') ?? 0).toBe(0)
     })
 })

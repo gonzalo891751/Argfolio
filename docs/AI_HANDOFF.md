@@ -1,5 +1,54 @@
 # Project Snapshot
 
+[CHECKPOINT #7 - COMPLETADO] - Prompt 3: operaciones unificadas y saldos fantasma (2026-07-10)
+
+Resultado:
+- Causa productiva confirmada en solo lectura: una SELL standalone de 119,30695 USDT, Binance, 2026-07-10 03:03. El wizard había escrito `settlementCurrency=ARS` sin `settlementArs`; el ledger interpretó el nominal USD como ARS y creó ARS 119,31. El drawer mostraba ARS histórico 187.110,28, confirmando la inconsistencia de unidades.
+- `cash-ledger.ts` excluye explícitamente swaps y operaciones cripto en especie, rechaza el settlement ARS incompleto y expone `traceCashBalanceContributions()` con operationId, razón, issues, impacto, acumulación compatible y saldo inicial inferido.
+- `MovementWizardPrefill` unifica Nuevo Movimiento, detalle y filas. Cripto ofrece buy/sell/transfer/swap/adjust_balance; wallet ofrece deposit/withdraw/transfer/adjust_balance.
+- Detalle cripto usa menú Operar; Mis Activos agrega acciones cripto/wallet; detalle wallet agrega Ajustar saldo, menú Operar y tabla `Cómo se compone este saldo`.
+- Ajuste cripto auditable y cash-neutral; ajuste wallet contextual con dirección automática, motivo obligatorio y before/after.
+- Transfer/Swap conservan builders existentes; diálogos ampliados, responsive, con stepper y resumen contable.
+- Ventas nuevas de stable exigen ARS real o fiat USD. `autoBalanceUsdt` queda limitado a trades no-stable de exchanges.
+
+Archivos clave:
+- `src/domain/portfolio/cash-ledger.ts`
+- `src/domain/operations/{wallet-balance-adjustment,auto-usdt-balance}.ts`
+- `src/pages/movements/movement-wizard-prefill.ts`
+- `src/pages/movements/components/crypto/CryptoBalanceAdjustmentDialog.tsx`
+- `src/pages/movements/components/{MovementWizard,crypto/CryptoBuySellWizard,wallet/WalletCashWizard}.tsx`
+- `src/pages/{assets-v2,crypto-detail,wallet-detail}.tsx`
+- `docs/ARGFOLIO_OPERACIONES_UNIFICADAS_Y_AJUSTES.md`
+
+Datos y seguridad:
+- No se guardó, supersedió, anuló ni borró ningún movimiento real.
+- Reparación recomendada: confirmar intención de la SELL; luego supersede + ajuste USDT o swap correcto. Si fue caja real, registrar el `settlementArs` respaldado por comprobante.
+
+Validación final:
+- `npm test -- --run`: 28 archivos, 209 tests OK.
+- `npm run build`: OK; conserva warnings preexistentes de fuente CEDEAR, CSS `@import`, browserslist, import mixto y chunk grande.
+- `npm run lint`: 0 errores, 151 warnings preexistentes (misma línea base).
+- `npx tsc --noEmit`: 0 errores.
+- `git diff --check`: OK; sin marcadores de conflicto.
+- QA navegador local desktop/mobile y auditoría productiva de solo lectura realizados. Ver documento nuevo para detalle.
+
+---
+
+[CHECKPOINT #7 - INICIO] - Prompt 3: operaciones unificadas y saldos fantasma (2026-07-10)
+
+Objetivo:
+- Auditar el saldo cash fantasma asociado a operaciones USDT, hacer swaps/transferencias/ajustes explicitamente cash-neutral y unificar las entradas de operaciones cripto/billetera mediante un contrato de prefill contextual.
+
+Estado inicial:
+- Worktree limpio y sin marcadores de conflicto reales (los matches de `=======` son separadores decorativos).
+- `npm test -- --run`: 25 archivos, 195 tests OK.
+- `npm run build`: OK, con warnings preexistentes (fuente CEDEAR ausente, orden CSS `@import`, browserslist, imports mixtos y chunk grande).
+- `npm run lint`: 0 errores, 151 warnings preexistentes.
+- `npx tsc --noEmit`: 0 errores.
+- No se modificaron ni se repararon movimientos reales. La investigacion del saldo Binance se limita a trazabilidad de lectura y fixtures hasta contar con el dataset local disponible.
+
+---
+
 [CHECKPOINT #6] — Prompt 2: Reparación asistida Binance → Nexo (2026-07-10)
 
 Objetivo:

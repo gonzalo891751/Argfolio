@@ -11,7 +11,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Pencil, Check, X, Calendar, Wallet } from 'lucide-react'
+import { ArrowLeft, Pencil, Check, X, Calendar, Wallet, ChevronDown, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Scale, ListFilter, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD } from '@/lib/format'
 import { usePortfolioV2, type ItemKind, type ItemV2 } from '@/features/portfolioV2'
@@ -19,6 +19,9 @@ import { useAccounts, useUpdateAccount } from '@/hooks/use-instruments'
 import { useMovements } from '@/hooks/use-movements'
 import { useToast } from '@/components/ui/toast'
 import type { Movement, Currency } from '@/domain/types'
+import { getMovementCashDeltas as getLedgerCashDeltas, traceCashBalanceContributions } from '@/domain/portfolio/cash-ledger'
+import { walletMovementPrefill } from '@/pages/movements/movement-wizard-prefill'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 // =============================================================================
 // Helpers
@@ -44,136 +47,9 @@ function isCashItemKind(kind: string | null): kind is Extract<ItemKind, 'cash_ar
     return kind === 'cash_ars' || kind === 'cash_usd' || kind === 'wallet_yield'
 }
 
-function resolveTradeCurrency(mov: Movement): Currency {
-    if (mov.tradeCurrency) return mov.tradeCurrency
-    if (mov.fee?.currency) return mov.fee.currency
-    if (mov.feeCurrency) return mov.feeCurrency
-    if (mov.totalUSD && mov.totalUSD !== 0) return 'USD'
-    return 'ARS'
-}
-
-function resolveFee(mov: Movement, fallbackCurrency: Currency): { amount: number; currency: Currency } | null {
-    const rawAmount = mov.fee?.amount ?? mov.feeAmount
-    if (rawAmount == null || !Number.isFinite(rawAmount) || rawAmount === 0) return null
-    const amount = rawAmount
-    const currency = mov.fee?.currency ?? mov.feeCurrency ?? fallbackCurrency
-    return { amount, currency }
-}
-
-function resolveGrossAmount(mov: Movement, tradeCurrency: Currency): number {
-    if (Number.isFinite(mov.totalAmount)) return mov.totalAmount
-    if (Number.isFinite(mov.netAmount)) return mov.netAmount ?? 0
-    const qty = mov.quantity ?? 0
-    const price = mov.unitPrice ?? 0
-    if (Number.isFinite(qty) && Number.isFinite(price) && qty !== 0 && price !== 0) {
-        return qty * price
-    }
-    if (tradeCurrency === 'ARS' && Number.isFinite(mov.totalARS)) return mov.totalARS ?? 0
-    if (tradeCurrency === 'USD' && Number.isFinite(mov.totalUSD)) return mov.totalUSD ?? 0
-    return 0
-}
-
-function resolveNetAmount(mov: Movement, tradeCurrency: Currency, isBuySide: boolean): number {
-    if (Number.isFinite(mov.netAmount)) return mov.netAmount ?? 0
-    const gross = resolveGrossAmount(mov, tradeCurrency)
-    const fee = resolveFee(mov, tradeCurrency)
-    if (fee && fee.currency === tradeCurrency) {
-        return isBuySide ? gross + fee.amount : gross - fee.amount
-    }
-    return gross
-}
-
-function resolveUsdQuantity(mov: Movement): number {
-    if (Number.isFinite(mov.quantity)) return mov.quantity ?? 0
-    if (Number.isFinite(mov.totalUSD)) return mov.totalUSD ?? 0
-    return 0
-}
-
-function getMovementCashDeltas(mov: Movement): Array<{ currency: Currency; amount: number }> {
-    const deltas: Array<{ currency: Currency; amount: number }> = []
-    const tradeCurrency = resolveTradeCurrency(mov)
-
-    const settlementMode = mov.meta?.fixedDeposit?.settlementMode
-    const skipPfSellCash = mov.assetClass === 'pf' && mov.type === 'SELL' && settlementMode === 'manual'
-
-    switch (mov.type) {
-        case 'DEPOSIT': {
-            const amount = resolveNetAmount(mov, tradeCurrency, false)
-            deltas.push({ currency: tradeCurrency, amount })
-            break
-        }
-        case 'WITHDRAW': {
-            const amount = resolveNetAmount(mov, tradeCurrency, true)
-            deltas.push({ currency: tradeCurrency, amount: -amount })
-            break
-        }
-        case 'INTEREST':
-        case 'DIVIDEND': {
-            const amount = resolveNetAmount(mov, tradeCurrency, false)
-            deltas.push({ currency: tradeCurrency, amount })
-            break
-        }
-        case 'FEE': {
-            const fee = resolveFee(mov, tradeCurrency)
-            const amount = fee?.amount ?? resolveNetAmount(mov, tradeCurrency, true)
-            const currency = fee?.currency ?? tradeCurrency
-            deltas.push({ currency, amount: -amount })
-            break
-        }
-        case 'BUY': {
-            if (skipPfSellCash) break
-            const amount = resolveNetAmount(mov, tradeCurrency, true)
-            deltas.push({ currency: tradeCurrency, amount: -amount })
-            break
-        }
-        case 'SELL': {
-            if (skipPfSellCash) break
-            const amount = resolveNetAmount(mov, tradeCurrency, false)
-            deltas.push({ currency: tradeCurrency, amount })
-            break
-        }
-        case 'TRANSFER_IN':
-        case 'DEBT_ADD': {
-            const amount = resolveNetAmount(mov, tradeCurrency, false)
-            deltas.push({ currency: tradeCurrency, amount })
-            break
-        }
-        case 'TRANSFER_OUT':
-        case 'DEBT_PAY': {
-            const amount = resolveNetAmount(mov, tradeCurrency, true)
-            deltas.push({ currency: tradeCurrency, amount: -amount })
-            break
-        }
-        case 'BUY_USD': {
-            const arsAmount = resolveNetAmount(mov, tradeCurrency, true)
-            deltas.push({ currency: tradeCurrency, amount: -arsAmount })
-            const usdAmount = resolveUsdQuantity(mov)
-            if (usdAmount !== 0) {
-                deltas.push({ currency: 'USD', amount: usdAmount })
-            }
-            break
-        }
-        case 'SELL_USD': {
-            const arsAmount = resolveNetAmount(mov, tradeCurrency, false)
-            deltas.push({ currency: tradeCurrency, amount: arsAmount })
-            const usdAmount = resolveUsdQuantity(mov)
-            if (usdAmount !== 0) {
-                deltas.push({ currency: 'USD', amount: -usdAmount })
-            }
-            break
-        }
-    }
-
-    const fee = resolveFee(mov, tradeCurrency)
-    if (fee && fee.currency !== tradeCurrency) {
-        deltas.push({ currency: fee.currency, amount: -fee.amount })
-    }
-
-    return deltas.filter(delta => Number.isFinite(delta.amount) && Math.abs(delta.amount) > EPSILON)
-}
 
 function getMovementCashDeltaForCurrencies(mov: Movement, currencies: Currency[]): number {
-    const deltas = getMovementCashDeltas(mov)
+    const deltas = getLedgerCashDeltas(mov)
     return deltas
         .filter(d => currencies.includes(d.currency))
         .reduce((sum, d) => sum + d.amount, 0)
@@ -212,6 +88,20 @@ export function WalletDetailPage() {
 
     const selectedItem: ItemV2 | null = useMemo(() => {
         const items = walletProvider?.items ?? []
+        if (items.length === 0 && accountId) {
+            const kind = requestedKind ?? 'cash_ars'
+            const isUsd = kind === 'cash_usd'
+            return {
+                id: `trace-${accountId}-${kind}`,
+                kind,
+                symbol: isUsd ? 'USD' : 'ARS',
+                label: isUsd ? 'Dólares' : 'Pesos',
+                qty: 0,
+                valArs: 0,
+                valUsd: 0,
+                accountId,
+            }
+        }
         if (items.length === 0) return null
 
         if (requestedKind) {
@@ -223,7 +113,7 @@ export function WalletDetailPage() {
 
         const arsDefault = items.find(it => it.kind === 'cash_ars') ?? items.find(it => it.kind === 'wallet_yield')
         return arsDefault ?? items[0]
-    }, [walletProvider, requestedKind])
+    }, [walletProvider, requestedKind, accountId])
 
     const baseCurrency: 'ARS' | 'USD' = selectedItem?.kind === 'cash_usd' ? 'USD' : 'ARS'
     const formatPrimaryMoney = baseCurrency === 'USD' ? formatMoneyUSD : formatMoneyARS
@@ -273,6 +163,22 @@ export function WalletDetailPage() {
             .sort((a, b) => b.movement.datetimeISO.localeCompare(a.movement.datetimeISO))
             .slice(0, 20) // Últimos 20
     }, [allMovements, accountId, movementCurrencies])
+
+    const cashTrace = useMemo(() => accountId
+        ? traceCashBalanceContributions({ movements: allMovements, accountId, currency: baseCurrency })
+        : [], [allMovements, accountId, baseCurrency])
+    const hasSuspiciousCash = cashTrace.some(row => row.issue != null)
+
+    const openWalletOperation = (operationMode: 'deposit' | 'withdraw' | 'transfer' | 'adjust_balance') => {
+        navigate('/movements', {
+            state: {
+                movementWizardPrefill: walletMovementPrefill(operationMode, {
+                    accountId,
+                    currency: baseCurrency,
+                }),
+            },
+        })
+    }
 
     // Projections (expressed in selected base currency)
     const dailyInterest = computeDailyInterest(capitalPrimary, tna)
@@ -362,7 +268,7 @@ export function WalletDetailPage() {
         )
     }
 
-    if (!walletProvider || !selectedItem) {
+    if (!selectedItem) {
         return (
             <div className="p-8 text-center space-y-4">
                 <p className="text-muted-foreground">No se encontraron subcuentas de liquidez para esta cuenta.</p>
@@ -410,7 +316,31 @@ export function WalletDetailPage() {
                         </div>
                     </div>
                 </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                    <button onClick={() => openWalletOperation('adjust_balance')} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+                        <Scale className="h-4 w-4" /> Ajustar saldo
+                    </button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-muted">Operar <ChevronDown className="h-4 w-4" /></button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuItem onClick={() => openWalletOperation('deposit')}><ArrowDownToLine className="mr-2 h-4 w-4" /> Registrar ingreso</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openWalletOperation('withdraw')}><ArrowUpFromLine className="mr-2 h-4 w-4" /> Registrar egreso / gasto</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openWalletOperation('transfer')}><ArrowLeftRight className="mr-2 h-4 w-4" /> Transferir</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => navigate('/movements', { state: { movementFilters: { accountId, datePreset: 'all' } } })}><ListFilter className="mr-2 h-4 w-4" /> Ver movimientos</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             </div>
+
+            {hasSuspiciousCash && (
+                <div className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex gap-3"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" /><span>Este saldo contiene una operación cripto cash-neutral o un settlement incompleto. Revisá la composición antes de ajustarlo.</span></div>
+                    <a href="#cash-composition" className="whitespace-nowrap font-medium text-amber-300 underline">Ver composición</a>
+                </div>
+            )}
 
             {/* Main Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -562,12 +492,12 @@ export function WalletDetailPage() {
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                             <h3 className="font-semibold">Últimos Movimientos</h3>
                         </div>
-                        <Link
-                            to={`/movements?account=${accountId}`}
+                        <button
+                            onClick={() => navigate('/movements', { state: { movementFilters: { accountId, datePreset: 'all' } } })}
                             className="text-xs text-primary hover:underline"
                         >
                             Ver todos
-                        </Link>
+                        </button>
                     </div>
 
                     {accountMovements.length === 0 ? (
@@ -586,6 +516,32 @@ export function WalletDetailPage() {
                                     secondaryPerPrimary={secondaryPerPrimary}
                                 />
                             ))}
+                        </div>
+                    )}
+                </div>
+
+                <div id="cash-composition" className="md:col-span-3 bg-card border border-border rounded-xl overflow-hidden scroll-mt-6">
+                    <div className="px-6 py-4 border-b border-border bg-muted/30">
+                        <h3 className="font-semibold">Cómo se compone este saldo</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">Lectura auditable; esta tabla no ejecuta reparaciones.</p>
+                    </div>
+                    {cashTrace.length === 0 ? <p className="p-6 text-sm text-muted-foreground">No hay contribuciones de {baseCurrency} para mostrar.</p> : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[720px] text-sm">
+                                <thead className="border-b border-border text-left text-xs text-muted-foreground"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Movimiento</th><th className="px-4 py-3">Operación</th><th className="px-4 py-3 text-right">Impacto</th><th className="px-4 py-3 text-right">Acumulado</th></tr></thead>
+                                <tbody className="divide-y divide-border">
+                                    {cashTrace.map((row, index) => {
+                                        const accumulated = cashTrace.slice(0, index + 1).reduce((sum, item) => sum + item.amount, 0)
+                                        return <tr key={`${row.movementId}-${index}`} className={row.issue ? 'bg-amber-500/[0.05]' : ''}>
+                                            <td className="px-4 py-3 whitespace-nowrap">{new Date(row.datetimeISO).toLocaleDateString('es-AR')}</td>
+                                            <td className="px-4 py-3 font-mono text-xs">{row.synthetic ? <span className="text-muted-foreground">Saldo inicial</span> : <button className="text-primary hover:underline" onClick={() => navigate('/movements', { state: { movementFilters: { search: row.movementId, datePreset: 'all' } } })}>{row.movementId.slice(0, 12)}</button>}<div className="text-muted-foreground">{row.type} {row.symbol ?? ''}</div></td>
+                                            <td className="px-4 py-3"><span>{row.reason}</span>{row.operationId && <div className="font-mono text-[10px] text-muted-foreground">{row.operationId.slice(0, 16)}</div>}{row.issue && <span className="mt-1 inline-flex rounded bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">{row.issue === 'possible_swap_residue' ? 'Posible residuo de swap' : row.issue === 'missing_settlement_metadata' ? 'Settlement sin importe real' : 'Settlement legacy'}</span>}</td>
+                                            <td className={`px-4 py-3 text-right font-mono ${row.amount < 0 ? 'text-rose-400' : row.amount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>{row.amount > 0 ? '+' : ''}{formatPrimaryMoney(row.amount)}</td>
+                                            <td className="px-4 py-3 text-right font-mono">{formatPrimaryMoney(accumulated)}</td>
+                                        </tr>
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
                     )}
                 </div>

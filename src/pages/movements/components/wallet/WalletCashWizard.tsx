@@ -14,6 +14,8 @@ import { computeTEA } from '@/domain/yield/accrual'
 import { db } from '@/db'
 import { syncMovementsBatch } from '@/sync/remote-sync'
 import { accountsRepo } from '@/db/repositories/accounts'
+import type { MovementWizardPrefill } from '../../movement-wizard-prefill'
+import { computeWalletBalanceAdjustment } from '@/domain/operations/wallet-balance-adjustment'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,6 +35,7 @@ interface WalletWizardState {
     tna: number
     adjustmentMode: boolean
     realBalance: string
+    adjustmentReason: '' | 'unregistered_expense' | 'unregistered_income' | 'interest' | 'commission' | 'correction' | 'other'
 }
 
 interface WalletCashWizardProps {
@@ -42,6 +45,7 @@ interface WalletCashWizardProps {
     onClose: () => void
     onBackToAssetType?: () => void
     onStepChange?: (step: number) => void
+    prefill?: MovementWizardPrefill | null
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +95,7 @@ function hasPositiveBalance(accountId: string, balancesMap: Map<string, Map<Curr
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export function WalletCashWizard({ accounts, movements, instruments, onClose, onBackToAssetType, onStepChange }: WalletCashWizardProps) {
+export function WalletCashWizard({ accounts, movements, instruments, onClose, onBackToAssetType, onStepChange, prefill }: WalletCashWizardProps) {
     const createMovement = useCreateMovement()
     const createInstrument = useCreateInstrument()
     const { toast } = useToast()
@@ -99,23 +103,25 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
     const amountInputRef = useRef<HTMLInputElement>(null)
     const [shaking, setShaking] = useState(false)
     const [submitting, setSubmitting] = useState(false)
+    const [directAdjustment, setDirectAdjustment] = useState(prefill?.operationMode === 'adjust_balance')
 
     const now = new Date()
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
 
     const [state, setState] = useState<WalletWizardState>({
-        mode: 'income',
-        step: 1,
-        datetime: now.toISOString().slice(0, 16),
-        accountId: '',
-        toAccountId: '',
-        currency: 'ARS',
+        mode: prefill?.operationMode === 'withdraw' ? 'expense' : prefill?.operationMode === 'transfer' ? 'transfer' : 'income',
+        step: prefill?.operationMode === 'adjust_balance' && prefill.accountId ? 2 : 1,
+        datetime: prefill?.datetimeISO ? new Date(prefill.datetimeISO).toISOString().slice(0, 16) : now.toISOString().slice(0, 16),
+        accountId: prefill?.accountId ?? '',
+        toAccountId: prefill?.destinationAccountId ?? '',
+        currency: prefill?.currency ?? 'ARS',
         amount: '',
-        note: '',
+        note: prefill?.note ?? '',
         isRemunerada: false,
         tna: 0,
-        adjustmentMode: false,
-        realBalance: '',
+        adjustmentMode: prefill?.operationMode === 'adjust_balance',
+        realBalance: prefill?.realBalance == null ? '' : String(prefill.realBalance),
+        adjustmentReason: '',
     })
 
     // Compute all cash balances once
@@ -188,10 +194,10 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
 
     // Focus amount input on step 2
     useEffect(() => {
-        if (state.step === 2) {
+        if (state.step === 2 && !state.adjustmentMode) {
             setTimeout(() => amountInputRef.current?.focus(), 100)
         }
-    }, [state.step])
+    }, [state.step, state.adjustmentMode])
 
     // ------ VALIDATION ------
     const isStep1Valid = useMemo(() => {
@@ -205,21 +211,28 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
     const isStep2Valid = useMemo(() => {
         if (parsedAmount <= 0) return false
         if (state.mode !== 'income' && parsedAmount > availableBalance + 0.001) return false
+        if (state.adjustmentMode && !state.adjustmentReason) return false
         return true
-    }, [parsedAmount, state.mode, availableBalance])
+    }, [parsedAmount, state.mode, state.adjustmentMode, state.adjustmentReason, availableBalance])
 
     const isCurrentStepValid = state.step === 1 ? isStep1Valid : state.step === 2 ? isStep2Valid : true
 
     // ------ ACTIONS ------
     const setMode = (mode: WalletMode) => {
+        setDirectAdjustment(false)
         setState(s => {
             // Reset account if current account has no balance and switching to expense/transfer
             let accountId = s.accountId
             if (mode !== 'income' && accountId) {
                 if (!hasPositiveBalance(accountId, balancesMap)) accountId = ''
             }
-            return { ...s, mode, step: 1, accountId, toAccountId: '', amount: '', currency: 'ARS', adjustmentMode: false, realBalance: '' }
+            return { ...s, mode, step: 1, accountId, toAccountId: '', amount: '', currency: 'ARS', adjustmentMode: false, realBalance: '', adjustmentReason: '' }
         })
+    }
+
+    const startAdjustment = () => {
+        setDirectAdjustment(true)
+        setState(s => ({ ...s, mode: 'income', step: s.accountId ? 2 : 1, adjustmentMode: true, amount: '', realBalance: '', adjustmentReason: '' }))
     }
 
     const nextStep = () => {
@@ -250,33 +263,34 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
     }
 
     const calculateAdjustment = (realStr: string) => {
-        setState(s => ({ ...s, realBalance: realStr }))
         const real = parseFloat(realStr)
-        if (!Number.isFinite(real)) return
-
-        if (state.mode === 'income') {
-            // Income: real > system → deposit delta; real <= system → suggest expense
-            if (real > availableBalance) {
-                const diff = (real - availableBalance).toFixed(2)
-                setState(s => ({ ...s, amount: diff }))
-            }
-            // If real <= system, feedback component handles the message
-        } else {
-            // Expense: real < system → withdraw delta; real > system → suggest income
-            if (real < availableBalance) {
-                const diff = (availableBalance - real).toFixed(2)
-                setState(s => ({ ...s, amount: diff }))
-            }
+        if (!Number.isFinite(real)) {
+            setState(s => ({ ...s, realBalance: realStr, amount: '' }))
+            return
         }
+        const adjustment = computeWalletBalanceAdjustment(availableBalance, real)
+        setState(s => ({
+            ...s,
+            realBalance: realStr,
+            mode: adjustment.direction === 'expense' ? 'expense' : 'income',
+            amount: adjustment.amount.toFixed(2),
+            adjustmentMode: true,
+        }))
     }
+
+    useEffect(() => {
+        if (!directAdjustment || state.realBalance === '') return
+        calculateAdjustment(state.realBalance)
+    // Recalculate when the contextual balance becomes available or changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [directAdjustment, availableBalance])
 
     const switchToIncome = (diff: number) => {
         setState(s => ({
             ...s,
             mode: 'income',
             amount: diff.toFixed(2),
-            adjustmentMode: false,
-            realBalance: '',
+            adjustmentMode: true,
         }))
     }
 
@@ -285,8 +299,7 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
             ...s,
             mode: 'expense',
             amount: diff.toFixed(2),
-            adjustmentMode: false,
-            realBalance: '',
+            adjustmentMode: true,
         }))
     }
 
@@ -344,6 +357,14 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
                     totalAmount: amount,
                     netAmount: amount,
                     notes: state.note || undefined,
+                    meta: state.adjustmentMode ? {
+                        operationId: crypto.randomUUID(),
+                        operationKind: 'balance_adjustment',
+                        operationStatus: 'posted',
+                        legRole: 'cash',
+                        direction: 'in',
+                        walletAdjustmentReason: state.adjustmentReason || undefined,
+                    } : undefined,
                 }
                 await createMovement.mutateAsync(mov)
 
@@ -382,6 +403,14 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
                     totalAmount: amount,
                     netAmount: amount,
                     notes: state.note || undefined,
+                    meta: state.adjustmentMode ? {
+                        operationId: crypto.randomUUID(),
+                        operationKind: 'balance_adjustment',
+                        operationStatus: 'posted',
+                        legRole: 'cash',
+                        direction: 'out',
+                        walletAdjustmentReason: state.adjustmentReason || undefined,
+                    } : undefined,
                 }
                 await createMovement.mutateAsync(mov)
                 toast({ title: 'Egreso registrado', description: `Se debitaron ${formatMoney(amount, state.currency)} de tu cuenta.` })
@@ -409,6 +438,10 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
                     notes: state.note || undefined,
                     groupId,
                     meta: {
+                        operationId: groupId,
+                        operationKind: 'transfer',
+                        operationStatus: 'posted',
+                        legRole: 'cash',
                         transferGroupId: groupId,
                         counterpartyAccountId: state.toAccountId,
                         direction: 'out' as const,
@@ -431,6 +464,10 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
                     notes: state.note || undefined,
                     groupId,
                     meta: {
+                        operationId: groupId,
+                        operationKind: 'transfer',
+                        operationStatus: 'posted',
+                        legRole: 'cash',
                         transferGroupId: groupId,
                         counterpartyAccountId: state.accountId,
                         direction: 'in' as const,
@@ -478,34 +515,31 @@ export function WalletCashWizard({ accounts, movements, instruments, onClose, on
             {/* Controls + Stepper */}
             <div className="px-6 pt-4 pb-2 shrink-0">
                 {/* Type Selector */}
-                <div className="flex p-1 bg-slate-950/50 rounded-lg border border-white/5 mb-6 max-w-md mx-auto relative">
-                    {/* Sliding indicator */}
-                    <div
-                        className="absolute h-[calc(100%-8px)] top-1 rounded-md transition-all duration-300 ease-out shadow-lg"
-                        style={{
-                            backgroundColor: theme.color,
-                            width: '33.33%',
-                            left: state.mode === 'income' ? '4px' : state.mode === 'expense' ? '33.33%' : 'calc(66.66% - 4px)',
-                        }}
-                    />
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6 max-w-2xl mx-auto">
                     <button
                         onClick={() => setMode('income')}
-                        className={cn('relative z-10 flex-1 py-1.5 text-sm font-medium text-center rounded-md transition-colors duration-200', state.mode === 'income' ? 'text-white' : 'text-slate-400 hover:text-white')}
+                        className={cn('py-2 px-3 text-sm font-medium text-center rounded-lg border transition', !directAdjustment && state.mode === 'income' ? 'bg-indigo-500 border-indigo-400 text-white' : 'border-white/10 text-slate-400 hover:text-white')}
                     >
                         Ingreso
                     </button>
                     <button
                         onClick={() => setMode('expense')}
-                        className={cn('relative z-10 flex-1 py-1.5 text-sm font-medium text-center rounded-md transition-colors duration-200', state.mode === 'expense' ? 'text-white' : 'text-slate-400 hover:text-white')}
+                        className={cn('py-2 px-3 text-sm font-medium text-center rounded-lg border transition', !directAdjustment && state.mode === 'expense' ? 'bg-rose-500 border-rose-400 text-white' : 'border-white/10 text-slate-400 hover:text-white')}
                     >
                         Egreso
                     </button>
                     <button
                         onClick={() => setMode('transfer')}
-                        className={cn('relative z-10 flex-1 py-1.5 text-sm font-medium text-center rounded-md transition-colors duration-200 flex items-center justify-center gap-1.5', state.mode === 'transfer' ? 'text-white' : 'text-slate-400 hover:text-white')}
+                        className={cn('py-2 px-3 text-sm font-medium text-center rounded-lg border transition flex items-center justify-center gap-1.5', state.mode === 'transfer' ? 'bg-sky-500 border-sky-400 text-white' : 'border-white/10 text-slate-400 hover:text-white')}
                     >
                         <span>Transferencia</span>
                         <ArrowLeftRight className="w-3.5 h-3.5 opacity-70" />
+                    </button>
+                    <button
+                        onClick={startAdjustment}
+                        className={cn('py-2 px-3 text-sm font-medium text-center rounded-lg border transition flex items-center justify-center gap-1.5', directAdjustment ? 'bg-amber-500 border-amber-400 text-slate-950' : 'border-white/10 text-slate-400 hover:text-white')}
+                    >
+                        <Zap className="w-3.5 h-3.5" /> Ajustar saldo
                     </button>
                 </div>
 
@@ -644,7 +678,7 @@ function Step1Datos({
                         <label className="text-xs font-mono text-slate-400 uppercase tracking-wider">Cuenta</label>
                         <AccountSelectCreatable
                             value={state.accountId}
-                            onChange={val => setState(s => ({ ...s, accountId: val, amount: '', adjustmentMode: false, realBalance: '' }))}
+                            onChange={val => setState(s => ({ ...s, accountId: val, amount: '', realBalance: '' }))}
                             accounts={filteredAccounts}
                             placeholder="Buscar cuenta..."
                         />
@@ -914,6 +948,7 @@ function Step2Monto({
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-mono">$</span>
                                 <input
                                     type="number"
+                                    autoFocus
                                     value={state.realBalance}
                                     onChange={e => onAdjustment(e.target.value)}
                                     placeholder="0.00"
@@ -922,6 +957,22 @@ function Step2Monto({
                             </div>
                             <div className="text-[10px] text-slate-500 mt-1 font-mono">
                                 Saldo sistema: {formatMoney(availableBalance, state.currency)}
+                            </div>
+                            <div className="mt-4 space-y-2">
+                                <label className="text-xs font-mono text-slate-400 uppercase">Motivo del ajuste</label>
+                                <select
+                                    value={state.adjustmentReason}
+                                    onChange={e => setState(s => ({ ...s, adjustmentReason: e.target.value as WalletWizardState['adjustmentReason'] }))}
+                                    className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                                >
+                                    <option value="">Seleccioná un motivo…</option>
+                                    <option value="unregistered_expense">Gasto no registrado</option>
+                                    <option value="unregistered_income">Ingreso no registrado</option>
+                                    <option value="interest">Interés</option>
+                                    <option value="commission">Comisión</option>
+                                    <option value="correction">Corrección</option>
+                                    <option value="other">Otro</option>
+                                </select>
                             </div>
                             <AdjustmentFeedback
                                 realBalance={state.realBalance}

@@ -34,6 +34,7 @@ import { FciBuySellWizard } from './fci'
 import { CedearBuySellWizard } from './cedear'
 import { WizardStepper } from './ui/WizardStepper'
 import { WizardFooter } from './ui/WizardFooter'
+import type { MovementWizardPrefill } from '../movement-wizard-prefill'
 
 // Max days after maturity to allow redemption
 const PF_REDEEM_MARGIN_DAYS = 3
@@ -177,6 +178,7 @@ interface MovementWizardProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     prefillMovement?: Movement | null
+    prefill?: MovementWizardPrefill | null
 }
 
 const ASSET_CLASS_CONFIG: Record<
@@ -228,7 +230,7 @@ const FX_RATES_FALLBACK: Record<FxType, number> = {
     OFICIAL: 890.5,
 }
 
-export function MovementWizard({ open, onOpenChange, prefillMovement }: MovementWizardProps) {
+export function MovementWizard({ open, onOpenChange, prefillMovement, prefill }: MovementWizardProps) {
     const [step, setStep] = useState(1)
     const [childStep, setChildStep] = useState(1) // Internal step of active sub-wizard (1-3)
     const [autoBalanceUsdt, setAutoBalanceUsdt] = useState(true) // Auto-balance default ON
@@ -337,6 +339,13 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
     }
 
     const [state, setState] = useState<WizardState>(getInitialState())
+
+    useEffect(() => {
+        if (!open || !prefill?.assetClass) return
+        handleClassChange(prefill.assetClass)
+        setStep(2)
+        setChildStep(1)
+    }, [open, prefill])
 
     // Compute owned FCI IDs for Typeahead restriction (SELL mode)
     const ownedFciIds = useMemo(() => {
@@ -1164,6 +1173,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         movements={allMovements}
                         instruments={instrumentsList}
                         prefillMovement={prefillMovement}
+                        prefill={prefill}
                         onClose={() => onOpenChange(false)}
                         onBackToAssetType={() => { setStep(1); setChildStep(1) }}
                         onStepChange={setChildStep}
@@ -1173,6 +1183,7 @@ export function MovementWizard({ open, onOpenChange, prefillMovement }: Movement
                         accounts={accountsList}
                         movements={allMovements}
                         instruments={instrumentsList}
+                        prefill={prefill}
                         onClose={() => onOpenChange(false)}
                         onBackToAssetType={() => { setStep(1); setChildStep(1) }}
                         onStepChange={setChildStep}
