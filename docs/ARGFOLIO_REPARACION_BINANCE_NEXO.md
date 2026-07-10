@@ -163,6 +163,18 @@ La reparación conserva cantidad y costo aunque no exista cotización actual. La
 - Binance puede quedar con dust o stables remanentes. El plan lo reporta; no inventa una salida.
 - El apply local y el push D1 no forman una transacción distribuida; los fallos remotos se informan para reconciliación.
 
+## Validación de implementación
+
+Ejecutada el 2026-07-10, sin aplicar reparaciones ni modificar movimientos reales:
+
+- `npm test -- --run`: 25 archivos y 195 tests pasando;
+- `npm run build`: OK, con warnings preexistentes de generación CEDEAR, CSS, browserslist y tamaño de chunk;
+- `npm run lint`: 0 errores y 151 warnings preexistentes;
+- `npx tsc --noEmit`: 0 errores;
+- `/settings?debug=1`: panel y targets visibles; un dataset local sin BNB detuvo el dry-run con error explícito y sin mostrar el botón de apply.
+
+El hardening final también verifica que una reclasificación a reward elimine el costo histórico (`unitPrice`, `totalAmount`, `totalUSD`) antes de persistir, y que las patas legacy vinculadas de otras cuentas o fuera de la ventana no entren como candidatas.
+
 ## QA manual
 
 1. Abrir la app con `?debug=1` y entrar a Settings.
@@ -177,4 +189,3 @@ La reparación conserva cantidad y costo aunque no exista cotización actual. La
 10. En una copia de datos, aplicar y verificar resultados/IDs.
 11. Ver Movimientos con estados Activos, Reemplazados, Anulados y Todos.
 12. Ejecutar rollback y confirmar nuevas patas anuladas + legacy reactivados.
-

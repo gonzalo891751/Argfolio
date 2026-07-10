@@ -75,9 +75,14 @@ describe('Binance → Nexo repair plan', () => {
             id: 'same-shape-old',
             datetimeISO: '2026-06-01T10:00:00.000Z',
         }
+        const linkedOutsideRepairAccounts = {
+            ...linkedLeg,
+            id: 'legacy-linked-other-account',
+            accountId: 'unrelated-exchange',
+        }
 
         const candidates = detectBinanceNexoLegacyCandidates(
-            [...movements, linkedLeg, outsideWindow],
+            [...movements, linkedLeg, outsideWindow, linkedOutsideRepairAccounts],
             {
                 accountIds: ['binance', 'nexo'],
                 occurredAtISO: '2026-07-09T12:00:00.000Z',
@@ -86,6 +91,7 @@ describe('Binance → Nexo repair plan', () => {
 
         expect(candidates.map(candidate => candidate.movement.id)).toContain('legacy-linked-leg')
         expect(candidates.map(candidate => candidate.movement.id)).not.toContain('same-shape-old')
+        expect(candidates.map(candidate => candidate.movement.id)).not.toContain('legacy-linked-other-account')
         expect(candidates.find(candidate => candidate.movement.id === 'legacy-linked-leg')?.confidence).toBe('medium')
     })
 })

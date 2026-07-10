@@ -1,5 +1,41 @@
 # Project Snapshot
 
+[CHECKPOINT #6] — Prompt 2: Reparación asistida Binance → Nexo (2026-07-10)
+
+Objetivo:
+- Reconstruir el caso Binance → Nexo de forma auditable: dry-run puro, conciliación por cuenta/activo, reemplazo lógico sin deletes, backup obligatorio, apply atómico, rollback lógico y UI sólo detrás de `?debug=1`.
+
+Implementado:
+- `operationStatus`: `posted`/legacy participa; `superseded` y `voided` quedan fuera de holdings, PPP/FIFO, caja, PnL, PF, Dashboard, Portfolio V2, detalles y asistentes de saldo. Movimientos V2 conserva el histórico con filtros y badges de estado.
+- Conciliación pura en `crypto-reconciliation.ts`, con targets editables, tolerancias por símbolo, before/after y acciones sugeridas sin escribir DB.
+- Ajustes auditables en `crypto-balance-adjustment.ts`: reward, rounding, fee, corrección manual, transferencia externa o causa pendiente; los ajustes desconocidos bloquean apply.
+- Planificador puro en `binance-nexo-repair-plan.ts`: detecta legacy en Binance/Nexo y ventana temporal, propone transferencias BTC/BNB/USDT, cinco swaps visibles a NEXO, diferencias NEXO/USDC y fingerprint del dataset completo.
+- Aplicador en `apply-repair-plan.ts`: revalida plan/selecciones/fingerprint, fuerza backup descargable, supersede + insert en una transacción Dexie, sincroniza por batch y nunca llama delete. Incluye rollback que anula patas nuevas y reactiva legacy, también con backup.
+- Panel `BinanceNexoRepairPanel` en Settings/debug: targets/fecha/precio editables, candidatos seleccionables, operaciones agrupadas, clasificación obligatoria, reporte proyectado, confirmación explícita, resultado y rollback.
+- Documentación operativa en `docs/ARGFOLIO_REPARACION_BINANCE_NEXO.md`.
+
+Hardening posterior a la auditoría:
+- Reclasificar un ajuste a reward ahora pone `unitPrice`, `totalAmount` y valuaciones históricas en cero, coherente con `costPolicy=zero_cost` y con el PnL futuro.
+- La expansión de patas legacy vinculadas se limita a movimientos cripto activos, cuentas Binance/Nexo y ventana elegida.
+- Se corrigió un warning de selección parcial que tenía texto UTF-8 corrupto.
+
+Seguridad y estado de datos:
+- No se ejecutó el panel ni se modificaron movimientos reales.
+- No se agregó migración ni tabla: la trazabilidad usa metadata opcional y compatible en `Movement`.
+- D1 sigue siendo autoritativo al arrancar; un fallo de push posterior al commit local se muestra como warning y requiere forzar reconciliación antes de editar en otro dispositivo.
+
+Validación:
+- `npm test -- --run`: 25 archivos, 195 tests ✅
+- `npm run build`: ✅; conserva warnings preexistentes de input CEDEAR ausente, orden de `@import`, chunk grande y browserslist desactualizado.
+- `npm run lint`: 0 errores, 151 warnings preexistentes.
+- `npx tsc --noEmit`: 0 errores.
+- QA navegador no destructivo: `/settings?debug=1` mostró el panel y los 8 targets; con dataset local incompleto, “Generar dry-run” informó `Falta el instrumento BNB` y no renderizó el botón de apply.
+
+Pendiente fuera de alcance:
+- El método contable consolidado sigue siendo PPP; FIFO/LIFO/Manual continúan como simulación.
+
+---
+
 [CHECKPOINT #5] — Prompt 1: Base contable cripto (2026-07-09)
 
 Objetivo:

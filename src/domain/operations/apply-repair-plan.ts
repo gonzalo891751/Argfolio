@@ -109,35 +109,36 @@ export async function applyRepairPlanWithStore(
         const reclassificationRequested = original.meta?.requiresManualReview === true
             && movement.meta?.adjustmentReason != null
             && movement.meta.adjustmentReason !== 'unknown'
-        const validReclassification = reclassificationRequested
-            && isAllowedAdjustmentReclassification(original, movement)
-        const protectedMetadataChanged = movement.meta?.operationKind !== original.meta?.operationKind
-            || movement.meta?.legRole !== original.meta?.legRole
-            || movement.meta?.direction !== original.meta?.direction
-            || movement.meta?.adjustmentReason !== original.meta?.adjustmentReason
-            || movement.meta?.costPolicy !== original.meta?.costPolicy
-            || movement.meta?.requiresManualReview !== original.meta?.requiresManualReview
-            || movement.meta?.repairPlanId !== original.meta?.repairPlanId
-        const typeChangedUnexpectedly = reclassificationRequested
-            ? !validReclassification
-            : movement.type !== original.type
-        const metadataChangedUnexpectedly = reclassificationRequested
-            ? !validReclassification
-            : protectedMetadataChanged
-        return typeChangedUnexpectedly
-            || metadataChangedUnexpectedly
-            || movement.assetClass !== original.assetClass
-            || movement.accountId !== original.accountId
-            || movement.instrumentId !== original.instrumentId
-            || movement.ticker !== original.ticker
-            || movement.quantity !== original.quantity
-            || movement.unitPrice !== original.unitPrice
-            || movement.totalAmount !== original.totalAmount
-            || movement.totalUSD !== original.totalUSD
-            || movement.totalARS !== original.totalARS
-            || movement.tradeCurrency !== original.tradeCurrency
-            || movement.datetimeISO !== original.datetimeISO
-            || getOperationId(movement) !== getOperationId(original)
+        if (reclassificationRequested && !isAllowedAdjustmentReclassification(original, movement)) return true
+
+        const expected = reclassificationRequested
+            ? reclassifyCryptoBalanceAdjustment(
+                original,
+                movement.meta?.adjustmentReason as CryptoAdjustmentReason,
+            )
+            : original
+        const protectedMetadataChanged = movement.meta?.operationKind !== expected.meta?.operationKind
+            || movement.meta?.legRole !== expected.meta?.legRole
+            || movement.meta?.direction !== expected.meta?.direction
+            || movement.meta?.adjustmentReason !== expected.meta?.adjustmentReason
+            || movement.meta?.costPolicy !== expected.meta?.costPolicy
+            || movement.meta?.requiresManualReview !== expected.meta?.requiresManualReview
+            || movement.meta?.repairPlanId !== expected.meta?.repairPlanId
+        return movement.type !== expected.type
+            || protectedMetadataChanged
+            || movement.assetClass !== expected.assetClass
+            || movement.accountId !== expected.accountId
+            || movement.instrumentId !== expected.instrumentId
+            || movement.ticker !== expected.ticker
+            || movement.quantity !== expected.quantity
+            || movement.unitPrice !== expected.unitPrice
+            || movement.totalAmount !== expected.totalAmount
+            || movement.totalUSD !== expected.totalUSD
+            || movement.totalARS !== expected.totalARS
+            || movement.netAmount !== expected.netAmount
+            || movement.tradeCurrency !== expected.tradeCurrency
+            || movement.datetimeISO !== expected.datetimeISO
+            || getOperationId(movement) !== getOperationId(expected)
     })
     if (alteredFinancialLeg) {
         return {

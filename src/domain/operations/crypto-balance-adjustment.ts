@@ -104,9 +104,15 @@ export function reclassifyCryptoBalanceAdjustment(
             ? 'Un fee debe disminuir el saldo.'
             : 'Un reward debe aumentar el saldo.')
     }
+    const becomesZeroCostIncome = reason === 'reward'
     return {
         ...movement,
         type: movementTypeFor(reason, isIncrease),
+        unitPrice: becomesZeroCostIncome ? 0 : movement.unitPrice,
+        totalAmount: becomesZeroCostIncome ? 0 : movement.totalAmount,
+        totalUSD: becomesZeroCostIncome ? 0 : movement.totalUSD,
+        totalARS: becomesZeroCostIncome && movement.totalARS != null ? 0 : movement.totalARS,
+        netAmount: becomesZeroCostIncome && movement.netAmount != null ? 0 : movement.netAmount,
         notes: movement.notes?.replace(/\([^)]*\)$/, `(${reason})`) ?? movement.notes,
         meta: {
             ...movement.meta,

@@ -169,6 +169,37 @@ describe('apply repair plan', () => {
         expect(await store.list()).toEqual(movements)
     })
 
+    it('accepts the exact reward reclassification and persists it with zero cost', async () => {
+        const { movements, plan } = fixturePlan()
+        const store = new MemoryRepairStore(movements)
+        const proposed = plan.proposedMovements.map(movement => movement.meta?.requiresManualReview
+            ? reclassifyCryptoBalanceAdjustment(
+                movement,
+                movement.ticker === 'NEXO' ? 'reward' : 'manual_correction',
+            )
+            : movement
+        )
+        const result = await applyRepairPlanWithStore(plan, store, {
+            confirmed: true,
+            proposedMovements: proposed,
+            createBackup: async () => 'backup.json',
+        })
+
+        expect(result.ok).toBe(true)
+        const reward = (await store.list()).find(movement =>
+            movement.meta?.repairPlanId === plan.id
+            && movement.ticker === 'NEXO'
+            && movement.meta?.adjustmentReason === 'reward'
+        )
+        expect(reward).toMatchObject({
+            type: 'INTEREST',
+            unitPrice: 0,
+            totalAmount: 0,
+            totalUSD: 0,
+            meta: { operationKind: 'income', costPolicy: 'zero_cost', requiresManualReview: false },
+        })
+    })
+
     it('rejects financial or protected metadata tampering after the dry-run', async () => {
         const { movements, plan } = fixturePlan()
         const store = new MemoryRepairStore(movements)

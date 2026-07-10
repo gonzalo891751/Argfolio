@@ -141,6 +141,9 @@ export function detectBinanceNexoLegacyCandidates(
     for (const candidate of candidates) {
         for (const sibling of findOperationLegs(candidate.movement, movements)) {
             if (expandedById.has(sibling.id)) continue
+            if (!isMovementActive(sibling) || sibling.assetClass !== 'crypto') continue
+            if (allowedAccounts && !allowedAccounts.has(sibling.accountId)) continue
+            if (!isWithinCandidateWindow(sibling, options.occurredAtISO, windowDays)) continue
             expandedById.set(sibling.id, {
                 movement: sibling,
                 reason: `Pata vinculada a ${candidate.movement.id}; revisar el grupo completo antes de reemplazar.`,
@@ -269,7 +272,7 @@ export function buildBinanceNexoRepairPlan(input: BinanceNexoRepairPlanInput): R
             .filter(id => detectedIds.has(id))
         if (candidateGroupIds.some(id => !selectedIds.has(id))) {
             warnings.push(
-                `SelecciÃ³n parcial del grupo legacy ${candidate.movement.id}; una pata vinculada quedarÃ¡ activa. Revisar antes de aplicar.`,
+                `Selección parcial del grupo legacy ${candidate.movement.id}; una pata vinculada quedará activa. Revisar antes de aplicar.`,
             )
         }
     }

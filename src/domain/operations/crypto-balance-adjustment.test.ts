@@ -34,12 +34,22 @@ describe('crypto balance adjustments', () => {
         const unknown = buildCryptoBalanceAdjustmentMovement({
             accountId: 'nexo', instrumentId: 'nexo-token', symbol: 'NEXO', diffQty: 0.11173359,
             reason: 'unknown', costPolicy: 'preserve_average', unitCostUsd: 0.74,
+            datetimeISO: '2026-07-09T00:00:00.000Z',
         })
         const reward = reclassifyCryptoBalanceAdjustment(unknown, 'reward')
+        const sale: Movement = {
+            id: 'reward-sale', datetimeISO: '2026-07-10T00:00:00.000Z', type: 'SELL', assetClass: 'crypto',
+            accountId: 'nexo', instrumentId: 'nexo-token', ticker: 'NEXO', quantity: 0.11173359, unitPrice: 1,
+            tradeCurrency: 'USD', totalAmount: 0.11173359, totalUSD: 0.11173359,
+        }
         expect(reward.type).toBe('INTEREST')
+        expect(reward.unitPrice).toBe(0)
+        expect(reward.totalAmount).toBe(0)
+        expect(reward.totalUSD).toBe(0)
         expect(reward.meta).toMatchObject({
             operationKind: 'income', adjustmentReason: 'reward', costPolicy: 'zero_cost', requiresManualReview: false,
         })
+        expect(computeRealizedPnL([reward, sale], fxRates).realizedUsd).toBeCloseTo(0.11173359, 10)
     })
 
     it('represents a small negative BTC fee without a fake SELL or realized PnL', () => {
