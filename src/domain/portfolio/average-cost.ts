@@ -5,6 +5,7 @@
  */
 
 import type { Movement } from '@/domain/types'
+import { filterActiveMovements } from '@/domain/operations/operation'
 
 export interface AverageCostResult {
     quantity: number
@@ -25,7 +26,7 @@ export function computeAverageCost(
     movements: Movement[]
 ): AverageCostResult {
     // 1. Sort by date ascending to build history
-    const sorted = [...movements].sort(
+    const sorted = filterActiveMovements(movements).sort(
         (a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime()
     )
 

@@ -21,6 +21,7 @@ import { syncMovementsBatch } from '@/sync/remote-sync'
 import { useToast } from '@/components/ui/toast'
 import { useAutoAccrueWalletInterest } from '@/hooks/use-preferences'
 import type { Movement } from '@/domain/types'
+import { isMovementActive } from '@/domain/operations/operation'
 
 const ACCRUAL_STORAGE_KEY = 'argfolio.lastAccrualRun'
 
@@ -72,6 +73,7 @@ function computeCashBalanceForAccount(movements: Movement[], accountId: string):
     let balance = 0
 
     for (const mov of movements) {
+        if (!isMovementActive(mov)) continue
         if (mov.accountId !== accountId) continue
 
         // Only count ARS cash-affecting movements

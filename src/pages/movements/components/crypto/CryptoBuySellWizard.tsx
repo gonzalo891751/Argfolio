@@ -14,6 +14,7 @@ import { allocateSale, COSTING_METHODS, type CostingMethod, type ManualAllocatio
 import type { LotDetail } from '@/features/portfolioV2/types'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
 import { WizardFooter } from '../ui/WizardFooter'
+import { isMovementActive } from '@/domain/operations/operation'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -133,6 +134,7 @@ export function CryptoBuySellWizard({
     const holdingsByTicker = useMemo(() => {
         const map = new Map<string, Map<string, number>>() // ticker -> accountId -> qty
         movements.forEach(m => {
+            if (!isMovementActive(m)) return
             if (m.assetClass !== 'crypto') return
             const ticker = m.ticker || instruments.find(i => i.id === m.instrumentId)?.symbol
             if (!ticker) return

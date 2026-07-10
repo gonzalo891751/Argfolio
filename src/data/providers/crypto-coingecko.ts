@@ -2,7 +2,7 @@
 
 // Map internal symbols to CoinGecko IDs
 // Add more as needed. Ideally this comes from a backend or configurable list.
-const COINGECKO_MAP: Record<string, string> = {
+export const COINGECKO_MAP: Record<string, string> = {
     BTC: 'bitcoin',
     ETH: 'ethereum',
     SOL: 'solana',
@@ -12,11 +12,17 @@ const COINGECKO_MAP: Record<string, string> = {
     LINK: 'chainlink',
     UNI: 'uniswap',
     AAVE: 'aave',
+    NEXO: 'nexo',
     // Stablecoins (usually overridden, but good to have map)
     USDT: 'tether',
     USDC: 'usd-coin',
     DAI: 'dai',
     BNB: 'binancecoin',
+}
+
+/** Resolve the CoinGecko id for an internal symbol (case-insensitive). */
+export function getCoingeckoId(symbol: string): string | null {
+    return COINGECKO_MAP[symbol.toUpperCase()] ?? null
 }
 
 export async function fetchCryptoPrices(symbols: string[]): Promise<Record<string, number>> {

@@ -189,13 +189,10 @@ export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean;
                 return typeof snapshot?.dateLocal === 'string' && snapshot.dateLocal.length > 0
             })
 
-<<<<<<< HEAD
-            // D1 is the single source of truth — replace local DB entirely.
-=======
             // Track remote IDs for reconciliation push
             const remoteMovementIds = new Set(movements.map(m => m.id))
 
->>>>>>> 7262d8101d6692d54190207b9ef61bba374f353a
+            // D1 is the single source of truth — replace local DB entirely.
             await db.transaction('rw', [db.accounts, db.movements, db.instruments, db.snapshots], async () => {
                 await db.accounts.clear()
                 await db.movements.clear()
@@ -352,6 +349,12 @@ function collectLocalPreferences(): Record<string, string> | null {
     const updatedAt = localStorage.getItem(PREFERENCES_UPDATED_AT_KEY)
     prefs['_updated_at'] = updatedAt || new Date().toISOString()
     return prefs
+}
+
+function toTimestampMs(value: string | null | undefined): number | null {
+    if (typeof value !== 'string' || value.length === 0) return null
+    const ms = Date.parse(value)
+    return Number.isNaN(ms) ? null : ms
 }
 
 function restorePreferencesFromRemote(

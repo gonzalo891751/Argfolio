@@ -17,6 +17,7 @@ import { listCedears } from '@/domain/cedears/master'
 import { sortAccountsForAssetClass } from '../wizard-helpers'
 import { formatMoneyARS } from '@/lib/format'
 import { WizardFooter } from '../ui/WizardFooter'
+import { isMovementActive } from '@/domain/operations/operation'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -214,6 +215,7 @@ export function CedearBuySellWizard({
     const holdingsByTicker = useMemo(() => {
         const map = new Map<string, Map<string, number>>()
         movements.forEach(m => {
+            if (!isMovementActive(m)) return
             if (m.assetClass !== 'cedear') return
             const ticker = m.ticker || instruments.find(i => i.id === m.instrumentId)?.symbol
             if (!ticker) return

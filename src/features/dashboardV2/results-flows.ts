@@ -1,4 +1,5 @@
 import type { Currency, Movement } from '@/domain/types'
+import { filterActiveMovements } from '@/domain/operations/operation'
 
 export type ResultsFlowRubroKey = 'wallets' | 'plazos' | 'cedears' | 'crypto' | 'fci'
 
@@ -269,9 +270,10 @@ export function computeNetFlowsByRubro(
     if (!Array.isArray(movements) || movements.length === 0) return result
     if (!fromISO || !toISO || fromISO >= toISO) return result
 
-    const pairedTransfers = collectPairedTransferIds(movements, fromISO, toISO)
+    const activeMovements = filterActiveMovements(movements)
+    const pairedTransfers = collectPairedTransferIds(activeMovements, fromISO, toISO)
 
-    for (const movement of movements) {
+    for (const movement of activeMovements) {
         const dateKey = toDateKey(movement.datetimeISO)
         if (!dateKey || !isInExclusiveRange(dateKey, fromISO, toISO)) continue
 

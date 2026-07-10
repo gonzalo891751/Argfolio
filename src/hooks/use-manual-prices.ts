@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { manualPricesRepo } from '@/db'
+import type { ManualPrice } from '@/domain/types'
 
 export function useManualPrices() {
     const queryClient = useQueryClient()
@@ -11,6 +12,10 @@ export function useManualPrices() {
 
     const priceMap = new Map<string, number>()
     prices.forEach(p => priceMap.set(p.instrumentId, p.price))
+
+    // Full entries (price + updatedAtISO) so consumers can show when the manual price was set
+    const entryMap = new Map<string, ManualPrice>()
+    prices.forEach(p => entryMap.set(p.instrumentId, p))
 
     const setPriceMutation = useMutation({
         mutationFn: async ({ instrumentId, price }: { instrumentId: string; price: number }) => {
@@ -39,9 +44,9 @@ export function useManualPrices() {
     return {
         prices,
         priceMap,
+        entryMap,
         setPrice: (instrumentId: string, price: number) => setPriceMutation.mutate({ instrumentId, price }),
         deletePrice: (instrumentId: string) => deletePriceMutation.mutate(instrumentId),
         isLoading,
     }
 }
-

@@ -1,4 +1,5 @@
 import type { Movement, Snapshot } from '@/domain/types'
+import { filterActiveMovements } from '@/domain/operations/operation'
 import type { PortfolioV2, ItemV2 } from '@/features/portfolioV2'
 import { computeDrivers, type DriverCategoryDelta } from './snapshot-helpers'
 import { buildSnapshotFromPortfolioV2 } from './snapshot-v2'
@@ -604,7 +605,7 @@ export function computeDashboardMetrics({
     const netIncomeResult = buildNetIncome(
         portfolio,
         snapshotsAsc,
-        movements,
+        filterActiveMovements(movements),
         range,
         todayKey,
         timeZone

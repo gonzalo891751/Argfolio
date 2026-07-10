@@ -33,6 +33,7 @@ import type { AccountSettings, RubroOverride } from '@/db/schema'
 import type { FxOverride, FxOverridesMap } from './fxOverrides'
 import { buildFifoLots } from '@/domain/portfolio/fifo'
 import type { PriceResult } from '@/domain/prices/price-result'
+import { filterActiveMovements } from '@/domain/operations/operation'
 
 // =============================================================================
 // Rubro Configuration
@@ -498,6 +499,41 @@ function buildItemFromMetrics(
                     }
                 }
             }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Missing price guard: a tradeable asset (crypto/cedear/fci/stable)
+    // with qty > 0 and NO price must never be valued at 0 nor shown as a
+    // -100% loss. We keep val* at 0 as neutral placeholders (so provider
+    // totals don't sum fake values), flag valueMissing and omit PnL.
+    // ------------------------------------------------------------------
+    const isCashKind = kind === 'cash_ars' || kind === 'cash_usd' || kind === 'wallet_yield'
+    const hasUpstreamValuation = (metrics.valArs != null && metrics.valArs !== 0)
+        || (metrics.valUsdEq != null && metrics.valUsdEq !== 0)
+    const priceIsMissing = !isCashKind
+        && (metrics.quantity ?? 0) > 0
+        && !hasUpstreamValuation
+        && (priceResult == null || priceResult.status === 'missing')
+
+    if (priceIsMissing) {
+        return {
+            id: `${accountId}-${metrics.instrumentId || metrics.symbol}`,
+            kind,
+            symbol: metrics.symbol,
+            label: metrics.name || metrics.symbol,
+            qty: metrics.quantity,
+            valArs: 0,
+            valUsd: 0,
+            pnlArs: undefined,
+            pnlUsd: undefined,
+            pnlPct: undefined,
+            valueMissing: true,
+            accountId,
+            instrumentId: metrics.instrumentId,
+            fxMeta,
+            priceMeta,
+            priceResult: priceResult ?? { price: null, status: 'missing', source: 'missing', asOf: null },
         }
     }
 
@@ -1143,7 +1179,8 @@ export interface BuildPortfolioV2Input {
 }
 
 export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
-    const { groupedRows, accounts, fxRates, movements, pfData, accountSettings = [], fxOverrides } = input
+    const { groupedRows, accounts, fxRates, movements: allMovements, pfData, accountSettings = [], fxOverrides } = input
+    const movements = filterActiveMovements(allMovements)
 
     const fxSnapshot = buildFxSnapshot(fxRates)
     const lastTrades = buildLastTradeUnitPriceIndex(movements)
@@ -1398,17 +1435,21 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
                 // Build FIFO lots
                 const fifoResult = buildFifoLots(assetMovements)
 
-                // Current price: derive from item value / qty
-                const currentPriceUsd = (item.qty && item.qty > 0)
+                // Current price: derive from item value / qty.
+                // When the price is missing the item was NOT valued: keep
+                // neutral zeros and flag valueMissing so the UI renders
+                // "no disponible" instead of $0 / -100%.
+                const priceMissing = item.valueMissing === true
+                const currentPriceUsd = (!priceMissing && item.qty && item.qty > 0)
                     ? item.valUsd / item.qty
                     : 0
 
                 // Map FIFO lots to LotDetail
                 const lots: LotDetail[] = fifoResult.lots.map((lot, idx) => {
-                    const currentVal = lot.quantity * currentPriceUsd
                     const costVal = lot.quantity * lot.unitCostUsd
-                    const pnl = currentVal - costVal
-                    const pnlPct = costVal > 0 ? pnl / costVal : 0
+                    const currentVal = priceMissing ? 0 : lot.quantity * currentPriceUsd
+                    const pnl = priceMissing ? 0 : currentVal - costVal
+                    const pnlPct = (!priceMissing && costVal > 0) ? pnl / costVal : 0
 
                     return {
                         id: `${item.id}-lot-${idx}`,
@@ -1425,11 +1466,11 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
                 const totalQty = fifoResult.totalQuantity
                 const totalCostUsd = fifoResult.totalCostUsd
                 const avgCostUsd = totalQty > 0 ? totalCostUsd / totalQty : 0
-                const currentValueUsd = totalQty * currentPriceUsd
+                const currentValueUsd = priceMissing ? 0 : totalQty * currentPriceUsd
                 const currentValueArs = currentValueUsd * criptoSellRate
-                const pnlUsd = currentValueUsd - totalCostUsd
+                const pnlUsd = priceMissing ? 0 : currentValueUsd - totalCostUsd
                 const pnlArs = pnlUsd * criptoSellRate
-                const pnlPct = totalCostUsd > 0 ? pnlUsd / totalCostUsd : 0
+                const pnlPct = (!priceMissing && totalCostUsd > 0) ? pnlUsd / totalCostUsd : 0
 
                 cryptoDetails.set(item.id, {
                     instrumentId: item.instrumentId || item.symbol,
@@ -1446,6 +1487,8 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
                     pnlPct,
                     lots,
                     fxUsed: 'Cripto',
+                    priceResult: item.priceResult,
+                    valueMissing: priceMissing || undefined,
                 })
             }
         }

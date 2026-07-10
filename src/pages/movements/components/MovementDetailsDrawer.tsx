@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Copy, Edit, Trash2 } from 'lucide-react'
+import { X, Copy, Edit, Trash2, Link2, AlertTriangle } from 'lucide-react'
 import type { Movement, Instrument, Account } from '@/domain/types'
 import { formatMoneyARS, formatMoneyUSD, formatQty } from '@/lib/format'
+import { inferOperationKind } from '@/domain/operations/operation'
+import { cn } from '@/lib/utils'
 import { getMovementAssetDisplay } from './utils'
 
 interface MovementDetailsDrawerProps {
@@ -11,9 +13,25 @@ interface MovementDetailsDrawerProps {
     movement: Movement | null
     instrument?: Instrument | null
     account?: Account | null
+    /** All legs of the operation this movement belongs to (including itself) */
+    operationLegs?: Movement[]
+    instrumentsMap?: Map<string, Instrument>
+    accountsMap?: Map<string, Account>
     onDuplicate?: (movement: Movement) => void
     onEdit?: (movement: Movement) => void
     onDelete?: (movementId: string) => void
+    /** Navigate the drawer to another leg of the same operation */
+    onSelectLeg?: (movement: Movement) => void
+}
+
+const OPERATION_KIND_LABELS: Record<string, string> = {
+    transfer: 'Transferencia',
+    swap: 'Swap / Conversión',
+    trade: 'Operación',
+    income: 'Ingreso',
+    fee: 'Comisión',
+    balance_adjustment: 'Ajuste de saldo',
+    unknown: 'Operación vinculada',
 }
 
 export function MovementDetailsDrawer({
@@ -22,9 +40,12 @@ export function MovementDetailsDrawer({
     movement,
     instrument,
     account,
+    operationLegs = [],
+    accountsMap,
     onDuplicate,
     onEdit,
     onDelete,
+    onSelectLeg,
 }: MovementDetailsDrawerProps) {
     // ESC to close
     useEffect(() => {
@@ -78,6 +99,23 @@ export function MovementDetailsDrawer({
     // ... (in component)
     const assetDisplay = getMovementAssetDisplay(movement, instrument, account)
 
+    // Compound operation context
+    const isGroupedOperation = operationLegs.length > 1
+    const operationKind = isGroupedOperation ? inferOperationKind(operationLegs) : null
+    const operationKindLabel = operationKind ? (OPERATION_KIND_LABELS[operationKind] ?? 'Operación vinculada') : null
+    const operationStatus = movement.meta?.operationStatus ?? 'posted'
+
+    const legRoleLabel = (leg: Movement): string => {
+        const role = leg.meta?.legRole
+        if (role === 'source') return 'Origen'
+        if (role === 'destination') return 'Destino'
+        if (role === 'fee') return 'Fee'
+        if (leg.type === 'TRANSFER_OUT') return 'Origen'
+        if (leg.type === 'TRANSFER_IN') return 'Destino'
+        if (leg.type === 'FEE') return 'Fee'
+        return getTypeLabel(leg.type)
+    }
+
     return createPortal(
         <>
             {/* Backdrop */}
@@ -120,6 +158,69 @@ export function MovementDetailsDrawer({
                             </span>
                         </div>
                     </div>
+
+                    {operationStatus !== 'posted' && (
+                        <div className={cn(
+                            'rounded-xl border px-4 py-3 text-sm',
+                            operationStatus === 'superseded'
+                                ? 'border-amber-500/25 bg-amber-500/10 text-amber-200'
+                                : 'border-rose-500/25 bg-rose-500/10 text-rose-200'
+                        )}>
+                            <strong>{operationStatus === 'superseded' ? 'Movimiento reemplazado' : 'Movimiento anulado'}.</strong>{' '}
+                            Se conserva para auditoría, pero no participa en tenencias, caja ni resultados.
+                        </div>
+                    )}
+
+                    {/* COMPOUND OPERATION: legs + warning */}
+                    {isGroupedOperation && (
+                        <div className="p-4 rounded-xl bg-sky-500/10 border border-sky-500/20 space-y-3">
+                            <h4 className="text-sky-400 font-bold text-sm uppercase tracking-wider flex items-center gap-2">
+                                <Link2 className="w-4 h-4" />
+                                {operationKindLabel} · {operationLegs.length} patas
+                            </h4>
+
+                            <div className="space-y-1.5">
+                                {operationLegs.map(leg => {
+                                    const legAccount = accountsMap?.get(leg.accountId)
+                                    const isCurrent = leg.id === movement.id
+                                    return (
+                                        <button
+                                            key={leg.id}
+                                            onClick={() => !isCurrent && onSelectLeg?.(leg)}
+                                            className={cn(
+                                                'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-mono transition text-left',
+                                                isCurrent
+                                                    ? 'bg-sky-500/20 border border-sky-500/30 cursor-default'
+                                                    : 'bg-white/5 border border-white/5 hover:bg-white/10 cursor-pointer'
+                                            )}
+                                        >
+                                            <span className="text-slate-400 shrink-0">{legRoleLabel(leg)}</span>
+                                            <span className="text-white truncate">
+                                                {legAccount?.name ?? leg.accountId}
+                                            </span>
+                                            <span className="text-slate-300 shrink-0">
+                                                {leg.quantity != null ? formatQty(leg.quantity, 'CRYPTO') : '—'} {leg.ticker ?? ''}
+                                            </span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+
+                            {movement.meta?.txHash && (
+                                <div className="text-[10px] font-mono text-slate-500 truncate" title={movement.meta.txHash}>
+                                    Tx: {movement.meta.txHash}
+                                </div>
+                            )}
+
+                            <div className="flex items-start gap-2 text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                                <span>
+                                    Editar o borrar una pata individual puede desbalancear esta operación
+                                    y alterar tenencias/costos.
+                                </span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* SPECIAL PF BREAKDOWN */}
                     {(movement.meta?.fixedDeposit || movement.pf) && (

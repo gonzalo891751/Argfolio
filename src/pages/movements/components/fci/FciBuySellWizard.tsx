@@ -39,6 +39,7 @@ import { allocateSale, COSTING_METHODS, type CostingMethod, type ManualAllocatio
 import type { LotDetail } from '@/features/portfolioV2/types'
 import { LotTable } from '../ui/LotTable'
 import { CostMethodPicker } from '../ui/CostMethodPicker'
+import { isMovementActive } from '@/domain/operations/operation'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -248,6 +249,7 @@ export function FciBuySellWizard({
         // Map<accountId, Map<instrumentId, qty>>
         const map = new Map<string, Map<string, number>>()
         movements.forEach(m => {
+            if (!isMovementActive(m)) return
             if (m.assetClass !== 'fci') return
             const instId = m.instrumentId
             if (!instId) return

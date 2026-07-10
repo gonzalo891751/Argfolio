@@ -19,6 +19,12 @@ interface ManualPriceDialogProps {
     currentPrice: number | undefined
     isOpen: boolean
     onOpenChange: (open: boolean) => void
+    /** Currency of the manual price. Crypto uses USD; ARS-native assets use ARS. */
+    currency?: 'ARS' | 'USD'
+    /** ISO timestamp of the existing manual price (shown for transparency) */
+    updatedAtISO?: string
+    /** True if currentPrice comes from an existing manual override (enables "Volver a AUTO") */
+    isManual?: boolean
 }
 
 export function ManualPriceDialog({
@@ -27,8 +33,11 @@ export function ManualPriceDialog({
     currentPrice,
     isOpen,
     onOpenChange,
+    currency = 'ARS',
+    updatedAtISO,
+    isManual,
 }: ManualPriceDialogProps) {
-    const { setPrice } = useManualPrices()
+    const { setPrice, deletePrice } = useManualPrices()
     const [priceInput, setPriceInput] = useState('')
 
     useEffect(() => {
@@ -47,13 +56,13 @@ export function ManualPriceDialog({
         }
     }
 
-    const { deletePrice } = useManualPrices()
-
     const handleDelete = () => {
         deletePrice(instrumentId)
         setIsConfirmOpen(false)
         onOpenChange(false)
     }
+
+    const currencyLabel = currency === 'USD' ? 'Dólares (USD)' : 'Pesos (ARS)'
 
     return (
         <>
@@ -62,31 +71,38 @@ export function ManualPriceDialog({
                     <DialogHeader>
                         <DialogTitle>Actualizar precio de {symbol}</DialogTitle>
                         <DialogDescription>
-                            Ingresá el precio actual en Pesos (ARS) para este activo.
+                            Ingresá el precio actual en {currencyLabel} para este activo.
+                            Se usará como precio manual hasta que lo quites.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="price" className="text-right">
-                                Precio ARS
+                                Precio {currency}
                             </Label>
                             <Input
                                 id="price"
                                 type="number"
-                                step="0.01"
+                                step="any"
+                                min="0"
                                 value={priceInput}
                                 onChange={(e) => setPriceInput(e.target.value)}
                                 className="col-span-3"
                             />
                         </div>
-                        {currentPrice && (
+                        {currentPrice != null && currentPrice > 0 && (
                             <div className="text-sm text-muted-foreground text-center">
-                                Precio actual: {formatCurrency(currentPrice, 'ARS')}
+                                Precio actual: {formatCurrency(currentPrice, currency)}
+                                {isManual && updatedAtISO && (
+                                    <span className="block text-xs mt-0.5">
+                                        Manual, cargado el {new Date(updatedAtISO).toLocaleString('es-AR')}
+                                    </span>
+                                )}
                             </div>
                         )}
                     </div>
                     <DialogFooter className="flex !justify-between gap-2 sm:gap-0">
-                        {currentPrice !== undefined && (
+                        {isManual && (
                             <Button
                                 variant="destructive"
                                 type="button"
@@ -111,7 +127,8 @@ export function ManualPriceDialog({
                     <DialogHeader>
                         <DialogTitle>Quitar precio manual</DialogTitle>
                         <DialogDescription>
-                            Este activo volverá a usar el precio automático (PPI) si está disponible.
+                            Este activo volverá a usar el precio automático si está disponible.
+                            Si no hay cotización, se mostrará como "Sin precio".
                             ¿Estás seguro?
                         </DialogDescription>
                     </DialogHeader>

@@ -184,6 +184,13 @@ export interface ItemV2 {
     /** Uniform pricing status for UI (all asset types) */
     priceResult?: PriceResult
 
+    /**
+     * True when the market price is missing and the item could NOT be valued.
+     * valArs/valUsd stay at 0 only as neutral placeholders — the UI must render
+     * "Valor no disponible" and never a real $0 valuation or -100% loss.
+     */
+    valueMissing?: boolean
+
     /** Reference to source data */
     accountId: string
     instrumentId?: string
@@ -301,6 +308,13 @@ export interface CryptoDetail {
     pnlPct: number
     lots: LotDetail[]
     fxUsed: 'Cripto'
+    /** Uniform pricing status for UI (missing / estimated / manual / stale) */
+    priceResult?: PriceResult
+    /**
+     * True when there is no market price: currentPrice/currentValue/pnl are
+     * neutral zeros and must be rendered as "no disponible", not $0 / -100%.
+     */
+    valueMissing?: boolean
 }
 
 export interface FciLotDetail {

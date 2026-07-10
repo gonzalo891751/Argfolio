@@ -14,11 +14,14 @@
 
 import { useMemo, useState, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Bitcoin, ArrowUpDown, ChevronUp, ChevronDown, Info } from 'lucide-react'
+import { ArrowLeft, Bitcoin, ArrowUpDown, ChevronUp, ChevronDown, Info, PencilLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD, formatDeltaMoneyUSD, formatQty } from '@/lib/format'
 import { usePortfolioV2 } from '@/features/portfolioV2'
 import type { CryptoDetail, LotDetail, ItemV2, ProviderV2 } from '@/features/portfolioV2/types'
+import { ManualPriceDialog } from '@/components/assets/ManualPriceDialog'
+import { CryptoTransferDialog, CryptoSwapDialog } from '@/pages/movements/components/crypto'
+import { useManualPrices } from '@/hooks/use-manual-prices'
 import { useCostingMethod } from '@/hooks/use-preferences'
 import {
     allocateSale,
@@ -81,6 +84,14 @@ export function CryptoDetailPage() {
     const createMovement = useCreateMovement()
     const createInstrument = useCreateInstrument()
     const { toast } = useToast()
+
+    // Manual price dialog state
+    const [isManualPriceOpen, setIsManualPriceOpen] = useState(false)
+    const { entryMap: manualPriceEntries } = useManualPrices()
+
+    // Transfer / Swap dialogs (Fase 4/5)
+    const [isTransferOpen, setIsTransferOpen] = useState(false)
+    const [isSwapOpen, setIsSwapOpen] = useState(false)
 
     // Find the item + provider in the crypto rubro
     const found = useMemo((): { item: ItemV2; provider: ProviderV2; detail: CryptoDetail } | null => {
@@ -349,6 +360,11 @@ export function CryptoDetailPage() {
     const { item, provider, detail } = found
     const totalHolding = detail.totalQty
 
+    // Price status: missing / manual / estimated
+    const priceMissing = detail.valueMissing === true
+    const manualEntry = item.instrumentId ? manualPriceEntries.get(item.instrumentId) : undefined
+    const isManualPrice = detail.priceResult?.source === 'manual'
+
     return (
         <div className="max-w-5xl mx-auto space-y-6 pb-12">
             {/* Breadcrumb + Actions */}
@@ -370,13 +386,41 @@ export function CryptoDetailPage() {
                         <span className="text-foreground font-medium">{item.label}</span>
                     </nav>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <div className="px-3 py-1 rounded bg-background border border-border text-[10px] font-mono text-muted-foreground">
                         TC Venta: <span className="text-sky-400 font-bold">${criptoSellRate.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <button
-                        onClick={() => navigate('/movements')}
-                        className="p-2 rounded-lg text-primary border border-primary/30 hover:bg-primary/10 transition text-xs font-medium"
+                        onClick={() => setIsTransferOpen(true)}
+                        className="px-3 py-2 rounded-lg text-sky-400 border border-sky-500/30 hover:bg-sky-500/10 transition text-xs font-medium"
+                    >
+                        Transferir
+                    </button>
+                    <button
+                        onClick={() => setIsSwapOpen(true)}
+                        className="px-3 py-2 rounded-lg text-violet-400 border border-violet-500/30 hover:bg-violet-500/10 transition text-xs font-medium"
+                    >
+                        Convertir
+                    </button>
+                    {(priceMissing || isManualPrice) && (
+                        <button
+                            onClick={() => setIsManualPriceOpen(true)}
+                            className="px-3 py-2 rounded-lg text-amber-400 border border-amber-500/30 hover:bg-amber-500/10 transition text-xs font-medium"
+                        >
+                            Precio manual
+                        </button>
+                    )}
+                    <button
+                        onClick={() => navigate('/movements', {
+                            state: {
+                                movementFilters: {
+                                    accountId: item.accountId,
+                                    assetKey: item.instrumentId ?? 'all',
+                                    datePreset: 'all',
+                                },
+                            },
+                        })}
+                        className="px-3 py-2 rounded-lg text-primary border border-primary/30 hover:bg-primary/10 transition text-xs font-medium"
                     >
                         Ver Movimientos
                     </button>
@@ -401,7 +445,11 @@ export function CryptoDetailPage() {
                                     </p>
                                 </div>
                             </div>
-                            {detail.pnlPct !== 0 && (
+                            {priceMissing ? (
+                                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-sm font-mono font-medium border bg-rose-500/10 text-rose-400 border-rose-500/20">
+                                    Sin precio
+                                </div>
+                            ) : detail.pnlPct !== 0 && (
                                 <div className={cn(
                                     "inline-flex items-center gap-1.5 px-2 py-1 rounded text-sm font-mono font-medium border",
                                     detail.pnlPct >= 0
@@ -414,13 +462,44 @@ export function CryptoDetailPage() {
                         </div>
                         <div className="space-y-1">
                             <div className="text-sm font-mono text-muted-foreground">Valor de Mercado</div>
-                            <div className="text-4xl md:text-5xl font-mono font-medium tracking-tight flex items-baseline gap-2">
-                                {formatMoneyUSD(detail.currentValueUsd)}
-                                <span className="text-lg text-muted-foreground font-normal">USD</span>
-                            </div>
-                            <div className="text-lg font-mono text-emerald-400">
-                                ≈ {formatMoneyARS(detail.currentValueArs)} ARS
-                            </div>
+                            {priceMissing ? (
+                                <>
+                                    <div className="text-2xl md:text-3xl font-mono font-medium tracking-tight text-muted-foreground italic">
+                                        No disponible
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                        No hay cotización para {item.symbol}. Podés cargar un precio manual para valuar la posición.
+                                    </p>
+                                    <button
+                                        onClick={() => setIsManualPriceOpen(true)}
+                                        className="mt-2 inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition"
+                                    >
+                                        <PencilLine className="h-4 w-4" />
+                                        Cargar precio manual
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="text-4xl md:text-5xl font-mono font-medium tracking-tight flex items-baseline gap-2">
+                                        {formatMoneyUSD(detail.currentValueUsd)}
+                                        <span className="text-lg text-muted-foreground font-normal">USD</span>
+                                    </div>
+                                    <div className="text-lg font-mono text-emerald-400">
+                                        ≈ {formatMoneyARS(detail.currentValueArs)} ARS
+                                    </div>
+                                    {isManualPrice && (
+                                        <p className="text-xs font-mono text-amber-400">
+                                            Precio manual{detail.priceResult?.asOf ? ` · ${new Date(detail.priceResult.asOf).toLocaleString('es-AR')}` : ''}
+                                            <button
+                                                onClick={() => setIsManualPriceOpen(true)}
+                                                className="ml-2 underline hover:text-amber-300"
+                                            >
+                                                Editar
+                                            </button>
+                                        </p>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -441,7 +520,20 @@ export function CryptoDetailPage() {
                         </div>
                         <div>
                             <div className="text-[10px] font-mono text-muted-foreground uppercase">Precio Actual</div>
-                            <div className="text-sm font-mono text-primary mt-1">{formatMoneyUSD(detail.currentPriceUsd)}</div>
+                            {priceMissing ? (
+                                <button
+                                    onClick={() => setIsManualPriceOpen(true)}
+                                    className="text-sm font-mono text-rose-400 mt-1 underline decoration-dotted hover:text-rose-300"
+                                    title="Sin precio disponible. Click para cargar precio manual."
+                                >
+                                    No disponible
+                                </button>
+                            ) : (
+                                <div className="text-sm font-mono text-primary mt-1">
+                                    {formatMoneyUSD(detail.currentPriceUsd)}
+                                    {isManualPrice && <span className="ml-1 text-[9px] text-amber-400 align-top">MANUAL</span>}
+                                </div>
+                            )}
                         </div>
                         <div>
                             <div className="text-[10px] font-mono text-muted-foreground uppercase">Invertido</div>
@@ -449,12 +541,18 @@ export function CryptoDetailPage() {
                         </div>
                         <div>
                             <div className="text-[10px] font-mono text-muted-foreground uppercase">Ganancia Total</div>
-                            <div className={cn(
-                                "text-sm font-mono mt-1 font-bold",
-                                detail.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                            )}>
-                                {formatDeltaMoneyUSD(detail.pnlUsd)} ({formatPnlPct(detail.pnlPct)})
-                            </div>
+                            {priceMissing ? (
+                                <div className="text-sm font-mono mt-1 text-muted-foreground italic" title="PnL no calculable sin precio de mercado">
+                                    No calculable
+                                </div>
+                            ) : (
+                                <div className={cn(
+                                    "text-sm font-mono mt-1 font-bold",
+                                    detail.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                )}>
+                                    {formatDeltaMoneyUSD(detail.pnlUsd)} ({formatPnlPct(detail.pnlPct)})
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -543,6 +641,7 @@ export function CryptoDetailPage() {
                                                 key={lot.id}
                                                 lot={lot}
                                                 onSell={handleSellFromLot}
+                                                priceMissing={priceMissing}
                                             />
                                         ))}
                                     </tbody>
@@ -557,12 +656,18 @@ export function CryptoDetailPage() {
                             <span className="text-muted-foreground">
                                 {sortedLots.length} lote{sortedLots.length !== 1 ? 's' : ''} · {COSTING_METHODS.find(m => m.value === costingMethod)?.label ?? costingMethod}
                             </span>
-                            <span className={cn(
-                                "font-bold",
-                                detail.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                            )}>
-                                Total: {formatDeltaMoneyUSD(detail.pnlUsd)} ({formatPnlPct(detail.pnlPct)})
-                            </span>
+                            {priceMissing ? (
+                                <span className="text-muted-foreground italic">
+                                    PnL no calculable (sin precio)
+                                </span>
+                            ) : (
+                                <span className={cn(
+                                    "font-bold",
+                                    detail.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                )}>
+                                    Total: {formatDeltaMoneyUSD(detail.pnlUsd)} ({formatPnlPct(detail.pnlPct)})
+                                </span>
+                            )}
                         </div>
                     )}
                 </div>
@@ -788,6 +893,32 @@ export function CryptoDetailPage() {
                     </div>
                 </div>
             )}
+
+            {/* Manual price dialog (USD) */}
+            {item.instrumentId && (
+                <ManualPriceDialog
+                    instrumentId={item.instrumentId}
+                    symbol={item.symbol}
+                    currentPrice={isManualPrice ? manualEntry?.price : (priceMissing ? undefined : detail.currentPriceUsd)}
+                    isOpen={isManualPriceOpen}
+                    onOpenChange={setIsManualPriceOpen}
+                    currency="USD"
+                    updatedAtISO={manualEntry?.updatedAtISO}
+                    isManual={isManualPrice}
+                />
+            )}
+
+            {/* Transfer / Swap dialogs */}
+            <CryptoTransferDialog
+                open={isTransferOpen}
+                onOpenChange={setIsTransferOpen}
+                prefill={{ accountId: item.accountId, instrumentId: item.instrumentId, symbol: item.symbol }}
+            />
+            <CryptoSwapDialog
+                open={isSwapOpen}
+                onOpenChange={setIsSwapOpen}
+                prefill={{ accountId: item.accountId, sourceInstrumentId: item.instrumentId }}
+            />
         </div>
     )
 }
@@ -837,9 +968,11 @@ function SortableHeader({
 function LotRow({
     lot,
     onSell,
+    priceMissing,
 }: {
     lot: LotDetail
     onSell: (lot: LotDetail) => void
+    priceMissing?: boolean
 }) {
     const pnlPositive = lot.pnlNative >= 0
 
@@ -858,17 +991,21 @@ function LotRow({
                 {formatMoneyUSD(lot.totalCostNative)}
             </td>
             <td className="px-6 py-4 text-right text-xs">
-                {formatMoneyUSD(lot.currentValueNative)}
+                {priceMissing ? <span className="text-muted-foreground">—</span> : formatMoneyUSD(lot.currentValueNative)}
             </td>
             <td className="px-6 py-4 text-right">
-                <span className={cn(
-                    "px-2 py-0.5 rounded text-[10px] font-bold border",
-                    pnlPositive
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                )}>
-                    {pnlPositive ? '+' : ''}{formatMoneyUSD(lot.pnlNative)} ({formatPnlPct(lot.pnlPct)})
-                </span>
+                {priceMissing ? (
+                    <span className="text-muted-foreground text-[10px]" title="PnL no calculable sin precio de mercado">—</span>
+                ) : (
+                    <span className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-bold border",
+                        pnlPositive
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                    )}>
+                        {pnlPositive ? '+' : ''}{formatMoneyUSD(lot.pnlNative)} ({formatPnlPct(lot.pnlPct)})
+                    </span>
+                )}
             </td>
             <td className="px-6 py-4 text-right">
                 <button

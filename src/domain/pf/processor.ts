@@ -1,6 +1,7 @@
 
 import { Movement, FxRates } from '@/domain/types'
 import { PFPosition } from './types'
+import { filterActiveMovements } from '@/domain/operations/operation'
 
 export interface PFTotals {
     totalActiveARS: number
@@ -50,8 +51,9 @@ export function derivePFPositions(movements: Movement[] | undefined, fxRates: Fx
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
     // 1. Identify Constitutions (BUY) and Redemptions (SELL)
-    const constitutions = movements.filter(m => m.assetClass === 'pf' && (m.type === 'BUY' || m.type === 'DEPOSIT')) // Usually BUY
-    const redemptions = movements.filter(m => m.assetClass === 'pf' && (m.type === 'SELL' || m.type === 'WITHDRAW')) // Usually SELL
+    const activeMovements = filterActiveMovements(movements)
+    const constitutions = activeMovements.filter(m => m.assetClass === 'pf' && (m.type === 'BUY' || m.type === 'DEPOSIT')) // Usually BUY
+    const redemptions = activeMovements.filter(m => m.assetClass === 'pf' && (m.type === 'SELL' || m.type === 'WITHDRAW')) // Usually SELL
 
     // Official Exchange Rate (Current)
     // Use 'buy' for converting ARS assets to USD? Or 'sell'?

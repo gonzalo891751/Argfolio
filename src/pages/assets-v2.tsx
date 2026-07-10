@@ -10,7 +10,7 @@
  * - No flickering (accrual moved to global scheduler)
  */
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, createContext, useContext } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { formatMoneyARS, formatMoneyUSD, formatPercent, formatDeltaMoneyARS, formatDeltaMoneyUSD } from '@/lib/format'
@@ -44,7 +44,25 @@ import {
     ChevronsDownUp,
     ChevronsUpDown,
     Zap,
+    MoreVertical,
+    ArrowLeftRight,
+    Repeat2,
+    PencilLine,
+    ShoppingCart,
+    Banknote,
+    ListFilter,
+    Eye,
 } from 'lucide-react'
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
+import { CryptoTransferDialog, CryptoSwapDialog } from '@/pages/movements/components/crypto'
+import { ManualPriceDialog } from '@/components/assets/ManualPriceDialog'
+import { useManualPrices } from '@/hooks/use-manual-prices'
 import { useAutomationTrigger } from '@/hooks/use-automation-trigger'
 import { PreferencesSheet } from '@/components/PreferencesSheet'
 import { AssetsKpiTop } from '@/components/AssetsKpiTop'
@@ -122,6 +140,21 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 }
 
 // =============================================================================
+// Crypto Quick Actions (Fase 6) — context to avoid prop-drilling to ItemRow
+// =============================================================================
+
+export type CryptoQuickAction =
+    | 'detail'
+    | 'movements'
+    | 'buy'
+    | 'sell'
+    | 'transfer'
+    | 'swap'
+    | 'manual-price'
+
+const CryptoQuickActionsContext = createContext<((action: CryptoQuickAction, item: ItemV2) => void) | null>(null)
+
+// =============================================================================
 // Main Page Component
 // =============================================================================
 
@@ -135,6 +168,12 @@ export function AssetsPageV2() {
     const { toast } = useToast()
     const { getOverride, setOverride, clearOverride } = useFxOverrides()
     const { runAutomationsNow, isRunning: isAutomationRunning } = useAutomationTrigger()
+
+    // Crypto quick actions (Fase 6)
+    const { entryMap: manualPriceEntries } = useManualPrices()
+    const [transferPrefill, setTransferPrefill] = useState<{ accountId?: string; instrumentId?: string; symbol?: string } | null>(null)
+    const [swapPrefill, setSwapPrefill] = useState<{ accountId?: string; sourceInstrumentId?: string } | null>(null)
+    const [manualPriceItem, setManualPriceItem] = useState<ItemV2 | null>(null)
     const { data: snapshots = [] } = useSnapshots()
 
     // Results period state (persisted in localStorage)
@@ -344,6 +383,61 @@ export function AssetsPageV2() {
         setSelectedProvider(null)
     }
 
+    // Crypto quick actions dispatcher (Fase 6)
+    const handleCryptoQuickAction = (action: CryptoQuickAction, item: ItemV2) => {
+        const accountId = item.accountId
+        switch (action) {
+            case 'detail':
+                navigate(`/mis-activos-v2/cripto/${accountId}/${item.symbol}`)
+                break
+            case 'movements':
+                navigate('/movements', {
+                    state: {
+                        movementFilters: {
+                            accountId,
+                            assetKey: item.instrumentId ?? 'all',
+                            datePreset: 'all',
+                        },
+                    },
+                })
+                break
+            case 'buy':
+            case 'sell': {
+                const priceUsd = (!item.valueMissing && item.qty && item.qty > 0)
+                    ? item.valUsd / item.qty
+                    : 0
+                navigate('/movements', {
+                    state: {
+                        prefillMovement: {
+                            id: '',
+                            type: action === 'buy' ? 'BUY' : 'SELL',
+                            assetClass: 'crypto',
+                            accountId,
+                            instrumentId: item.instrumentId || '',
+                            ticker: item.symbol,
+                            assetName: item.label,
+                            quantity: 0,
+                            unitPrice: priceUsd,
+                            tradeCurrency: 'USD',
+                            totalAmount: 0,
+                            datetimeISO: new Date().toISOString(),
+                        },
+                    },
+                })
+                break
+            }
+            case 'transfer':
+                setTransferPrefill({ accountId, instrumentId: item.instrumentId, symbol: item.symbol })
+                break
+            case 'swap':
+                setSwapPrefill({ accountId, sourceInstrumentId: item.instrumentId })
+                break
+            case 'manual-price':
+                setManualPriceItem(item)
+                break
+        }
+    }
+
     const openProviderSettings = (providerId: string) => {
         setSettingsProviderId(providerId)
         setShowSettingsModal(true)
@@ -484,6 +578,7 @@ export function AssetsPageV2() {
     const showCashDisabledEmptyState = isPortfolioEmpty && !trackCash && movements.length > 0
 
     return (
+        <CryptoQuickActionsContext.Provider value={handleCryptoQuickAction}>
         <div className="space-y-6 relative">
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -857,7 +952,39 @@ export function AssetsPageV2() {
 
             {/* Preferences Sheet */}
             <PreferencesSheet open={showPreferences} onOpenChange={setShowPreferences} />
+
+            {/* Crypto quick action dialogs (Fase 6) */}
+            <CryptoTransferDialog
+                open={transferPrefill != null}
+                onOpenChange={(open) => { if (!open) setTransferPrefill(null) }}
+                prefill={transferPrefill ?? undefined}
+            />
+            <CryptoSwapDialog
+                open={swapPrefill != null}
+                onOpenChange={(open) => { if (!open) setSwapPrefill(null) }}
+                prefill={swapPrefill ?? undefined}
+            />
+            {manualPriceItem?.instrumentId && (
+                <ManualPriceDialog
+                    instrumentId={manualPriceItem.instrumentId}
+                    symbol={manualPriceItem.symbol}
+                    currentPrice={(() => {
+                        const manual = manualPriceEntries.get(manualPriceItem.instrumentId!)
+                        if (manual) return manual.price
+                        if (!manualPriceItem.valueMissing && manualPriceItem.qty && manualPriceItem.qty > 0) {
+                            return manualPriceItem.valUsd / manualPriceItem.qty
+                        }
+                        return undefined
+                    })()}
+                    isOpen={true}
+                    onOpenChange={(open) => { if (!open) setManualPriceItem(null) }}
+                    currency={(manualPriceItem.kind === 'crypto' || manualPriceItem.kind === 'stable') ? 'USD' : 'ARS'}
+                    updatedAtISO={manualPriceEntries.get(manualPriceItem.instrumentId!)?.updatedAtISO}
+                    isManual={manualPriceEntries.has(manualPriceItem.instrumentId!)}
+                />
+            )}
         </div>
+        </CryptoQuickActionsContext.Provider>
     )
 }
 
@@ -1238,7 +1365,69 @@ interface ItemRowProps {
     results?: AssetsResultsMap | null
 }
 
+/** Quick actions dropdown for crypto/stable rows (Fase 6). */
+function CryptoQuickActionsMenu({
+    item,
+    onQuickAction,
+    className,
+}: {
+    item: ItemV2
+    onQuickAction: (action: CryptoQuickAction, item: ItemV2) => void
+    className?: string
+}) {
+    const isVolatileCrypto = item.kind === 'crypto'
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+                    className={cn(
+                        'p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer',
+                        className
+                    )}
+                    title="Acciones rápidas"
+                >
+                    <MoreVertical className="h-4 w-4" />
+                </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
+                {isVolatileCrypto && (
+                    <DropdownMenuItem onClick={() => onQuickAction('detail', item)}>
+                        <Eye className="h-4 w-4 mr-2" /> Ver detalle
+                    </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => onQuickAction('movements', item)}>
+                    <ListFilter className="h-4 w-4 mr-2" /> Ver movimientos
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onQuickAction('buy', item)}>
+                    <ShoppingCart className="h-4 w-4 mr-2" /> Comprar
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickAction('sell', item)}>
+                    <Banknote className="h-4 w-4 mr-2" /> Vender
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickAction('transfer', item)}>
+                    <ArrowLeftRight className="h-4 w-4 mr-2" /> Transferir
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onQuickAction('swap', item)}>
+                    <Repeat2 className="h-4 w-4 mr-2" /> Convertir / Swap
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onQuickAction('manual-price', item)}>
+                    <PencilLine className="h-4 w-4 mr-2" /> Precio manual
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
 function ItemRow({ item, onClick, onOpenFxOverride, providerName, results }: ItemRowProps) {
+    const onQuickAction = useContext(CryptoQuickActionsContext)
+    const isCryptoKind = item.kind === 'crypto' || item.kind === 'stable'
+    const showQuickActions = isCryptoKind && onQuickAction != null
     const isWalletOrCash = item.kind === 'wallet_yield' || item.kind === 'cash_ars' || item.kind === 'cash_usd'
     const isUsdCash = item.kind === 'cash_usd'
     const isUsdNative = item.kind === 'crypto' || item.kind === 'stable'
@@ -1252,31 +1441,42 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName, results }: Ite
     const priceStatus = item.priceResult?.status ?? legacyStatus
     const priceSource = item.priceResult?.source ?? fciPriceSource ?? 'missing'
     const priceAsOf = item.priceResult?.asOf ?? item.priceMeta?.asOfISO ?? null
+    const isManualPrice = priceSource === 'manual'
     const showPriceBadge = !isWalletOrCash && priceStatus !== 'ok'
     const priceBadgeLabel = priceStatus === 'missing'
         ? 'Sin precio'
         : priceStatus === 'stale'
             ? 'Desactualizado'
-            : 'Estimado'
+            : isManualPrice
+                ? 'Manual'
+                : 'Estimado'
     const priceBadgeClass = priceStatus === 'missing'
         ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
         : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
     const priceBadgeTitle = priceStatus === 'missing'
-        ? 'Sin precio disponible en este momento'
+        ? 'Sin precio disponible. El valor de mercado y el resultado no se pueden calcular.'
         : priceStatus === 'stale'
             ? `Precio desactualizado (${priceSource}${priceAsOf ? `, ${new Date(priceAsOf).toLocaleString('es-AR')}` : ''})`
-            : `Precio estimado (${priceSource}${priceAsOf ? `, ${new Date(priceAsOf).toLocaleString('es-AR')}` : ''})`
+            : isManualPrice
+                ? `Precio manual${priceAsOf ? ` (cargado ${new Date(priceAsOf).toLocaleString('es-AR')})` : ''}`
+                : `Precio estimado (${priceSource}${priceAsOf ? `, ${new Date(priceAsOf).toLocaleString('es-AR')}` : ''})`
+
+    // Missing price: never render $0 as if it were a real valuation
+    const valueMissing = item.valueMissing === true
+
     // For USD-native assets, secondary is ARS (check valArs). For others, secondary is USD (check valUsd).
-    const hasSecondary = isUsdNative || isUsdCash
+    const hasSecondary = !valueMissing && (isUsdNative || isUsdCash
         ? Math.abs(item.valArs) >= 1
-        : Math.abs(item.valUsd) >= 0.01
+        : Math.abs(item.valUsd) >= 0.01)
 
     // Determine primary/secondary display based on native currency
-    const primaryValue = isUsdNative
-        ? formatMoneyUSD(item.valUsd)
-        : isUsdCash
+    const primaryValue = valueMissing
+        ? 'Valor no disponible'
+        : isUsdNative
             ? formatMoneyUSD(item.valUsd)
-            : formatMoneyARS(item.valArs)
+            : isUsdCash
+                ? formatMoneyUSD(item.valUsd)
+                : formatMoneyARS(item.valArs)
     const secondaryValue = isUsdNative || isUsdCash
         ? formatMoneyARS(item.valArs)
         : formatMoneyUSD(item.valUsd)
@@ -1304,11 +1504,18 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName, results }: Ite
                             <span
                                 className={cn(
                                     'text-[10px] font-bold px-1.5 py-0.5 rounded border',
-                                    priceBadgeClass
+                                    priceBadgeClass,
+                                    showQuickActions && priceStatus === 'missing' && 'cursor-pointer hover:bg-rose-500/20'
                                 )}
-                                title={priceBadgeTitle}
+                                title={showQuickActions && priceStatus === 'missing'
+                                    ? 'Sin precio disponible. Click para cargar precio manual.'
+                                    : priceBadgeTitle}
+                                onClick={showQuickActions && priceStatus === 'missing'
+                                    ? (e) => { e.stopPropagation(); onQuickAction!('manual-price', item) }
+                                    : undefined}
                             >
                                 {priceBadgeLabel}
+                                {showQuickActions && priceStatus === 'missing' && ' · Cargar precio'}
                             </span>
                         )}
                         {hasTna && (
@@ -1329,10 +1536,20 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName, results }: Ite
                             item.qty ? `${item.qty.toLocaleString('es-AR', { maximumFractionDigits: 4 })} unidades` : ''}
                     </p>
                 </div>
+                {showQuickActions && (
+                    <CryptoQuickActionsMenu
+                        item={item}
+                        onQuickAction={onQuickAction!}
+                        className="ml-auto md:hidden"
+                    />
+                )}
             </div>
             {/* Col: Balance */}
             <div className="hidden md:block md:col-span-3 text-right">
-                <p className="font-mono text-sm font-medium tabular-nums">
+                <p className={cn(
+                    "font-mono text-sm font-medium tabular-nums",
+                    valueMissing && "text-muted-foreground italic"
+                )}>
                     {primaryValue}
                 </p>
                 {hasSecondary ? (
@@ -1375,8 +1592,11 @@ function ItemRow({ item, onClick, onOpenFxOverride, providerName, results }: Ite
                 ) : null}
             </div>
             {/* Col: Results */}
-            <div className="hidden md:flex md:col-span-4 justify-end pl-4 border-l border-border/50">
+            <div className="hidden md:flex md:col-span-4 justify-end items-center gap-2 pl-4 border-l border-border/50">
                 {results && <ResultsCell pnl={results.byItemId[item.id]} level={2} />}
+                {showQuickActions && (
+                    <CryptoQuickActionsMenu item={item} onQuickAction={onQuickAction!} />
+                )}
             </div>
         </button>
     )

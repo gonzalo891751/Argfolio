@@ -179,8 +179,63 @@ export interface Movement {
         counterpartyAccountId?: string
         /** Direction of the transfer movement */
         direction?: 'in' | 'out'
+
+        // ---------------------------------------------------------------
+        // Compound Operation Contract (Fase 3 — backwards compatible).
+        // Every leg of a compound operation (transfer, swap, adjustment)
+        // shares the same operationId. Legacy movements without these
+        // fields keep working: grouping falls back to groupId /
+        // transferGroupId / linkedMovementId.
+        // ---------------------------------------------------------------
+        /** Shared id linking every leg of a compound operation */
+        operationId?: string
+        /** Kind of compound operation this leg belongs to */
+        operationKind?: 'trade' | 'transfer' | 'swap' | 'balance_adjustment' | 'income' | 'fee'
+        /** Role of this movement within the operation */
+        legRole?: 'source' | 'destination' | 'fee' | 'cash' | 'asset'
+        /** Lifecycle status of the operation (default: posted) */
+        operationStatus?: 'posted' | 'voided' | 'superseded'
+        /** Optional blockchain tx hash for transfers/swaps */
+        txHash?: string
+        /** USD cost basis carried from source to destination in a transfer */
+        costBasisTransferredUsd?: number
+        /** Quantity lost to network fee in an in-kind transfer */
+        feeQty?: number
+        /** Realized PnL (USD) recorded when this swap source leg was executed */
+        realizedPnlUsd?: number
+        /** Repair plan that superseded this legacy movement */
+        supersededByOperationId?: string
+        /** Audit timestamp for a supersede action */
+        supersededAtISO?: string
+        /** Machine-readable audit reason for supersede/void */
+        supersededReason?: string
+        /** Audit timestamp when a posted movement was voided */
+        voidedAtISO?: string
+        /** Machine-readable reason for a void action */
+        voidedReason?: string
+        /** Audit timestamp when a superseded legacy movement was reactivated */
+        reactivatedAtISO?: string
+        /** Repair plan whose effects were rolled back */
+        rollbackOfRepairPlanId?: string
+        /** Classification chosen for a balance reconciliation leg */
+        adjustmentReason?: 'reward' | 'rounding' | 'fee' | 'manual_correction' | 'external_transfer' | 'unknown'
+        /** How the adjustment cost basis was obtained */
+        costPolicy?: 'zero_cost' | 'manual_cost' | 'preserve_average' | 'unknown'
+        /** True while a proposed repair leg still needs an explicit user classification */
+        requiresManualReview?: boolean
+        /** Repair plan that created this movement */
+        repairPlanId?: string
+        /** Optional human-readable evidence/assumption attached to a repair leg */
+        repairNote?: string
     }
 }
+
+/** Kind of a compound operation (union of the meta.operationKind values). */
+export type OperationKind = NonNullable<NonNullable<Movement['meta']>['operationKind']>
+/** Role of a leg inside a compound operation. */
+export type OperationLegRole = NonNullable<NonNullable<Movement['meta']>['legRole']>
+/** Lifecycle status of a compound operation. */
+export type OperationStatus = NonNullable<NonNullable<Movement['meta']>['operationStatus']>
 
 export interface FixedDepositMeta {
     principalARS: number

@@ -22,6 +22,7 @@ import { CryptoTypeahead, type CryptoOption } from './CryptoTypeahead'
 import { FciTypeahead, generateFciSlug } from './FciTypeahead'
 import { db } from '@/db'
 import { computeTEA, computeTermTEA } from '@/domain/yield/accrual'
+import { isMovementActive } from '@/domain/operations/operation'
 
 const formatQty = (n: number) => n.toLocaleString('es-AR', { maximumFractionDigits: 8 })
 import { AssetTypeahead, type AssetOption, MOCK_ASSETS } from './AssetTypeahead'
@@ -43,6 +44,7 @@ function getActivePFs(movements: Movement[], accountId?: string): Movement[] {
     const redeemedGroupIds = new Set<string>()
     const redeemedPfIds = new Set<string>()
     movements.forEach(m => {
+        if (!isMovementActive(m)) return
         if (m.assetClass === 'pf' && m.type === 'SELL') {
             if (m.meta?.pfGroupId) redeemedGroupIds.add(m.meta.pfGroupId)
             if (m.pf?.pfId) redeemedPfIds.add(m.pf.pfId)
@@ -50,6 +52,7 @@ function getActivePFs(movements: Movement[], accountId?: string): Movement[] {
     })
 
     return movements.filter(m => {
+        if (!isMovementActive(m)) return false
         if (m.assetClass !== 'pf' || m.type !== 'BUY') return false
         if (accountId && m.accountId !== accountId) return false
         // Exclude if explicitly redeemed

@@ -1,4 +1,5 @@
 import type { Movement, Currency } from '@/domain/types'
+import { filterActiveMovements } from '@/domain/operations/operation'
 
 export interface CashLedgerResult {
     balances: Map<string, Map<Currency, number>>
@@ -67,9 +68,30 @@ function resolveUsdQuantity(mov: Movement): number {
     return 0
 }
 
+/**
+ * In-kind asset movements (crypto transfers between own accounts and their
+ * network-fee legs) move UNITS of an instrument, not cash. Their quantity is
+ * tracked by the holdings engine via instrumentId; touching the cash ledger
+ * would create phantom USD balances.
+ */
+function isInKindAssetMovement(mov: Movement): boolean {
+    if (!mov.instrumentId) return false
+    if (mov.assetClass !== 'crypto') return false
+    if (mov.type === 'TRANSFER_IN' || mov.type === 'TRANSFER_OUT') return true
+    if (mov.type === 'FEE' && mov.meta?.legRole === 'fee') return true
+    if (mov.meta?.legRole === 'asset' && (
+        mov.meta.operationKind === 'balance_adjustment'
+        || mov.meta.operationKind === 'income'
+        || mov.meta.operationKind === 'fee'
+    )) return true
+    return false
+}
+
 function getMovementCashDeltas(mov: Movement): CashDelta[] {
     const deltas: CashDelta[] = []
     const tradeCurrency = resolveTradeCurrency(mov)
+
+    if (isInKindAssetMovement(mov)) return deltas
 
     // Skip PF SELL cash effect when a paired DEPOSIT handles the cash inflow.
     // settlementMode is set for both 'auto' and 'manual' settlements that create
@@ -173,7 +195,7 @@ export function computeCashLedger(movements: Movement[]): CashLedgerResult {
     const balances = new Map<string, Map<Currency, number>>()
     const minBalances = new Map<string, Map<Currency, number>>()
 
-    const sorted = [...movements].sort(
+    const sorted = filterActiveMovements(movements).sort(
         (a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime()
     )
 

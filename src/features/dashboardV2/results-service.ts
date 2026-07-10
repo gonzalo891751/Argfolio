@@ -11,6 +11,7 @@
  */
 
 import type { Movement, Snapshot } from '@/domain/types'
+import { filterActiveMovements } from '@/domain/operations/operation'
 import type { PortfolioV2, ItemV2 } from '@/features/portfolioV2'
 import { buildSnapshotFromPortfolioV2 } from './snapshot-v2'
 import {
@@ -767,5 +768,5 @@ export function computeResultsCardModel({
         return buildTotalFromPortfolio(portfolio, snapshots, now)
     }
 
-    return buildPeriodFromSnapshots(portfolio, snapshots, movements, periodKey, now)
+    return buildPeriodFromSnapshots(portfolio, snapshots, filterActiveMovements(movements), periodKey, now)
 }

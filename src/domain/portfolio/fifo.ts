@@ -4,6 +4,7 @@
  */
 
 import type { Movement } from '@/domain/types'
+import { filterActiveMovements } from '@/domain/operations/operation'
 
 export interface FifoLot {
     date: string
@@ -39,7 +40,7 @@ export function buildFifoLots(
     movements: Movement[]
 ): FifoResult {
     // 1. Sort by date ascending
-    const sorted = [...movements].sort(
+    const sorted = filterActiveMovements(movements).sort(
         (a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime()
     )
 

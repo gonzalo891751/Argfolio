@@ -8,6 +8,7 @@ import { calculateValuation } from '@/domain/portfolio/valuation'
 import type { Movement, Instrument } from '@/domain/types'
 import { buildPriceCacheKey, resolvePriceWithCache } from '@/domain/prices/price-cache'
 import { missingPrice, okPrice } from '@/domain/prices/price-result'
+import { isMovementActive } from '@/domain/operations/operation'
 
 function getPriceTtlMs(category: string): number {
     switch (category) {
@@ -100,7 +101,7 @@ export function useInstrumentDetail(instrumentId: string): InstrumentDetail | nu
         const accountsMap = new Map(accountsList.map((a) => [a.id, a]))
 
         // Filter movements for this instrument
-        const instrumentMovements = movements.filter((m) => m.instrumentId === instrumentId)
+        const instrumentMovements = movements.filter((m) => m.instrumentId === instrumentId && isMovementActive(m))
         const sortedMovements = [...instrumentMovements].sort(
             (a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime()
         )

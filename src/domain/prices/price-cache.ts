@@ -90,8 +90,13 @@ export function resolvePriceWithCache(
     const ttlMs = options?.ttlMs ?? DEFAULT_TTL_MS
     const now = options?.now ?? Date.now()
 
-    if (liveResult.status === 'ok' && isValidPrice(liveResult.price)) {
-        setLastKnownPrice(cacheKey, liveResult, now)
+    // Any live result carrying a valid price wins over the cache.
+    // This includes manual/estimated prices, which must not be shadowed
+    // by a previously cached provider quote.
+    if (isValidPrice(liveResult.price)) {
+        if (liveResult.status === 'ok') {
+            setLastKnownPrice(cacheKey, liveResult, now)
+        }
         return liveResult
     }
 

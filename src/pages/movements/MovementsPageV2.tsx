@@ -11,9 +11,15 @@ import {
     MovementDetailsDrawer,
     MovementWizard,
 } from './components'
+import { DEFAULT_MOVEMENTS_FILTERS, type MovementsFilterState } from './components/movements-filter-state'
+import {
+    filterMovements,
+    buildDisplayRows,
+    paginateRows,
+    MOVEMENTS_PAGE_SIZE,
+} from './components/movements-view'
+import { findOperationLegs } from '@/domain/operations/operation'
 import type { Movement } from '@/domain/types'
-
-type FilterType = 'all' | 'buy' | 'sell' | 'pf'
 
 export function MovementsPageV2() {
     const navigate = useNavigate()
@@ -24,24 +30,34 @@ export function MovementsPageV2() {
     const { data: fxRates } = useFxRates()
 
     // UI State
-    const [search, setSearch] = useState('')
-    const [filter, setFilter] = useState<FilterType>('all')
+    const [filters, setFilters] = useState<MovementsFilterState>(DEFAULT_MOVEMENTS_FILTERS)
+    const [visibleCount, setVisibleCount] = useState(MOVEMENTS_PAGE_SIZE)
     const [isWizardOpen, setIsWizardOpen] = useState(false)
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
     const [selectedMovement, setSelectedMovement] = useState<Movement | null>(null)
     const [editingMovement, setEditingMovement] = useState<Movement | null>(null)
     const deleteMovement = useDeleteMovement()
 
-    // Handle incoming prefill from navigation state (e.g. from crypto detail sell button)
+    // Handle incoming prefill/filters from navigation state
     useEffect(() => {
-        const state = location.state as { prefillMovement?: Movement } | null
+        const state = location.state as {
+            prefillMovement?: Movement
+            movementFilters?: Partial<MovementsFilterState>
+        } | null
         if (state?.prefillMovement) {
             setEditingMovement(state.prefillMovement as Movement)
             setIsWizardOpen(true)
-            // Clear the state to avoid re-opening on back navigation
+            navigate(location.pathname, { replace: true, state: {} })
+        } else if (state?.movementFilters) {
+            setFilters(prev => ({ ...prev, ...state.movementFilters }))
             navigate(location.pathname, { replace: true, state: {} })
         }
     }, [location.state, location.pathname, navigate])
+
+    // Reset pagination when filters change
+    useEffect(() => {
+        setVisibleCount(MOVEMENTS_PAGE_SIZE)
+    }, [filters])
 
     // Maps for lookup
     const instruments = useMemo(
@@ -53,29 +69,19 @@ export function MovementsPageV2() {
         [accountsList]
     )
 
-    // Filter movements
-    const filteredMovements = useMemo(() => {
-        return movements
-            .filter(m => {
-                // Type filter
-                if (filter === 'buy' && m.type !== 'BUY') return false
-                if (filter === 'sell' && m.type !== 'SELL') return false
-
-                // Search filter
-                if (search) {
-                    const instrument = m.instrumentId ? instruments.get(m.instrumentId) : null
-                    const account = accounts.get(m.accountId)
-                    const searchLower = search.toLowerCase()
-                    const matchSymbol = instrument?.symbol.toLowerCase().includes(searchLower)
-                    const matchName = instrument?.name.toLowerCase().includes(searchLower)
-                    const matchAccount = account?.name.toLowerCase().includes(searchLower)
-                    if (!matchSymbol && !matchName && !matchAccount) return false
-                }
-
-                return true
-            })
-            .sort((a, b) => new Date(b.datetimeISO).getTime() - new Date(a.datetimeISO).getTime())
-    }, [movements, filter, search, instruments, accounts])
+    // Filter + group + paginate
+    const filteredMovements = useMemo(
+        () => filterMovements(movements, filters, instruments, accounts),
+        [movements, filters, instruments, accounts]
+    )
+    const displayRows = useMemo(
+        () => buildDisplayRows(filteredMovements),
+        [filteredMovements]
+    )
+    const { visible: visibleRows, hasMore } = useMemo(
+        () => paginateRows(displayRows, visibleCount),
+        [displayRows, visibleCount]
+    )
 
     // Handlers
     const handleRowClick = (movement: Movement) => {
@@ -90,19 +96,44 @@ export function MovementsPageV2() {
     }
 
     const handleEdit = (movement: Movement) => {
+        const legs = findOperationLegs(movement, movements)
+        if (legs.length > 1) {
+            const ok = confirm(
+                `⚠️ Este movimiento es una pata de una operación con ${legs.length} patas vinculadas ` +
+                `(transferencia/swap). Editarlo individualmente puede desbalancear la operación.\n\n` +
+                `¿Querés editarlo de todos modos?`
+            )
+            if (!ok) return
+        }
         setIsDrawerOpen(false)
         setEditingMovement(movement)
         setIsWizardOpen(true)
     }
 
     const handleDelete = (id: string) => {
-        if (confirm('¿Estás seguro de que querés eliminar este movimiento?')) {
+        const movement = movements.find(m => m.id === id)
+        const legs = movement ? findOperationLegs(movement, movements) : []
+
+        const message = legs.length > 1
+            ? `⚠️ Este movimiento pertenece a una operación con ${legs.length} patas vinculadas ` +
+            `(transferencia/swap). Borrar sólo esta pata deja la operación desbalanceada ` +
+            `y puede alterar tenencias y costos.\n\n` +
+            `¿Estás seguro de que querés eliminar SÓLO esta pata?`
+            : '¿Estás seguro de que querés eliminar este movimiento?'
+
+        if (confirm(message)) {
             deleteMovement.mutate(id)
             setIsDrawerOpen(false)
         }
     }
 
     const fxMep = fxRates?.mep?.sell ?? 1180
+
+    // Operation legs for the drawer (grouped operation detail)
+    const selectedLegs = useMemo(() => {
+        if (!selectedMovement) return []
+        return findOperationLegs(selectedMovement, movements)
+    }, [selectedMovement, movements])
 
     return (
         <div className="space-y-8">
@@ -135,26 +166,46 @@ export function MovementsPageV2() {
             </div>
 
             {/* KPIs */}
-            <MovementsKpis movements={movements} fxMep={fxMep} />
+            <MovementsKpis movements={filteredMovements} fxMep={fxMep} />
 
             {/* Filters */}
             <MovementsFilters
-                search={search}
-                onSearchChange={setSearch}
-                filter={filter}
-                onFilterChange={setFilter}
+                state={filters}
+                onChange={setFilters}
+                accounts={accountsList}
+                instruments={instrumentsList}
             />
+
+            {/* Results summary */}
+            <div className="flex items-center justify-between -my-4">
+                <p className="text-xs text-slate-500 font-mono">
+                    {filteredMovements.length} movimiento{filteredMovements.length !== 1 ? 's' : ''}
+                    {filteredMovements.length !== movements.length && ` (de ${movements.length})`}
+                    {displayRows.length !== filteredMovements.length && ` · ${displayRows.length} operaciones`}
+                </p>
+            </div>
 
             {/* Table */}
             <div className="glass-panel rounded-xl overflow-hidden border border-white/10 shadow-xl">
                 <MovementsTable
-                    movements={filteredMovements}
+                    rows={visibleRows}
                     instruments={instruments}
                     accounts={accounts}
                     isLoading={isLoading}
                     onRowClick={handleRowClick}
                     onNewClick={() => setIsWizardOpen(true)}
+                    totalUnfiltered={movements.length}
                 />
+                {hasMore && (
+                    <div className="p-4 border-t border-white/5 text-center">
+                        <button
+                            onClick={() => setVisibleCount(c => c + MOVEMENTS_PAGE_SIZE)}
+                            className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-lg text-sm font-medium transition"
+                        >
+                            Cargar más ({displayRows.length - visibleRows.length} restantes)
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Drawer */}
@@ -164,9 +215,13 @@ export function MovementsPageV2() {
                 movement={selectedMovement}
                 instrument={selectedMovement?.instrumentId ? instruments.get(selectedMovement.instrumentId) : null}
                 account={selectedMovement ? accounts.get(selectedMovement.accountId) : undefined}
+                operationLegs={selectedLegs}
+                instrumentsMap={instruments}
+                accountsMap={accounts}
                 onDuplicate={handleDuplicate}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onSelectLeg={(leg) => setSelectedMovement(leg)}
             />
 
             {/* Wizard */}

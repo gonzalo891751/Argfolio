@@ -70,6 +70,26 @@ export async function exportLocalBackup(): Promise<LocalBackupPayload> {
     }
 }
 
+/** Export and force a browser download before a destructive-looking repair action. */
+export async function downloadLocalBackup(filePrefix = 'argfolio-backup'): Promise<string> {
+    if (typeof document === 'undefined' || typeof URL === 'undefined') {
+        throw new Error('La descarga de backup sólo está disponible desde el navegador.')
+    }
+    const payload = await exportLocalBackup()
+    const timestamp = payload.exportedAtISO.replace(/[:.]/g, '-').slice(0, 19)
+    const fileName = `${filePrefix}-${timestamp}.json`
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+    return fileName
+}
+
 export function parseBackupJson(raw: string): LocalBackupPayload {
     let parsed: unknown
     try {

@@ -1,5 +1,76 @@
 # Project Snapshot
 
+[CHECKPOINT #5] — Prompt 1: Base contable cripto (2026-07-09)
+
+Objetivo:
+- Implementar la base funcional-contable para operar cripto correctamente: repo sano, NEXO/precios faltantes seguros, precio manual, Movimientos V2 con filtros/paginación/agrupación, transferencia cripto con carry-over de costo, swap multi-origen y acciones rápidas.
+
+Fases completadas:
+- FASE 0 — Repo sano: resueltos los conflictos de merge en `src/pages/settings.tsx` (diseño "debug detrás de ?debug=1" conservado; reconciliación/fingerprint del PR #21 movidos al panel debug) y `src/sync/remote-sync.ts` (se conservó `remoteMovementIds` para el reconciliation push + comentario D1-autoritativo; se restauró el helper `toTimestampMs` que el LWW de preferences aún usa).
+- FASE 1 — Precios: NEXO en `COINGECKO_MAP`; resolución de precio extraída a `src/domain/prices/resolve-asset-price.ts` (manual → proveedor → fallback → missing); precio manual marcado estimated/manual con fecha y con prioridad sobre el cache; guard `valueMissing` en builder V2 (sin precio ⇒ pnl undefined, nunca US$0/-100%); `CryptoDetail` con priceResult/valueMissing; `ManualPriceDialog` soporta USD; UI "Valor no disponible"/"PnL no calculable" + CTA "Cargar precio manual".
+- FASE 2 — Movimientos V2: filtros reales (texto/cuenta/activo/tipo con transferencia+swap/fechas con "Últimos 30 días" efectivo por defecto), paginación de 50 + "Cargar más", agrupación visual por operación, drawer con patas + advertencia al editar/borrar pata de grupo. Lógica pura en `movements-view.ts`/`movements-filter-state.ts`.
+- FASE 3 — Contrato de operación compuesta (Opción A): `Movement.meta.{operationId, operationKind, legRole, operationStatus, txHash, costBasisTransferredUsd, feeQty}` opcionales; helpers en `src/domain/operations/operation.ts` con fallbacks legacy (transferGroupId/groupId/linkedMovementId).
+- FASE 4 — Transferencia cripto: `src/domain/operations/crypto-transfer.ts` + `CryptoTransferDialog`. Carry-over PPP (destino hereda costo; fee en especie capitalizado ⇒ base consolidada constante), sin PnL, validación de saldo, patas atómicas. Fixes de motor: `computeRealizedPnL` ahora reduce posición en TRANSFER_OUT sin PnL; `computeCashLedger` ignora transferencias/fees en especie (instrumentId + crypto).
+- FASE 5 — Swap: `src/domain/operations/crypto-swap.ts` + `CryptoSwapDialog` multi-origen (BTC+USDT→NEXO). SELL por pata origen (PnL realizado), BUY destino con costo = valor entregado (funciona sin cotización de NEXO), cash-neutral, agrupado.
+- FASE 6 — Acciones rápidas: menú "⋯" en filas cripto de Mis Activos V2 (detalle/movimientos/comprar/vender/transferir/swap/precio manual, badge "Sin precio" clickeable); botones Transferir/Convertir/Precio manual/Movimientos filtrados en detalle cripto.
+
+Archivos clave creados:
+- src/domain/operations/{operation,crypto-transfer,crypto-swap}.ts (+tests)
+- src/domain/prices/resolve-asset-price.ts (+test)
+- src/features/portfolioV2/missing-price.test.ts
+- src/pages/movements/components/{movements-view,movements-filter-state}.ts (+test)
+- src/pages/movements/components/crypto/{CryptoTransferDialog,CryptoSwapDialog}.tsx
+- docs/ARGFOLIO_OPERACIONES_CRIPTO_MVP.md (contrato, modelos, límites, validación)
+
+Validación:
+- npm test: 19 archivos, 170 tests ✅ (114 → 170)
+- npm run build: ✅
+- npm run lint: 0 errores, 151 warnings (línea base preexistente)
+- npx tsc --noEmit: ✅
+
+Pendientes (Prompt 2):
+- [ ] Reconstrucción Binance → Nexo con backup, dry-run y reporte antes/después (NO ejecutada — datos reales intactos).
+- [ ] Anular/reemplazar operaciones (contrato ya reserva operationStatus voided/superseded).
+- [ ] Ajuste de saldo y conciliación por cuenta.
+- [ ] Método de costeo efectivo (PPP sigue siendo el único real; FIFO/LIFO/Manual son simulación).
+
+---
+
+[CHECKPOINT #4]
+Objetivo:
+- Diagnóstico integral de Argfolio: activos, movimientos, cripto, costo promedio, transferencias, conversiones y conciliación de saldos.
+
+Archivos tocados:
+- docs/ARGFOLIO_DIAGNOSTICO_ACTIVOS_MOVIMIENTOS.md
+- docs/AI_HANDOFF.md
+
+Cambios realizados:
+- Se inspeccionó el repo y se documentó la arquitectura actual.
+- Se diagnosticó el modelo actual de activos, movimientos y cálculos.
+- Se identificaron problemas con transferencias, conversiones, NEXO sin precio y Movimientos.
+- Se propuso un plan de mejora por etapas.
+- No se hicieron cambios funcionales ni se borraron datos.
+
+Hallazgos prioritarios:
+- NEXO no está mapeado en el proveedor de precios; un precio faltante puede terminar valuado visualmente como cero.
+- Las transferencias atómicas existen sólo para billeteras/caja; cripto no tiene flujo de transferencia ni portación explícita de costo/lotes.
+- El motor consolidado usa PPP aunque la UI permite simular FIFO/LIFO/Baratos/Manual.
+- No hay operación compuesta para swap ni conciliación/auditoría de ajustes.
+
+Pendientes:
+- [ ] Revisar el diagnóstico con el usuario.
+- [ ] Definir alcance de implementación.
+- [ ] Implementar mejoras priorizadas en una segunda etapa.
+- [ ] Corregir/reconstruir movimientos Binance → Nexo con backup previo.
+
+Validación:
+- git status
+- npm run build: falló por marcadores de conflicto preexistentes en src/pages/settings.tsx y src/sync/remote-sync.ts; el prebuild además advirtió que no existe data/comafi-cedears.xlsx y usó el JSON existente.
+- npm run lint: falló por los mismos 2 errores de parsing de marcadores de conflicto; reportó 150 warnings adicionales.
+- npm test: pasó, 15 archivos y 114 tests.
+
+---
+
 Argfolio es un tracker de inversiones y portafolio personal enfocado en el ecosistema argentino (Cedears, FCI, Crypto, MEP). Permite seguimiento bimonetario (ARS/USD) con valuación en tiempo real y cálculo de resultados históricos.
 
 **Run:** `npm run dev`

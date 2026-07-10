@@ -1,5 +1,6 @@
 import type { Movement, Instrument, Account, Holding } from '@/domain/types'
 import { computeAverageCost } from './average-cost'
+import { isMovementActive } from '@/domain/operations/operation'
 
 /**
  * Compute holdings from movements using FIFO/PEPS method for cost basis.
@@ -14,6 +15,7 @@ export function computeHoldings(
     const groups = new Map<string, Movement[]>()
 
     for (const mov of movements) {
+        if (!isMovementActive(mov)) continue
         if (!mov.instrumentId) continue
         const key = `${mov.instrumentId}::${mov.accountId}`
         if (!groups.has(key)) {

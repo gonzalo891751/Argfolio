@@ -1,4 +1,5 @@
 import type { Movement, Holding, FxRates, FxType } from '@/domain/types'
+import { filterActiveMovements } from '@/domain/operations/operation'
 
 export interface RealizedPnLResult {
     totalNative: number
@@ -18,7 +19,7 @@ export function computeRealizedPnL(
     _fxRates: FxRates,
     _baseFx: FxType = 'MEP'
 ): RealizedPnLResult {
-    const sorted = [...movements].sort(
+    const sorted = filterActiveMovements(movements).sort(
         (a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime()
     )
 
@@ -54,7 +55,10 @@ export function computeRealizedPnL(
         ) {
             position.quantity += qty
             position.costBasis += qty * price
-        } else if (mov.type === 'SELL' || mov.type === 'SELL_USD' || mov.type === 'WITHDRAW') {
+        } else if (mov.type === 'SELL' || mov.type === 'SELL_USD' || mov.type === 'WITHDRAW' || mov.type === 'TRANSFER_OUT') {
+            // TRANSFER_OUT reduces the position (custody change) but the
+            // guard below only records PnL for explicit SELLs — a transfer
+            // between own accounts must never realize a gain/loss.
             // SELL logic
             if (position.quantity > 0) {
                 const avgCost = position.costBasis / position.quantity

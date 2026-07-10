@@ -17,7 +17,8 @@ import type { FxQuotes } from '@/domain/fx/types'
 import type { AssetRowMetrics, AssetInput, AssetPrices, PortfolioAssetTotals, AssetClass } from '@/domain/assets/types'
 import type { HoldingAggregated, Holding } from '@/domain/types'
 import { buildPriceCacheKey, resolvePriceWithCache } from '@/domain/prices/price-cache'
-import { missingPrice, okPrice, type PriceResult } from '@/domain/prices/price-result'
+import { resolveAssetPriceResult } from '@/domain/prices/resolve-asset-price'
+import type { PriceResult } from '@/domain/prices/price-result'
 
 // Master data imports for CEDEAR ratios
 import { getCedearMeta, type CedearMasterItem } from '@/domain/cedears/master'
@@ -119,7 +120,7 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
     const { data: portfolio, isLoading: portfolioLoading, error: portfolioError } = useComputedPortfolio()
     const { data: fxRates, isLoading: fxLoading } = useFxRates()
     useInstruments() // Keep query active for cache
-    const { priceMap: manualPrices } = useManualPrices()
+    const { entryMap: manualPrices } = useManualPrices()
 
     // Get crypto symbols from portfolio
     const cryptoSymbols = useMemo(() => {
@@ -184,7 +185,6 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                     const accountId = holding.accountId
                     const accountName = holding.account.name
                     const now = Date.now()
-                    const nowISO = new Date(now).toISOString()
 
                     // Build AssetInput from specific holding data
                     const assetInput: AssetInput = {
@@ -204,27 +204,26 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
 
                     // Build AssetPrices
                     const sym = holding.instrument.symbol.toUpperCase()
-                    let livePriceResult: PriceResult = missingPrice('missing')
                     let underlyingUsd: number | null = null
                     let changePct1d: number | null = null
 
-                    // Price logic
-                    if (manualPrices.has(holding.instrumentId)) {
-                        livePriceResult = okPrice(manualPrices.get(holding.instrumentId) ?? 0, 'manual', nowISO, 'high')
-                    } else if (category === 'CEDEAR' && cedearPrices[sym]) {
-                        livePriceResult = okPrice(cedearPrices[sym].lastPriceArs ?? 0, 'PPI', cedearPrices[sym].updatedAt, 'high')
+                    if (category === 'CEDEAR' && cedearPrices[sym]) {
                         underlyingUsd = cedearPrices[sym].underlyingPrice ?? null
                         changePct1d = cedearPrices[sym].changePct != null
                             ? cedearPrices[sym].changePct! / 100
                             : null
-                    } else if ((category === 'CRYPTO' || category === 'STABLE') && cryptoPrices[sym] !== undefined) {
-                        livePriceResult = okPrice(cryptoPrices[sym], 'coingecko', null, 'high')
-                    } else if (aggregatedItem.currentPrice != null && Number.isFinite(aggregatedItem.currentPrice) && aggregatedItem.currentPrice > 0) {
-                        const source = category === 'FCI' ? 'fci_latest' : 'portfolio'
-                        livePriceResult = okPrice(aggregatedItem.currentPrice, source, null, category === 'FCI' ? 'high' : 'medium')
-                    } else {
-                        livePriceResult = missingPrice(category === 'FCI' ? 'fci_latest' : 'missing')
                     }
+
+                    // Price logic (manual → provider → portfolio fallback → missing)
+                    const livePriceResult: PriceResult = resolveAssetPriceResult({
+                        category,
+                        symbol: sym,
+                        instrumentId: holding.instrumentId,
+                        manualEntry: manualPrices.get(holding.instrumentId) ?? null,
+                        cedearQuote: category === 'CEDEAR' ? cedearPrices[sym] ?? null : null,
+                        cryptoPriceUsd: (category === 'CRYPTO' || category === 'STABLE') ? cryptoPrices[sym] ?? null : null,
+                        portfolioPrice: aggregatedItem.currentPrice ?? null,
+                    })
 
                     const resolvedPrice = resolvePriceWithCache(
                         buildPriceCacheKey(category, holding.instrumentId),
