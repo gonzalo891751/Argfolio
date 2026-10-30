@@ -259,7 +259,7 @@ export function WalletDetailPage() {
             <div className="p-8 text-center space-y-4">
                 <p className="text-muted-foreground">Cuenta no encontrada</p>
                 <button
-                    onClick={() => navigate('/mis-activos-v2')}
+                    onClick={() => navigate('/activos')}
                     className="text-primary hover:underline"
                 >
                     Volver a Mis Activos
@@ -273,7 +273,7 @@ export function WalletDetailPage() {
             <div className="p-8 text-center space-y-4">
                 <p className="text-muted-foreground">No se encontraron subcuentas de liquidez para esta cuenta.</p>
                 <button
-                    onClick={() => navigate('/mis-activos-v2')}
+                    onClick={() => navigate('/activos')}
                     className="text-primary hover:underline"
                 >
                     Volver a Mis Activos
@@ -286,7 +286,7 @@ export function WalletDetailPage() {
         <div className="max-w-4xl mx-auto space-y-6">
             {/* Breadcrumb */}
             <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Link to="/mis-activos-v2" className="hover:text-foreground transition-colors">
+                <Link to="/activos" className="hover:text-foreground transition-colors">
                     Mis Activos
                 </Link>
                 <span>/</span>
@@ -299,7 +299,7 @@ export function WalletDetailPage() {
             <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => navigate('/mis-activos-v2')}
+                        onClick={() => navigate('/activos')}
                         className="p-2 hover:bg-muted rounded-lg transition-colors"
                     >
                         <ArrowLeft className="h-5 w-5" />

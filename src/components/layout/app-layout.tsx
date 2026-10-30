@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { Sidebar, SidebarProvider, useSidebar, MobileNav } from '@/components/layout/sidebar'
+import { Sidebar, SidebarProvider, useSidebar, MobileNav, MobileTabBar } from '@/components/layout/sidebar'
+import { QuickEntryProvider } from '@/features/quick-entry/QuickEntryContext'
 import { ArgfolioHeader } from '@/components/layout/ArgfolioHeader'
 import { usePFSettlement } from '@/hooks/use-pf-settlement'
 import { usePFModelMigration } from '@/hooks/use-pf-model-migration'
@@ -41,11 +42,13 @@ function LayoutContent() {
                 {/* NOTE: isCondensed affects ONLY header, NOT sidebar */}
                 <ArgfolioHeader condensed={isCondensed} />
 
-                {/* Page content */}
-                <main className="flex-1 p-4 md:p-6 lg:p-8">
+                {/* Page content (bottom padding leaves room for the phone tab bar) */}
+                <main className="flex-1 p-4 pb-28 md:p-6 md:pb-28 lg:p-8">
                     <Outlet />
                 </main>
             </div>
+
+            <MobileTabBar />
         </div>
     )
 }
@@ -55,7 +58,9 @@ export function AppLayout() {
     usePFModelMigration()
     return (
         <SidebarProvider>
-            <LayoutContent />
+            <QuickEntryProvider>
+                <LayoutContent />
+            </QuickEntryProvider>
         </SidebarProvider>
     )
 }
