@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDailySeries, computePeriodChange } from './history-model'
+import { buildDailySeries, buildMonthlySummary, buildRubroSeries, computePeriodChange, findSuspiciousDays } from './history-model'
 import { shouldReplaceDaySnapshot, toSnapshotDateKey, SNAPSHOT_PARTIAL_NOTE } from '@/features/dashboardV2/snapshot-v2'
 import type { Movement, Snapshot } from '@/domain/types'
 
@@ -105,5 +105,64 @@ describe('computePeriodChange', () => {
     it('returns null without previous history', () => {
         expect(computePeriodChange([], [], { ars: 1000, usd: 1 }, 30, fxContext, now)).toBeNull()
         expect(computePeriodChange([snap('2026-10-30', 900, 1)], [], { ars: 1000, usd: 1 }, 30, fxContext, now)).toBeNull()
+    })
+})
+
+describe('buildMonthlySummary', () => {
+    const deposit = (dateISO: string, amount: number): Movement => ({
+        id: `dep-${dateISO}`, datetimeISO: dateISO, type: 'DEPOSIT', assetClass: 'wallet', instrumentId: 'ars-cash',
+        accountId: 'mp', tradeCurrency: 'ARS', quantity: amount, totalAmount: amount, netAmount: amount,
+    })
+    const snapshots = [
+        snap('2026-08-31', 1_000_000, 700),
+        snap('2026-09-10', 1_050_000, 730),
+        snap('2026-09-30', 1_250_000, 860),
+        snap('2026-10-15', 1_300_000, 880),
+    ]
+
+    it('starts each month at the last day of the previous one and nets deposits', () => {
+        const months = buildMonthlySummary(snapshots, [deposit('2026-09-20T12:00:00.000Z', 100_000)], fxContext, { ars: 1_320_000, usd: 900, fxMep: 1466 }, now)
+        expect(months.map(m => m.monthKey)).toEqual(['2026-10', '2026-09', '2026-08'])
+        expect(months[2].comparable).toBe(false)
+        const sep = months[1]
+        expect(sep.startDateKey).toBe('2026-08-31')
+        expect(sep.endDateKey).toBe('2026-09-30')
+        expect(sep.deltaArs).toBe(250_000)
+        expect(sep.netFlowsArs).toBe(100_000)
+        expect(sep.gainArs).toBe(150_000)
+        expect(sep.daysRecorded).toBe(2)
+        const oct = months[0]
+        expect(oct.isCurrent).toBe(true)
+        expect(oct.startDateKey).toBe('2026-09-30')
+        expect(oct.endArs).toBe(1_320_000)
+        expect(oct.gainArs).toBe(70_000)
+    })
+})
+
+describe('buildMonthlySummary edge cases', () => {
+    it('keeps a first month with a single day so it can be opened and deleted', () => {
+        const months = buildMonthlySummary([snap('2026-08-10', 1_000_000, 700), snap('2026-09-05', 1_100_000, 760)], [], fxContext, null, now)
+        expect(months.map(m => m.monthKey)).toEqual(['2026-09', '2026-08'])
+        expect(months[1].comparable).toBe(false)
+        expect(months[1].daysRecorded).toBe(1)
+        expect(months[0].comparable).toBe(true)
+        expect(months[0].startDateKey).toBe('2026-08-10')
+    })
+})
+
+describe('buildRubroSeries', () => {
+    it('groups wallets and frascos as pesos', () => {
+        const s = { ...snap('2026-10-01', 300, 0.2), breakdownRubros: { wallets: { ars: 100, usd: 0.07 }, frascos: { ars: 50, usd: 0.03 }, cedears: { ars: 150, usd: 0.1 } } }
+        const [point] = buildRubroSeries([s])
+        expect(point.values.pesos.ars).toBe(150)
+        expect(point.values.cedears.ars).toBe(150)
+        expect(point.values.crypto.ars).toBe(0)
+    })
+})
+
+describe('findSuspiciousDays', () => {
+    it('flags a spike that the next day undoes, not a jump that stays', () => {
+        const days = [snap('2026-10-01', 1, 1000), snap('2026-10-02', 1, 1600), snap('2026-10-03', 1, 1010), snap('2026-10-04', 1, 1500), snap('2026-10-05', 1, 1510)]
+        expect([...findSuspiciousDays(days)]).toEqual(['2026-10-02'])
     })
 })

@@ -430,14 +430,14 @@ export function CedearDetailPage() {
                         <div className="flex items-center gap-3">
                             <div className="bg-background rounded-lg px-3 py-1.5 border border-border inline-flex items-baseline gap-2">
                                 <span className="text-sm text-muted-foreground">≈</span>
-                                <span className="text-xl font-mono text-emerald-400 tabular-nums">{formatMoneyUSD(detail.currentValueUsd)}</span>
+                                <span className="text-xl font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">{formatMoneyUSD(detail.currentValueUsd)}</span>
                             </div>
                             {detail.pnlPctUsd !== 0 && (
                                 <span className={cn(
                                     "text-xs font-bold px-2 py-0.5 rounded-md tabular-nums border",
                                     detail.pnlPctUsd >= 0
-                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                        : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                        : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
                                 )}>
                                     {formatPnlPct(detail.pnlPctUsd)}
                                 </span>
@@ -458,7 +458,7 @@ export function CedearDetailPage() {
 
                 {/* Card 2: Metrics Dashboard */}
                 <div className="bg-card border border-border rounded-2xl p-5 lg:col-span-2 flex flex-col justify-between relative">
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 h-full">
+                    <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-5 gap-3 h-full">
                         {/* Tenencia */}
                         <MetricBlock label="Tenencia" highlight>
                             <div className="text-3xl font-bold tabular-nums">{formatQty(detail.totalQty, 'CEDEAR')}</div>
@@ -495,16 +495,16 @@ export function CedearDetailPage() {
                         </MetricBlock>
 
                         {/* Resultado */}
-                        <MetricBlock label="Resultado Total" className="md:col-span-2 lg:col-span-1">
+                        <MetricBlock label="Resultado Total" className="md:col-span-2 2xl:col-span-1">
                             <div className="flex flex-col mb-2">
                                 <span className="text-[9px] text-muted-foreground uppercase font-mono mb-0.5">Nominal (ARS)</span>
-                                <div className={cn("font-mono text-sm tabular-nums font-bold", detail.pnlArs >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                <div className={cn("font-mono text-sm tabular-nums font-bold", detail.pnlArs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                     {formatDeltaMoneyARS(detail.pnlArs)} ({formatPnlPct(detail.pnlPctArs)})
                                 </div>
                             </div>
                             <div className="flex flex-col pt-2 border-t border-border">
                                 <span className="text-[9px] text-muted-foreground uppercase font-mono mb-0.5">Real (USD)</span>
-                                <div className={cn("font-mono text-sm tabular-nums font-bold", detail.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                <div className={cn("font-mono text-sm tabular-nums font-bold", detail.pnlUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                     {formatDeltaMoneyUSD(detail.pnlUsd)} ({formatPnlPct(detail.pnlPctUsd)})
                                 </div>
                             </div>
@@ -644,10 +644,10 @@ export function CedearDetailPage() {
                                                 <div className="text-xs text-muted-foreground tabular-nums">{formatMoneyUSD(detail.currentValueUsd)}</div>
                                             </td>
                                             <td className="px-4 py-4 text-right">
-                                                <div className={cn("text-xs tabular-nums font-bold", detail.pnlArs >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                                <div className={cn("text-xs tabular-nums font-bold", detail.pnlArs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                     {formatDeltaMoneyARS(detail.pnlArs)} ({formatPnlPct(detail.pnlPctArs)})
                                                 </div>
-                                                <div className={cn("text-[10px] tabular-nums font-bold", detail.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                                <div className={cn("text-[10px] tabular-nums font-bold", detail.pnlUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                     {formatDeltaMoneyUSD(detail.pnlUsd)} ({formatPnlPct(detail.pnlPctUsd)})
                                                 </div>
                                             </td>
@@ -697,7 +697,7 @@ export function CedearDetailPage() {
                                         </button>
                                     </div>
                                     {effectiveSellQty > totalHolding && (
-                                        <p className="text-rose-400 text-xs">No podés vender más de lo que tenés.</p>
+                                        <p className="text-rose-600 dark:text-rose-400 text-xs">No podés vender más de lo que tenés.</p>
                                     )}
                                 </div>
 
@@ -803,7 +803,7 @@ export function CedearDetailPage() {
                                         </div>
                                         <div className="text-right">
                                             <div className="text-[10px] text-muted-foreground uppercase mb-1">Equivalente USD</div>
-                                            <div className="text-base font-mono text-emerald-400 tabular-nums">{formatMoneyUSD(allocation.revenueUsd)}</div>
+                                            <div className="text-base font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">{formatMoneyUSD(allocation.revenueUsd)}</div>
                                         </div>
                                     </div>
 
@@ -877,10 +877,10 @@ export function CedearDetailPage() {
                                                     Resultado Fiscal
                                                     <span className="px-1 py-0.5 bg-muted rounded text-[9px] border border-border">ARS</span>
                                                 </div>
-                                                <div className={cn("text-3xl font-mono font-bold tabular-nums tracking-tight", allocation.pnlArs >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                                <div className={cn("text-3xl font-mono font-bold tabular-nums tracking-tight", allocation.pnlArs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                     {formatDeltaMoneyARS(allocation.pnlArs)}
                                                 </div>
-                                                <div className={cn("text-sm mt-1 font-mono font-bold", allocation.pnlArs >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                                <div className={cn("text-sm mt-1 font-mono font-bold", allocation.pnlArs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                     {formatPnlPct(allocation.pctArs)}
                                                 </div>
                                             </div>
@@ -889,10 +889,10 @@ export function CedearDetailPage() {
                                                     Resultado Real
                                                     <span className="px-1 py-0.5 bg-muted rounded text-[9px] border border-border">USD</span>
                                                 </div>
-                                                <div className={cn("text-2xl font-mono font-bold tabular-nums tracking-tight", allocation.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                                <div className={cn("text-2xl font-mono font-bold tabular-nums tracking-tight", allocation.pnlUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                     {formatDeltaMoneyUSD(allocation.pnlUsd)}
                                                 </div>
-                                                <div className={cn("text-xs mt-1 font-mono font-bold", allocation.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                                <div className={cn("text-xs mt-1 font-mono font-bold", allocation.pnlUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                     {formatPnlPct(allocation.pctUsd)}
                                                 </div>
                                             </div>
@@ -975,7 +975,7 @@ export function CedearDetailPage() {
                             </div>
                         </div>
 
-                        <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-200 flex gap-3 items-start">
+                        <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-700 dark:text-yellow-200 flex gap-3 items-start">
                             <AlertTriangle className="w-5 h-5 shrink-0 opacity-70" />
                             <p>
                                 <strong>Dato Clave:</strong> Si ves que ganás 50% en pesos pero estás 0% en dólares, significa que tu CEDEAR
@@ -1040,7 +1040,7 @@ function MetricBlock({
 }) {
     return (
         <div className={cn(
-            "p-4 rounded-xl bg-background/30 border border-border/50 flex flex-col justify-center",
+            "min-w-0 break-words p-4 rounded-xl bg-background/30 border border-border/50 flex flex-col justify-center",
             highlight && "border-primary/20 bg-primary/5",
             className
         )}>
@@ -1160,10 +1160,10 @@ function CedearLotRow({
 
             {/* Resultado */}
             <td className="px-4 py-4 text-right align-top">
-                <div className={cn("text-xs font-mono font-bold mb-1", lot.pnlArs >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                <div className={cn("text-xs font-mono font-bold mb-1", lot.pnlArs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                     {formatDeltaMoneyARS(lot.pnlArs)} <span className="opacity-75 text-[10px] font-normal">({formatPnlPct(lot.pnlPctArs)})</span>
                 </div>
-                <div className={cn("text-xs font-mono font-bold", lot.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                <div className={cn("text-xs font-mono font-bold", lot.pnlUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                     {formatDeltaMoneyUSD(lot.pnlUsd)} <span className="opacity-75 text-[10px] font-normal">({formatPnlPct(lot.pnlPctUsd)})</span>
                 </div>
             </td>

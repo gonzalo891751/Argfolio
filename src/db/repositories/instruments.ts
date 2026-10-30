@@ -1,21 +1,37 @@
 import { db } from '../schema'
 import type { Instrument } from '@/domain/types'
 
+/**
+ * CEDEARs trade in pesos (BYMA quotes are ARS), but the first demo instruments
+ * were stored as USD-native, which valued them as dollar assets. Read them as
+ * ARS-native; the stored record is left untouched.
+ */
+export function normalizeInstrument(instrument: Instrument): Instrument {
+    if (instrument.category === 'CEDEAR' && instrument.nativeCurrency !== 'ARS') {
+        return { ...instrument, nativeCurrency: 'ARS' }
+    }
+    return instrument
+}
+
+function normalizeOptional(instrument: Instrument | undefined): Instrument | undefined {
+    return instrument ? normalizeInstrument(instrument) : undefined
+}
+
 export const instrumentsRepo = {
     async list(): Promise<Instrument[]> {
-        return db.instruments.toArray()
+        return (await db.instruments.toArray()).map(normalizeInstrument)
     },
 
     async listByCategory(category: string): Promise<Instrument[]> {
-        return db.instruments.where('category').equals(category).toArray()
+        return (await db.instruments.where('category').equals(category).toArray()).map(normalizeInstrument)
     },
 
     async get(id: string): Promise<Instrument | undefined> {
-        return db.instruments.get(id)
+        return normalizeOptional(await db.instruments.get(id))
     },
 
     async getBySymbol(symbol: string): Promise<Instrument | undefined> {
-        return db.instruments.where('symbol').equalsIgnoreCase(symbol).first()
+        return normalizeOptional(await db.instruments.where('symbol').equalsIgnoreCase(symbol).first())
     },
 
     async create(instrument: Instrument): Promise<string> {

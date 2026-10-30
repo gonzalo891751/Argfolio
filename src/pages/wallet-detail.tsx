@@ -307,7 +307,7 @@ export function WalletDetailPage() {
                     <div>
                         <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                                <Wallet className="h-6 w-6 text-emerald-400" />
+                                <Wallet className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                             </div>
                             <div>
                                 <h1 className="text-2xl font-bold">{account.name || `Liquidez ${accountId.slice(-4).toUpperCase()}`}</h1>
@@ -337,8 +337,8 @@ export function WalletDetailPage() {
 
             {hasSuspiciousCash && (
                 <div className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex gap-3"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" /><span>Este saldo contiene una operación cripto cash-neutral o un settlement incompleto. Revisá la composición antes de ajustarlo.</span></div>
-                    <a href="#cash-composition" className="whitespace-nowrap font-medium text-amber-300 underline">Ver composición</a>
+                    <div className="flex gap-3"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" /><span>Este saldo contiene una operación cripto cash-neutral o un settlement incompleto. Revisá la composición antes de ajustarlo.</span></div>
+                    <a href="#cash-composition" className="whitespace-nowrap font-medium text-amber-700 dark:text-amber-300 underline">Ver composición</a>
                 </div>
             )}
 
@@ -350,7 +350,7 @@ export function WalletDetailPage() {
                     <p className="text-xs uppercase text-muted-foreground tracking-wider mb-2">Capital Actual</p>
                     <p className="text-4xl font-bold font-mono mb-2">{formatPrimaryMoney(capitalPrimary)}</p>
                     <div className="flex items-center gap-3">
-                        <span className="px-2 py-1 bg-background/50 rounded text-sm font-mono text-emerald-400">
+                        <span className="px-2 py-1 bg-background/50 rounded text-sm font-mono text-emerald-600 dark:text-emerald-400">
                             ≈ {formatSecondaryMoney(capitalSecondary)}
                         </span>
                         {selectedItem.fxMeta && selectedItem.fxMeta.rate > 0 && (
@@ -423,12 +423,12 @@ export function WalletDetailPage() {
                         <>
                             <div className="mb-4">
                                 <p className="text-sm text-muted-foreground mb-1">TNA</p>
-                                <p className="text-3xl font-bold font-mono text-emerald-400">{tna.toFixed(2)}%</p>
+                                <p className="text-3xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{tna.toFixed(2)}%</p>
                             </div>
                             <div className="space-y-2 pt-4 border-t border-border">
                                 <div className="flex justify-between">
                                     <span className="text-sm text-muted-foreground">TEA</span>
-                                    <span className="font-mono text-emerald-400">{tea.toFixed(2)}%</span>
+                                    <span className="font-mono text-emerald-600 dark:text-emerald-400">{tea.toFixed(2)}%</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-muted-foreground">Interés Diario</span>
@@ -445,12 +445,12 @@ export function WalletDetailPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* Tomorrow */}
                         <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400 font-bold text-sm">
+                            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-sm">
                                 1d
                             </div>
                             <div>
                                 <p className="text-sm text-muted-foreground">Mañana</p>
-                                <p className="font-mono text-lg text-emerald-400 font-semibold">+{formatPrimaryMoney(dailyInterest)}</p>
+                                <p className="font-mono text-lg text-emerald-600 dark:text-emerald-400 font-semibold">+{formatPrimaryMoney(dailyInterest)}</p>
                                 {secondaryPerPrimary != null && (
                                     <p className="font-mono text-xs text-muted-foreground">≈ {formatSecondaryMoney(dailyInterest * secondaryPerPrimary)}</p>
                                 )}
@@ -463,7 +463,7 @@ export function WalletDetailPage() {
                             </div>
                             <div>
                                 <p className="text-sm text-muted-foreground">En 30 días</p>
-                                <p className="font-mono text-lg text-emerald-400 font-semibold">+{formatPrimaryMoney(interest30d)}</p>
+                                <p className="font-mono text-lg text-emerald-600 dark:text-emerald-400 font-semibold">+{formatPrimaryMoney(interest30d)}</p>
                                 {secondaryPerPrimary != null && (
                                     <p className="font-mono text-xs text-muted-foreground">≈ {formatSecondaryMoney(interest30d * secondaryPerPrimary)}</p>
                                 )}
@@ -471,12 +471,12 @@ export function WalletDetailPage() {
                         </div>
                         {/* 1 Year */}
                         <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-sm">
+                            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-sm">
                                 1A
                             </div>
                             <div>
                                 <p className="text-sm text-muted-foreground">En 1 año (TEA)</p>
-                                <p className="font-mono text-lg text-emerald-400 font-semibold">+{formatPrimaryMoney(interest1y)}</p>
+                                <p className="font-mono text-lg text-emerald-600 dark:text-emerald-400 font-semibold">+{formatPrimaryMoney(interest1y)}</p>
                                 {secondaryPerPrimary != null && (
                                     <p className="font-mono text-xs text-muted-foreground">≈ {formatSecondaryMoney(interest1y * secondaryPerPrimary)}</p>
                                 )}
@@ -535,8 +535,8 @@ export function WalletDetailPage() {
                                         return <tr key={`${row.movementId}-${index}`} className={row.issue ? 'bg-amber-500/[0.05]' : ''}>
                                             <td className="px-4 py-3 whitespace-nowrap">{new Date(row.datetimeISO).toLocaleDateString('es-AR')}</td>
                                             <td className="px-4 py-3 font-mono text-xs">{row.synthetic ? <span className="text-muted-foreground">Saldo inicial</span> : <button className="text-primary hover:underline" onClick={() => navigate('/movements', { state: { movementFilters: { search: row.movementId, datePreset: 'all' } } })}>{row.movementId.slice(0, 12)}</button>}<div className="text-muted-foreground">{row.type} {row.symbol ?? ''}</div></td>
-                                            <td className="px-4 py-3"><span>{row.reason}</span>{row.operationId && <div className="font-mono text-[10px] text-muted-foreground">{row.operationId.slice(0, 16)}</div>}{row.issue && <span className="mt-1 inline-flex rounded bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">{row.issue === 'possible_swap_residue' ? 'Posible residuo de swap' : row.issue === 'missing_settlement_metadata' ? 'Settlement sin importe real' : 'Settlement legacy'}</span>}</td>
-                                            <td className={`px-4 py-3 text-right font-mono ${row.amount < 0 ? 'text-rose-400' : row.amount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>{row.amount > 0 ? '+' : ''}{formatPrimaryMoney(row.amount)}</td>
+                                            <td className="px-4 py-3"><span>{row.reason}</span>{row.operationId && <div className="font-mono text-[10px] text-muted-foreground">{row.operationId.slice(0, 16)}</div>}{row.issue && <span className="mt-1 inline-flex rounded bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">{row.issue === 'possible_swap_residue' ? 'Posible residuo de swap' : row.issue === 'missing_settlement_metadata' ? 'Settlement sin importe real' : 'Settlement legacy'}</span>}</td>
+                                            <td className={`px-4 py-3 text-right font-mono ${row.amount < 0 ? 'text-rose-600 dark:text-rose-400' : row.amount > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>{row.amount > 0 ? '+' : ''}{formatPrimaryMoney(row.amount)}</td>
                                             <td className="px-4 py-3 text-right font-mono">{formatPrimaryMoney(accumulated)}</td>
                                         </tr>
                                     })}
@@ -602,7 +602,7 @@ function MovementRow({ movement, delta, formatPrimaryMoney, formatSecondaryMoney
             <div className="flex items-center gap-4">
                 <div className={cn(
                     "w-8 h-8 rounded-full flex items-center justify-center text-xs",
-                    isPositive ? "bg-emerald-500/10 text-emerald-400" : "bg-muted text-muted-foreground"
+                    isPositive ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground"
                 )}>
                     {typeIcons[movement.type] || '•'}
                 </div>
@@ -614,7 +614,7 @@ function MovementRow({ movement, delta, formatPrimaryMoney, formatSecondaryMoney
             <div className="text-right">
                 <p className={cn(
                     "font-mono text-sm font-semibold",
-                    isPositive ? "text-emerald-400" : "text-foreground"
+                    isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"
                 )}>
                     {isPositive ? '+' : '-'}{formatPrimaryMoney(amount)}
                 </p>

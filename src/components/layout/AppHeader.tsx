@@ -20,7 +20,7 @@ function Quote({ label, pair, className }: { label: string; pair: FxPair | undef
     if (!sell) return null
     const title = pair?.buy ? `${label}: compra $ ${nf.format(pair.buy)} · venta $ ${nf.format(sell)}` : `${label}: $ ${nf.format(sell)}`
     return (
-        <span className={cn('flex shrink-0 items-baseline gap-1.5 whitespace-nowrap', className)} title={title}>
+        <span className={cn('flex shrink-0 items-baseline gap-1 whitespace-nowrap sm:gap-1.5', className)} title={title}>
             <span className="text-xs text-muted-foreground">{label}</span>
             <span className="text-sm font-semibold tabular-nums">$ {nf.format(sell)}</span>
         </span>
@@ -48,7 +48,7 @@ export function AppHeader() {
             className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70"
             style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
-            <div className="flex h-14 items-center gap-3 px-4 lg:px-6">
+            <div className="flex h-14 items-center gap-2 px-4 sm:gap-3 lg:px-6">
                 <div className="flex items-center gap-2 lg:hidden">
                     <button
                         type="button"
@@ -58,10 +58,11 @@ export function AppHeader() {
                     >
                         <Menu className="h-5 w-5" />
                     </button>
-                    <ArgfolioLogo variant="mark" className="h-7 w-7" />
+                    <ArgfolioLogo variant="mark" className="hidden h-7 w-7 sm:block" />
                 </div>
 
-                <div className="flex min-w-0 flex-1 items-center gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {/* Scrolls sideways on phones; the fade hints there is more */}
+                <div className="flex min-w-0 flex-1 items-center gap-3 overflow-x-auto pr-4 [mask-image:linear-gradient(to_right,black_85%,transparent)] [scrollbar-width:none] sm:gap-4 sm:pr-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden">
                     <Quote label="MEP" pair={fx?.mep} />
                     <Quote label="Oficial" pair={fx?.oficial} />
                     <Quote label="Cripto" pair={fx?.cripto} />

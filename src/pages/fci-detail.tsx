@@ -357,14 +357,14 @@ export function FciDetailPage() {
                         <div className="flex items-center gap-3">
                             <div className="bg-background rounded-lg px-3 py-1.5 border border-border inline-flex items-baseline gap-2">
                                 <span className="text-sm text-muted-foreground">≈</span>
-                                <span className="text-xl font-mono text-emerald-400 tabular-nums">{formatMoneyUSD(detail.currentValueUsd)}</span>
+                                <span className="text-xl font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">{formatMoneyUSD(detail.currentValueUsd)}</span>
                             </div>
                             {detail.pnlPctUsd !== 0 && (
                                 <span className={cn(
                                     "text-xs font-bold px-2 py-0.5 rounded-md tabular-nums border",
                                     detail.pnlPctUsd >= 0
-                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                        : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                        : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
                                 )}>
                                     {formatPnlPct(detail.pnlPctUsd)}
                                 </span>
@@ -400,7 +400,7 @@ export function FciDetailPage() {
 
                 {/* Card 2: Metrics Dashboard */}
                 <div className="bg-card border border-border rounded-2xl p-5 lg:col-span-2 flex flex-col justify-between relative">
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 h-full">
+                    <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-5 gap-3 h-full">
                         {/* Tenencia */}
                         <MetricBlock label="Tenencia" highlight>
                             <div className="text-2xl font-bold tabular-nums">{formatQty(detail.totalQty, 'FCI')}</div>
@@ -436,16 +436,16 @@ export function FciDetailPage() {
                         </MetricBlock>
 
                         {/* Resultado */}
-                        <MetricBlock label="Resultado Total" className="md:col-span-2 lg:col-span-1">
+                        <MetricBlock label="Resultado Total" className="md:col-span-2 2xl:col-span-1">
                             <div className="flex flex-col mb-2">
                                 <span className="text-[9px] text-muted-foreground uppercase font-mono mb-0.5">Nominal (ARS)</span>
-                                <div className={cn("font-mono text-sm tabular-nums font-bold", detail.pnlArs >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                <div className={cn("font-mono text-sm tabular-nums font-bold", detail.pnlArs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                     {formatDeltaMoneyARS(detail.pnlArs)} ({formatPnlPct(detail.pnlPctArs)})
                                 </div>
                             </div>
                             <div className="flex flex-col pt-2 border-t border-border">
                                 <span className="text-[9px] text-muted-foreground uppercase font-mono mb-0.5">Real (USD)</span>
-                                <div className={cn("font-mono text-sm tabular-nums font-bold", detail.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                <div className={cn("font-mono text-sm tabular-nums font-bold", detail.pnlUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                     {formatDeltaMoneyUSD(detail.pnlUsd)} ({formatPnlPct(detail.pnlPctUsd)})
                                 </div>
                             </div>
@@ -541,10 +541,10 @@ export function FciDetailPage() {
                                                 <div className="text-xs text-muted-foreground tabular-nums">{formatMoneyUSD(detail.currentValueUsd)}</div>
                                             </td>
                                             <td className="px-4 py-4 text-right">
-                                                <div className={cn("text-xs tabular-nums font-bold", detail.pnlArs >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                                <div className={cn("text-xs tabular-nums font-bold", detail.pnlArs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                     {formatDeltaMoneyARS(detail.pnlArs)} ({formatPnlPct(detail.pnlPctArs)})
                                                 </div>
-                                                <div className={cn("text-[10px] tabular-nums font-bold", detail.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                                <div className={cn("text-[10px] tabular-nums font-bold", detail.pnlUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                     {formatDeltaMoneyUSD(detail.pnlUsd)} ({formatPnlPct(detail.pnlPctUsd)})
                                                 </div>
                                             </td>
@@ -588,7 +588,7 @@ export function FciDetailPage() {
                                         </button>
                                     </div>
                                     {effectiveRescateQty > totalHolding && (
-                                        <p className="text-rose-400 text-xs">No podés rescatar más de lo que tenés.</p>
+                                        <p className="text-rose-600 dark:text-rose-400 text-xs">No podés rescatar más de lo que tenés.</p>
                                     )}
                                 </div>
 
@@ -606,8 +606,8 @@ export function FciDetailPage() {
 
                                 {/* Info about T+2 */}
                                 <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-start gap-2">
-                                    <Info className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
-                                    <p className="text-xs text-blue-400">
+                                    <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                                    <p className="text-xs text-blue-600 dark:text-blue-400">
                                         Los rescates de FCI se acreditan en <strong>T+2</strong> (48-72hs hábiles).
                                     </p>
                                 </div>
@@ -657,10 +657,10 @@ export function FciDetailPage() {
 
                                         <div className="bg-card border border-border rounded-xl p-4">
                                             <span className="text-xs text-muted-foreground uppercase font-mono">Resultado</span>
-                                            <div className={cn("text-lg font-mono font-bold tabular-nums mt-1", rescatePreview.pnlArs >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                            <div className={cn("text-lg font-mono font-bold tabular-nums mt-1", rescatePreview.pnlArs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                 {formatDeltaMoneyARS(rescatePreview.pnlArs)}
                                             </div>
-                                            <div className={cn("text-xs font-mono tabular-nums font-bold", rescatePreview.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                                            <div className={cn("text-xs font-mono tabular-nums font-bold", rescatePreview.pnlUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                                                 {formatDeltaMoneyUSD(rescatePreview.pnlUsd)} ({formatPnlPct(rescatePreview.pctUsd)})
                                             </div>
                                         </div>
@@ -764,7 +764,7 @@ function MetricBlock({
 }) {
     return (
         <div className={cn(
-            "p-3 rounded-xl border transition-colors flex flex-col",
+            "min-w-0 break-words p-3 rounded-xl border transition-colors flex flex-col",
             highlight
                 ? "bg-primary/5 border-primary/20"
                 : "bg-background border-border hover:border-muted-foreground/30",
@@ -859,10 +859,10 @@ function FciLotRow({
                 <div className="text-[10px] text-muted-foreground tabular-nums">{formatMoneyUSD(lot.currentValueUsd)}</div>
             </td>
             <td className="px-4 py-3 text-right">
-                <div className={cn("text-xs tabular-nums font-bold", lot.pnlArs >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                <div className={cn("text-xs tabular-nums font-bold", lot.pnlArs >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                     {formatDeltaMoneyARS(lot.pnlArs)} ({formatPnlPct(lot.pnlPctArs)})
                 </div>
-                <div className={cn("text-[10px] tabular-nums", lot.pnlUsd >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                <div className={cn("text-[10px] tabular-nums", lot.pnlUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
                     {formatDeltaMoneyUSD(lot.pnlUsd)} ({formatPnlPct(lot.pnlPctUsd)})
                 </div>
             </td>

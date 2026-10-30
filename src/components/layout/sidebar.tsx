@@ -12,6 +12,7 @@ import {
     Plus,
     Menu,
     TrendingUp,
+    BarChart3,
 } from 'lucide-react'
 import { useQuickEntry } from '@/features/quick-entry/QuickEntryContext'
 import { cn } from '@/lib/utils'
@@ -44,13 +45,14 @@ const STORAGE_KEY = 'argfolio-sidebar-collapsed'
 const navItems = [
     { path: '/inicio', label: 'Inicio', icon: Home },
     { path: '/activos', label: 'Mis activos', icon: Wallet },
+    { path: '/rendimiento', label: 'Rendimiento', icon: BarChart3 },
     { path: '/movements', label: 'Movimientos', icon: ArrowLeftRight },
     { path: '/market', label: 'Mercado', icon: TrendingUp },
 ]
 
 /** Secondary tools, out of the way */
 const moreItems = [
-    { path: '/history', label: 'Historial diario', icon: History },
+    { path: '/history', label: 'Historial', icon: History },
     { path: '/personal-finances', label: 'Finanzas personales', icon: CreditCard },
     { path: '/finanzas-express', label: 'Presupuesto', icon: Calculator },
     { path: '/settings', label: 'Configuración', icon: Settings },

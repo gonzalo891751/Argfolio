@@ -74,6 +74,8 @@ export interface Account {
     kind: AccountKind
     defaultCurrency: Currency
     cashYield?: CashYieldParams
+    /** Synced rubro (e.g. a Naranja X frasco); device settings can override it */
+    rubroOverride?: 'billeteras' | 'frascos' | 'plazos' | 'cedears' | 'cripto'
 }
 
 export interface MovementFee {
@@ -223,6 +225,11 @@ export interface Movement {
         walletAdjustmentReason?: 'unregistered_expense' | 'unregistered_income' | 'interest' | 'commission' | 'correction' | 'other'
         /** How the adjustment cost basis was obtained */
         costPolicy?: 'zero_cost' | 'manual_cost' | 'preserve_average' | 'unknown'
+        /**
+         * CEDEAR ratio change (split): the BUY adds the new units at zero cost,
+         * so total cost is kept and the cost per unit is divided.
+         */
+        splitRatio?: number
         /** True while a proposed repair leg still needs an explicit user classification */
         requiresManualReview?: boolean
         /** Repair plan that created this movement */

@@ -168,6 +168,11 @@ function Performance({
                 </p>
             )}
 
+            <Link to="/rendimiento" className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2.5 text-sm font-medium hover:bg-muted">
+                Cuánto rindió cada inversión
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </Link>
+
             {chartData.length > 1 && (
                 <div>
                     <div className="mb-2 flex justify-end">

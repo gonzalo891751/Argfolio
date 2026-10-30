@@ -49,6 +49,8 @@ export interface OverviewPfInfo {
 
 export interface OverviewPosition {
     id: string
+    /** PortfolioV2 item id (key of the detail maps) */
+    itemId: string
     groupId: GroupId
     kind: ItemKind
     label: string
@@ -224,6 +226,7 @@ function buildPosition(
 
     const position: OverviewPosition = {
         id: `${rubroId}:${item.id}`,
+        itemId: item.id,
         groupId,
         kind: item.kind,
         label,

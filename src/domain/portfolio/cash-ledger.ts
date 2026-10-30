@@ -134,6 +134,30 @@ function isStablecoinSale(mov: Movement): boolean {
         && ['USDT', 'USDC', 'DAI', 'BUSD'].includes(symbol)
 }
 
+/**
+ * Crypto trades settled with the account's own stablecoin (the asset leg plus
+ * its auto USDT leg) swap units, not fiat. Both legs share an operation id.
+ * Letting them cancel out made the ledger order-dependent: with equal
+ * timestamps the BUY could run first, and the momentary dip below zero was
+ * "filled" with a phantom opening balance.
+ */
+function collectStableSettledOperations(movements: Movement[]): Set<string> {
+    const ids = new Set<string>()
+    for (const mov of movements) {
+        if (mov.assetClass !== 'crypto' || mov.reason !== 'auto_usdt_balance') continue
+        if (mov.meta?.operationKind !== 'trade') continue
+        const id = mov.meta.operationId ?? mov.groupId ?? mov.linkedMovementId
+        if (id) ids.add(id)
+    }
+    return ids
+}
+
+function isStableSettledLeg(mov: Movement, operations: Set<string>): boolean {
+    if (mov.assetClass !== 'crypto' || operations.size === 0) return false
+    const id = mov.meta?.operationId ?? mov.groupId
+    return id != null && operations.has(id)
+}
+
 export function getMovementCashDeltas(mov: Movement): CashDelta[] {
     const deltas: CashDelta[] = []
     const tradeCurrency = resolveTradeCurrency(mov)
@@ -287,10 +311,14 @@ export function traceCashBalanceContributions({
     accountId: string
     currency: Currency
 }): CashContribution[] {
-    const contributions = filterActiveMovements(movements)
+    const active = filterActiveMovements(movements)
+    const stableSettled = collectStableSettledOperations(active)
+    const contributions = active
         .filter(mov => mov.accountId === accountId)
         .sort((a, b) => a.datetimeISO.localeCompare(b.datetimeISO))
         .flatMap((mov): CashContribution[] => {
+            // Paid or received in USDT: never touched this account's fiat
+            if (isStableSettledLeg(mov, stableSettled)) return []
             const matching = getMovementCashDeltas(mov).filter(delta => delta.currency === currency)
             const issue = contributionIssue(mov)
             const cashNeutralForCurrency = isExplicitCashNeutralOperation(mov)
@@ -342,8 +370,10 @@ export function computeCashLedger(movements: Movement[]): CashLedgerResult {
     const sorted = filterActiveMovements(movements).sort(
         (a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime()
     )
+    const stableSettled = collectStableSettledOperations(sorted)
 
     for (const mov of sorted) {
+        if (isStableSettledLeg(mov, stableSettled)) continue
         const deltas = getMovementCashDeltas(mov)
         if (deltas.length === 0) continue
 

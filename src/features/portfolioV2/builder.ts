@@ -653,6 +653,9 @@ export function buildRubros(
     const rubros: RubroV2[] = []
     const accountMap = new Map(accounts.map(a => [a.id, a]))
     const settingsMap = new Map(accountSettings.map(s => [s.id, s]))
+    // Device settings win; the account's own (synced) rubro is the fallback
+    const rubroOverrideOf = (accountId: string): RubroOverride | undefined =>
+        settingsMap.get(accountId)?.rubroOverride ?? accountMap.get(accountId)?.rubroOverride
     const oficialSell = fxSnapshot?.officialSell ?? 1
 
     for (const config of RUBRO_CONFIGS) {
@@ -664,7 +667,7 @@ export function buildRubros(
         if (config.id === 'frascos') {
             for (const [accountId, group] of Object.entries(groupedRows)) {
                 const account = accountMap.get(accountId)
-                const rubroOverride = settingsMap.get(accountId)?.rubroOverride
+                const rubroOverride = rubroOverrideOf(accountId)
 
                 // Only include if explicitly marked as Frasco via settings
                 if (!isFrasco(rubroOverride)) continue
@@ -812,7 +815,7 @@ export function buildRubros(
                 // BILLETERAS: WALLET/BANK + cash from brokers/exchanges
                 // ==========================================================
                 if (config.id === 'wallets') {
-                    const rubroOverride = settingsMap.get(accountId)?.rubroOverride
+                    const rubroOverride = rubroOverrideOf(accountId)
 
                     // Case A: Standard wallet/bank accounts - include all their cash
                     if (isWalletForBilleteras(account, rubroOverride)) {
@@ -1243,11 +1246,12 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
         // ignore debug-only guard rail failures
     }
 
-    // Count inferred balances
+    // Count inferred balances the user can see. One that ends at zero (e.g.
+    // USDT bought with money from outside the exchange) has nothing to fix.
     let inferredCount = 0
     for (const group of Object.values(groupedRows)) {
         for (const m of group.metrics) {
-            if (m.openingBalanceInferred) inferredCount++
+            if (m.openingBalanceInferred && Math.abs(m.quantity ?? 0) >= 0.01) inferredCount++
         }
     }
 

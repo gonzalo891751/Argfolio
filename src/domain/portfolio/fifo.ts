@@ -29,6 +29,15 @@ export interface FifoResult {
     totalCostUsd: number // = sum(lot.qty * lot.unitCostUsd)
 }
 
+/** (held + added) / held for a split BUY over open lots; null otherwise. */
+function splitFactorFor(mov: Movement, lots: FifoLot[]): number | null {
+    if (mov.type !== 'BUY' || !(mov.meta?.splitRatio && mov.meta.splitRatio > 1)) return null
+    const held = lots.reduce((sum, lot) => sum + lot.quantity, 0)
+    const added = mov.quantity ?? 0
+    if (held <= 0 || added <= 0) return null
+    return (held + added) / held
+}
+
 /**
  * Build FIFO inventory from movements.
  * 
@@ -57,6 +66,19 @@ export function buildFifoLots(
         // For accurate historical cost in USD, we rely on fxAtTrade being populated during ingestion.
         // If not, we might be missing data.
         const fxRate = mov.fxAtTrade ?? 1
+
+        // CEDEAR ratio change: every open lot gets more units, same cost
+        const splitFactor = splitFactorFor(mov, lots)
+        if (splitFactor) {
+            for (const lot of lots) {
+                lot.quantity *= splitFactor
+                lot.originalQty *= splitFactor
+                lot.unitCostNative /= splitFactor
+                lot.unitCostArs /= splitFactor
+                lot.unitCostUsd /= splitFactor
+            }
+            continue
+        }
 
         switch (mov.type) {
             case 'BUY':
