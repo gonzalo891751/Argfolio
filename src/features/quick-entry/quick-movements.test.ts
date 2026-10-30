@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildBalanceUpdate, buildCashMovement, buildTradeMovements } from './quick-movements'
-import { computeCashBalances, getMovementCashDeltas } from '@/domain/portfolio/cash-ledger'
+import { computeCashBalances, computeCashLedger, getMovementCashDeltas, traceCashBalanceContributions } from '@/domain/portfolio/cash-ledger'
 import type { Movement } from '@/domain/types'
 
 /** Net cash effect of the movements, without the ledger's inferred opening balance. */
@@ -126,5 +126,34 @@ describe('buildBalanceUpdate', () => {
     it('refuses impossible reasons', () => {
         expect(() => buildBalanceUpdate({ ...base, systemBalance: 100, realBalance: 50, reason: 'interest' })).toThrow()
         expect(() => buildBalanceUpdate({ ...base, systemBalance: 100, realBalance: 150, reason: 'withdraw' })).toThrow()
+    })
+})
+
+describe('crypto trades settled with USDT in the cash ledger', () => {
+    const trade = (side: 'buy' | 'sell') => buildTradeMovements({
+        side, assetClass: 'crypto', instrumentId: 'btc', symbol: 'BTC', name: 'Bitcoin',
+        accountId: 'binance', isExchange: true, qty: 0.002, unitPrice: 101_000,
+        datetimeISO: when, fxRate: 1500, settleWithStable: true, stableInstrumentId: 'usdt', newId,
+    })
+
+    it('never creates fiat cash, whatever order the legs come in (same timestamp)', () => {
+        for (const side of ['buy', 'sell'] as const) {
+            const [asset, usdt] = trade(side)
+            for (const order of [[asset, usdt], [usdt, asset]]) {
+                const ledger = computeCashLedger(order)
+                expect(ledger.balances.get('binance')?.get('USD') ?? 0).toBe(0)
+                expect(ledger.openingBalances.get('binance')?.get('USD') ?? 0).toBe(0)
+                expect(traceCashBalanceContributions({ movements: order, accountId: 'binance', currency: 'USD' })).toEqual([])
+            }
+        }
+    })
+
+    it('keeps real fiat movements of the same account', () => {
+        const dep = buildCashMovement({
+            direction: 'in', accountId: 'binance', currency: 'USD', amount: 50, datetimeISO: '2026-10-29T15:00:00.000Z',
+            instrumentId: 'usd-cash', fxRate: 1500, fxKind: 'CRIPTO', newId,
+        })
+        const ledger = computeCashLedger([...trade('buy').reverse(), dep])
+        expect(ledger.balances.get('binance')?.get('USD')).toBe(50)
     })
 })

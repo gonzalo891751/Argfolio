@@ -11,11 +11,11 @@ export const demoInstruments: Instrument[] = [
     { id: 'usdt', symbol: 'USDT', name: 'Tether', category: 'STABLE', nativeCurrency: 'USDT', priceKey: 'usdt' },
     { id: 'usdc', symbol: 'USDC', name: 'USD Coin', category: 'STABLE', nativeCurrency: 'USDC', priceKey: 'usdc' },
     // Cedears
-    { id: 'aapl', symbol: 'AAPL', name: 'Apple Inc.', category: 'CEDEAR', nativeCurrency: 'USD', priceKey: 'aapl', cedearRatio: 10 },
-    { id: 'googl', symbol: 'GOOGL', name: 'Alphabet Inc.', category: 'CEDEAR', nativeCurrency: 'USD', priceKey: 'googl', cedearRatio: 29 },
-    { id: 'meli', symbol: 'MELI', name: 'MercadoLibre', category: 'CEDEAR', nativeCurrency: 'USD', priceKey: 'meli', cedearRatio: 60 },
-    { id: 'tsla', symbol: 'TSLA', name: 'Tesla Inc.', category: 'CEDEAR', nativeCurrency: 'USD', priceKey: 'tsla', cedearRatio: 15 },
-    { id: 'msft', symbol: 'MSFT', name: 'Microsoft', category: 'CEDEAR', nativeCurrency: 'USD', priceKey: 'msft', cedearRatio: 10 },
+    { id: 'aapl', symbol: 'AAPL', name: 'Apple Inc.', category: 'CEDEAR', nativeCurrency: 'ARS', priceKey: 'aapl', cedearRatio: 10 },
+    { id: 'googl', symbol: 'GOOGL', name: 'Alphabet Inc.', category: 'CEDEAR', nativeCurrency: 'ARS', priceKey: 'googl', cedearRatio: 29 },
+    { id: 'meli', symbol: 'MELI', name: 'MercadoLibre', category: 'CEDEAR', nativeCurrency: 'ARS', priceKey: 'meli', cedearRatio: 60 },
+    { id: 'tsla', symbol: 'TSLA', name: 'Tesla Inc.', category: 'CEDEAR', nativeCurrency: 'ARS', priceKey: 'tsla', cedearRatio: 15 },
+    { id: 'msft', symbol: 'MSFT', name: 'Microsoft', category: 'CEDEAR', nativeCurrency: 'ARS', priceKey: 'msft', cedearRatio: 10 },
     // Cash instruments (virtual)
     { id: 'ars-cash', symbol: 'ARS', name: 'Pesos Argentinos', category: 'ARS_CASH', nativeCurrency: 'ARS', priceKey: 'ars' },
     { id: 'usd-cash', symbol: 'USD', name: 'Dólares', category: 'USD_CASH', nativeCurrency: 'USD', priceKey: 'usd' },

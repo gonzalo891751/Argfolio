@@ -1243,11 +1243,12 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
         // ignore debug-only guard rail failures
     }
 
-    // Count inferred balances
+    // Count inferred balances the user can see. One that ends at zero (e.g.
+    // USDT bought with money from outside the exchange) has nothing to fix.
     let inferredCount = 0
     for (const group of Object.values(groupedRows)) {
         for (const m of group.metrics) {
-            if (m.openingBalanceInferred) inferredCount++
+            if (m.openingBalanceInferred && Math.abs(m.quantity ?? 0) >= 0.01) inferredCount++
         }
     }
 
