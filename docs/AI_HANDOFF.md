@@ -1,6 +1,73 @@
 # Project Snapshot
 
-[CHECKPOINT #8 - EN CURSO] - Rediseño "simple": Inicio pesos/dólares, Mis activos, carga rápida (2026-10-30)
+[CHECKPOINT #9 - COMPLETADO] - QA de carga rápida, Rendimiento, Historial, modo claro, limpieza y actualización de saldos reales (2026-10-30)
+
+Pedido: seguir los pendientes del #8 en orden (QA del header y "Cargar" guardando de verdad, modo claro de los
+detalles, Historial, propuesta de reconstrucción, limpieza). En el medio el usuario pasó sus saldos reales y pidió
+que se actualicen y un panel para ver cómo rinde cada inversión (CEDEARs: dólares al comprar vs hoy).
+
+Hecho en la rama claude/zen-thompson-n0mc1s:
+- QA en navegador (Playwright, IndexedDB vacío y precios simulados; la sync remota está apagada en local):
+  compra de BTC con USDT, compra de CEDEAR, ingreso USD, "Saldo" con interés y TNA. Bugs corregidos:
+  - cash-ledger: las dos patas de un trade cripto liquidado con USDT (asset + auto_usdt_balance, mismo
+    operationId) ya no tocan caja fiat. Antes, con la misma hora, si la compra se procesaba primero el ledger
+    inventaba un saldo inicial (ej. "Binance · Dólares US$ 202"). Mismo bug con el asistente clásico.
+  - CEDEARs sembrados con nativeCurrency USD (seed demo) se leen como ARS (db/repositories/instruments.ts,
+    normalizeInstrument; el registro guardado no se toca). Antes un CEDEAR de $90.000 mostraba ≈ $88.176.
+  - El aviso "saldos que se completaron solos" solo cuenta saldos visibles (no los que terminan en 0).
+  - Header en celular: sin logo, espacios más cortos y degradé al final de las cotizaciones.
+- /rendimiento (pages/rendimiento.tsx + features/overview/performance-model.ts, con tests): por inversión,
+  lo que pusiste vs lo que vale hoy. CEDEARs en USD al MEP de cada compra vs MEP de hoy y ganancia en pesos
+  separada en "por la acción" = resultado USD × MEP hoy y "por el dólar" = resto (siempre suman). Cripto en USD,
+  FCI en pesos, cuentas con TNA con interés ganado. En el menú y con acceso desde Inicio.
+- Split de CEDEAR: BUY a costo cero con meta.splitRatio (domain/operations/cedear-split.ts). average-cost no le
+  asigna costo (costPolicy zero_cost) y fifo.ts reescala los lotes en vez de crear un lote gratis.
+- Account.rubroOverride sincronizado (ej. frascos); la configuración del dispositivo sigue teniendo prioridad.
+- Modo claro en detalles (wallet/crypto/cedear/pf/fci): los textos -400 pasan a -600 en claro y -400 en oscuro;
+  grilla de KPIs de CEDEAR/FCI en 3 columnas hasta 2xl (se pisaban los precios).
+- Historial (pages/history.tsx): gráfico total o por tipo (USD/ARS, 30d/3m/1a/todo), mes por mes con ganancia
+  sin contar ingresos/retiros y MEP, días por mes con variación, aviso "Salto raro" (findSuspiciousDays) y borrar
+  un día. Borrar ahora también borra en D1: DELETE /api/sync/snapshots?date= (functions/api/sync/snapshots.ts,
+  con el token de sync). Antes el día volvía en el siguiente bootstrap.
+- Propuesta de reconstrucción: docs/PROPUESTA_HISTORIAL.md (Worker con cron recomendado + reconstrucción con
+  precios históricos + arreglo puntual de SPY en fotos viejas).
+- Limpieza: 44 archivos borrados (dashboard viejo, ArgfolioHeader + header/*, topbar, user-menu, ticker,
+  tarjetas/tablas de assets sin uso, modal/tabla vieja de movimientos, páginas debts/movements viejas, PFList,
+  BankTypeahead, hooks sin uso, lint_*.txt, ts-errors.txt, DGitrun-contalivre.bat, minimal_import.csv).
+  Verificado con escaneo de alcanzabilidad desde main.tsx + imports de functions/ y scripts/.
+
+Datos reales (D1 argfolio-prod), con permiso explícito del usuario:
+- Se agregaron 12 movimientos con meta.source = 'update-2026-10-30' (ids 'upd-20261030-NN-*') y se tocaron 4 cuentas.
+  No se modificó ni borró ningún movimiento existente.
+  - Fiwind → $0 y Carrefour (28942930…) → $0 (WITHDRAW con el saldo exacto que calculaba la app); intereses apagados.
+  - Naranja X → $221.967,19 (DEPOSIT de la diferencia) y TNA 18 → 20.
+  - Cuenta nueva 'naranja-x-frascos' (BANK, rubroOverride frascos, TNA 22) con $141.185,88.
+  - IOL: rescate total de IOL Portafolio Potenciado (a VCP de la app) y suscripciones para quedar en
+    IOLCAMA 285.498,5735 cp y Premier Capital B 3.076,75 cp (VCP = monto informado / cuotapartes).
+  - SPY split 3:1 en Galicia (12 → 36) e IOL (1 → 3), fechado 29/05/2026 (los precios guardados muestran el
+    salto entre el 27 y el 30 de mayo).
+  - Nexo: venta de 0,01707622 BTC por 1.410,507355 USDT (con su pata USDT) y +5,32127148 NEXO como reward.
+    El "23,36 BNB" del usuario eran US$ 23,36 (0,0334 BNB): sin cambios.
+- Deshacer: DELETE FROM movements WHERE json_extract(meta_json,'$.source')='update-2026-10-30'; borrar la cuenta
+  'naranja-x-frascos' y restaurar Naranja X/Fiwind/Carrefour (payloads previos: TNA 18 activo, TNA 25 activo,
+  TNA 20 activo; lastAccruedDate 2026-10-29).
+
+Pendiente (sugerido, en orden):
+1. Con OK del usuario: corregir SPY ×3 en las fotos del 30/05 al 29/10 (ver docs/PROPUESTA_HISTORIAL.md).
+   Las comparaciones que cruzan el 30/10 muestran ese salto (corrección, no ganancia).
+2. Worker con Cron Trigger para la foto diaria en el servidor (Opción A de la propuesta).
+3. Comprar USDT con pesos desde "Cargar": hoy debita US$ fiat de la cuenta (igual que el asistente clásico)
+   y la app infiere un saldo inicial. Conviene preguntar "¿con qué pagaste?".
+4. /api/movements y /api/accounts no pasan por el middleware del token (solo ARGFOLIO_SYNC_WRITE_ENABLED):
+   revisar si el sitio está detrás de Cloudflare Access.
+5. Del #8 siguen: nombre del usuario para el saludo y precios de cripto fuera de COINGECKO_MAP.
+
+Validación: npm test (35 archivos, 257 tests), npx tsc --noEmit (0), npm run build (OK, warnings de siempre),
+npm run lint (0 errores, 151 warnings = línea base).
+
+---
+
+[CHECKPOINT #8 - COMPLETADO (seguido en #9)] - Rediseño "simple": Inicio pesos/dólares, Mis activos, carga rápida (2026-10-30)
 
 Pedido del usuario (resumen): la app tenía demasiadas cosas. Quiere entrar y ver en grande cuánta plata tiene
 en pesos y su equivalente en dólares, y abajo cuánto hay realmente en pesos y realmente en dólares. Pesos =
