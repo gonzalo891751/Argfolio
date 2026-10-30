@@ -136,12 +136,12 @@ function Performance({
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <p className="text-sm text-muted-foreground">Ganancia en dólares</p>
-                            <p className={cn('text-2xl font-semibold tabular-nums', toneClass(change.gainUsd))}>{fmtSignedUsd(change.gainUsd)}</p>
+                            <p className={cn('whitespace-nowrap text-xl font-semibold tabular-nums sm:text-2xl', toneClass(change.gainUsd))}>{fmtSignedUsd(change.gainUsd)}</p>
                             <p className={cn('text-sm tabular-nums', toneClass(change.gainUsd))}>{fmtPct(change.gainPctUsd)}</p>
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Ganancia en pesos</p>
-                            <p className={cn('text-2xl font-semibold tabular-nums', toneClass(change.gainArs))}>{fmtSignedArs(change.gainArs)}</p>
+                            <p className={cn('whitespace-nowrap text-xl font-semibold tabular-nums sm:text-2xl', toneClass(change.gainArs))}>{fmtSignedArs(change.gainArs)}</p>
                             <p className={cn('text-sm tabular-nums', toneClass(change.gainArs))}>{fmtPct(change.gainPctArs)}</p>
                         </div>
                     </div>
@@ -245,9 +245,9 @@ function PositionLine({ p, currency }: { p: OverviewPosition; currency: 'ARS' | 
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
     return (
-        <div className="rounded-xl bg-muted/50 p-3">
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className={cn('mt-0.5 font-semibold tabular-nums', tone)}>{value}</p>
+        <div className="min-w-0 rounded-xl bg-muted/50 p-2.5 sm:p-3">
+            <p className="truncate text-xs text-muted-foreground">{label}</p>
+            <p className={cn('mt-0.5 whitespace-nowrap text-sm font-semibold tabular-nums sm:text-base', tone)}>{value}</p>
         </div>
     )
 }

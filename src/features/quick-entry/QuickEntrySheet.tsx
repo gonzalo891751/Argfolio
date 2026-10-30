@@ -726,9 +726,9 @@ function BalanceForm({ prefill, positions, onDone }: { prefill: QuickEntryPrefil
 // ---------------------------------------------------------------------------
 
 const MODES: Array<{ value: QuickEntryMode; label: string }> = [
-    { value: 'trade', label: 'Compra / venta' },
-    { value: 'cash', label: 'Ingreso / retiro' },
-    { value: 'balance', label: 'Actualizar saldo' },
+    { value: 'trade', label: 'Compra/venta' },
+    { value: 'cash', label: 'Ingreso/retiro' },
+    { value: 'balance', label: 'Saldo' },
 ]
 
 export function QuickEntrySheet({
