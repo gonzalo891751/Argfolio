@@ -285,17 +285,23 @@ function MonthRow({
                         Terminó en {fmtUsd(month.endUsd)} · {fmtArs(month.endArs)}
                     </p>
                     <p className="text-xs text-muted-foreground">
+                        {/* The comparison runs from the last recorded day before the month, which can be weeks earlier */}
+                        {month.comparable && <>Del {fmtDayKey(month.startDateKey)} al {fmtDayKey(month.endDateKey)} · </>}
                         {Math.abs(month.netFlowsArs) >= 1 && <>{month.netFlowsArs > 0 ? 'Ingresaste' : 'Retiraste'} {fmtArs(Math.abs(month.netFlowsArs))} · </>}
                         {month.fxStart && month.fxEnd ? <>MEP {fmtRate(month.fxStart)} → {fmtRate(month.fxEnd)} · </> : null}
                         {month.daysRecorded} {month.daysRecorded === 1 ? 'día guardado' : 'días guardados'}
                         {flagged > 0 && <span className="text-amber-700 dark:text-amber-300"> · {flagged} para revisar</span>}
                     </p>
                 </div>
-                <div className="shrink-0 whitespace-nowrap text-right tabular-nums">
-                    <p className={cn('font-semibold', toneClass(month.gainUsd))}>{fmtSignedUsd(month.gainUsd)}</p>
-                    {month.gainPctUsd != null && <p className={cn('text-sm', toneClass(month.gainUsd))}>{fmtPct(month.gainPctUsd)}</p>}
-                    <p className={cn('text-xs', toneClass(month.gainArs))}>{fmtSignedArs(month.gainArs)}</p>
-                </div>
+                {month.comparable ? (
+                    <div className="shrink-0 whitespace-nowrap text-right tabular-nums">
+                        <p className={cn('font-semibold', toneClass(month.gainUsd))}>{fmtSignedUsd(month.gainUsd)}</p>
+                        {month.gainPctUsd != null && <p className={cn('text-sm', toneClass(month.gainUsd))}>{fmtPct(month.gainPctUsd)}</p>}
+                        <p className={cn('text-xs', toneClass(month.gainArs))}>{fmtSignedArs(month.gainArs)}</p>
+                    </div>
+                ) : (
+                    <p className="shrink-0 text-right text-sm text-muted-foreground">Sin días<br />para comparar</p>
+                )}
                 <ChevronDown className={cn('mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
             </button>
             {open && (

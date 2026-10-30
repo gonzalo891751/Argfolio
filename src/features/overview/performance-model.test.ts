@@ -90,6 +90,17 @@ describe('buildPerformance', () => {
         expect(nx.investedArs).toBeCloseTo(221_967.19 - 22_341.81, 6)
     })
 
+    it('gives dollar FCIs a percentage in dollars', () => {
+        const pf = portfolio()
+        pf.rubros.push(rubro('fci', 'iol', [{ id: 'usd-fund', kind: 'fci', symbol: 'FCIUSD', label: 'Fondo USD', accountId: 'iol', qty: 100, valArs: 100 * 1560, valUsd: 100, nativeCurrency: 'USD' }]))
+        pf.fciDetails.set('usd-fund', { totalCostArs: 100 * 1200, totalCostUsd: 100, lots: [] } as unknown as FciDetail)
+        const row = buildPerformance(buildOverview(pf), pf).groups.find(g => g.id === 'fci')!.rows.find(r => r.label === 'Fondo USD')!
+        expect(row.currency).toBe('USD')
+        expect(row.resultUsd).toBeCloseTo(0, 6)
+        expect(row.resultPct).toBeCloseTo(0, 6)
+        expect(row.resultArs).toBeGreaterThan(0)
+    })
+
     it('adds every row into the totals', () => {
         const sum = perf.groups.flatMap(g => g.rows).reduce((s, r) => s + r.resultArs, 0)
         expect(perf.totals.resultArs).toBeCloseTo(sum, 6)

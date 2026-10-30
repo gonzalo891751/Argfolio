@@ -122,7 +122,8 @@ describe('buildMonthlySummary', () => {
 
     it('starts each month at the last day of the previous one and nets deposits', () => {
         const months = buildMonthlySummary(snapshots, [deposit('2026-09-20T12:00:00.000Z', 100_000)], fxContext, { ars: 1_320_000, usd: 900, fxMep: 1466 }, now)
-        expect(months.map(m => m.monthKey)).toEqual(['2026-10', '2026-09'])
+        expect(months.map(m => m.monthKey)).toEqual(['2026-10', '2026-09', '2026-08'])
+        expect(months[2].comparable).toBe(false)
         const sep = months[1]
         expect(sep.startDateKey).toBe('2026-08-31')
         expect(sep.endDateKey).toBe('2026-09-30')
@@ -135,6 +136,17 @@ describe('buildMonthlySummary', () => {
         expect(oct.startDateKey).toBe('2026-09-30')
         expect(oct.endArs).toBe(1_320_000)
         expect(oct.gainArs).toBe(70_000)
+    })
+})
+
+describe('buildMonthlySummary edge cases', () => {
+    it('keeps a first month with a single day so it can be opened and deleted', () => {
+        const months = buildMonthlySummary([snap('2026-08-10', 1_000_000, 700), snap('2026-09-05', 1_100_000, 760)], [], fxContext, null, now)
+        expect(months.map(m => m.monthKey)).toEqual(['2026-09', '2026-08'])
+        expect(months[1].comparable).toBe(false)
+        expect(months[1].daysRecorded).toBe(1)
+        expect(months[0].comparable).toBe(true)
+        expect(months[0].startDateKey).toBe('2026-08-10')
     })
 })
 

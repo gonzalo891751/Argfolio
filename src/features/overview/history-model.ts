@@ -218,6 +218,8 @@ export interface MonthSummary {
     daysRecorded: number
     /** Current month ends with the live value */
     isCurrent: boolean
+    /** False when start and end are the same day: nothing to compare yet */
+    comparable: boolean
 }
 
 /**
@@ -259,10 +261,9 @@ export function buildMonthlySummary(
         const end = isCurrent
             ? { dateKey: todayKey, ars: current!.ars, usd: current!.usd, fxMep: current!.fxMep }
             : { dateKey: last.dateLocal, ars: last.totalARS, usd: last.totalUSD, fxMep: snapshotFxMep(last) }
-        if (end.dateKey <= start.dateLocal) {
-            // A single recorded day and nothing after it: no movement to show yet
-            if (!isCurrent) continue
-        }
+        // A month with a single day and nothing before it is still listed, so
+        // its day can be seen and deleted; it just has no change to show.
+        const comparable = end.dateKey > start.dateLocal
 
         const flows = computeNetFlowsByRubro(movements, fxContext, start.dateLocal, end.dateKey)
         let netFlowsArs = 0
@@ -298,6 +299,7 @@ export function buildMonthlySummary(
             fxEnd: end.fxMep,
             daysRecorded: days.length,
             isCurrent,
+            comparable,
         })
     }
     return out.reverse()

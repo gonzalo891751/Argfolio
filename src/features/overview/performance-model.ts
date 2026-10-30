@@ -195,14 +195,17 @@ function fciRow(p: OverviewPosition, portfolio: PortfolioV2): PerformanceRow | n
     if (!d || !(d.totalCostArs > 0)) return null
     const resultArs = p.valueArs - d.totalCostArs
     const investedUsd = d.totalCostUsd > 0 ? d.totalCostUsd : 0
+    const resultUsd = investedUsd > 0 ? p.valueUsd - investedUsd : 0
+    const isUsd = p.groupId === 'fci_usd' && investedUsd > 0
     return {
         ...baseRow(p, 'fci'),
-        currency: p.groupId === 'fci_usd' ? 'USD' : 'ARS',
+        currency: isUsd ? 'USD' : 'ARS',
         investedArs: d.totalCostArs,
         investedUsd,
         resultArs,
-        resultUsd: investedUsd > 0 ? p.valueUsd - investedUsd : 0,
-        resultPct: pct(resultArs, d.totalCostArs),
+        resultUsd,
+        // Same currency as the amount shown next to it
+        resultPct: isUsd ? pct(resultUsd, investedUsd) : pct(resultArs, d.totalCostArs),
         sinceISO: earliest(d.lots.map(l => l.dateISO)),
     }
 }
