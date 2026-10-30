@@ -52,7 +52,7 @@ const navItems = [
 
 /** Secondary tools, out of the way */
 const moreItems = [
-    { path: '/history', label: 'Historial diario', icon: History },
+    { path: '/history', label: 'Historial', icon: History },
     { path: '/personal-finances', label: 'Finanzas personales', icon: CreditCard },
     { path: '/finanzas-express', label: 'Presupuesto', icon: Calculator },
     { path: '/settings', label: 'Configuración', icon: Settings },

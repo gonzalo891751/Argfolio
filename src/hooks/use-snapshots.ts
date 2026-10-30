@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { snapshotsRepo } from '@/db'
-import type { FxType } from '@/domain/types'
+import type { FxType, Snapshot } from '@/domain/types'
 import { usePortfolioV2 } from '@/features/portfolioV2'
 import { useAccounts, useInstruments } from '@/hooks/use-instruments'
 import { useMovements } from '@/hooks/use-movements'
@@ -13,7 +13,7 @@ import {
     shouldReplaceDaySnapshot,
     writeAutoSnapshotsEnabled,
 } from '@/features/dashboardV2/snapshot-v2'
-import { syncPushSnapshots } from '@/sync/remote-sync'
+import { syncDeleteSnapshot, syncPushSnapshots } from '@/sync/remote-sync'
 
 const AUTO_SNAPSHOTS_EVENT = 'argfolio:auto-snapshots-changed'
 const SNAPSHOT_RETRY_BACKOFF_MS = [5000, 15000, 30000, 30000, 30000] as const
@@ -70,7 +70,10 @@ export function useDeleteSnapshot() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: (id: string) => snapshotsRepo.delete(id),
+        mutationFn: async (snapshot: Pick<Snapshot, 'id' | 'dateLocal'>) => {
+            await snapshotsRepo.delete(snapshot.id)
+            return syncDeleteSnapshot(snapshot.dateLocal)
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['snapshots'] })
         },

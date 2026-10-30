@@ -190,3 +190,185 @@ export function computePeriodChange(
 }
 
 export { isPartialSnapshot }
+
+// ---------------------------------------------------------------------------
+// Month by month
+// ---------------------------------------------------------------------------
+
+export interface MonthSummary {
+    /** 'YYYY-MM' */
+    monthKey: string
+    /** Last day of the previous month when recorded, else the first day of this one */
+    startDateKey: string
+    endDateKey: string
+    startArs: number
+    startUsd: number
+    endArs: number
+    endUsd: number
+    deltaArs: number
+    deltaUsd: number
+    netFlowsArs: number
+    netFlowsUsd: number
+    gainArs: number
+    gainUsd: number
+    gainPctArs: number | null
+    gainPctUsd: number | null
+    fxStart?: number
+    fxEnd?: number
+    daysRecorded: number
+    /** Current month ends with the live value */
+    isCurrent: boolean
+}
+
+/**
+ * One row per month with snapshots, newest first: how the patrimonio moved in
+ * the month, net of the money you added or took out.
+ */
+export function buildMonthlySummary(
+    snapshots: Snapshot[],
+    movements: Movement[],
+    fxContext: ResultsFlowFxContext,
+    current: { ars: number; usd: number; fxMep?: number } | null,
+    now: Date = new Date(),
+): MonthSummary[] {
+    const usable = usableSnapshots(snapshots)
+    const todayKey = toSnapshotDateKey(now)
+    const currentMonth = todayKey.slice(0, 7)
+
+    const byMonth = new Map<string, Snapshot[]>()
+    for (const s of usable) {
+        const key = s.dateLocal.slice(0, 7)
+        const list = byMonth.get(key) ?? []
+        list.push(s)
+        byMonth.set(key, list)
+    }
+    if (current && current.ars > 0 && !byMonth.has(currentMonth) && usable.length > 0) byMonth.set(currentMonth, [])
+
+    const months = [...byMonth.keys()].sort()
+    const out: MonthSummary[] = []
+    let previousLast: Snapshot | null = null
+
+    for (const monthKey of months) {
+        const days = byMonth.get(monthKey) ?? []
+        const isCurrent = monthKey === currentMonth && Boolean(current && current.ars > 0)
+        const start = previousLast ?? days[0]
+        const last = days[days.length - 1]
+        if (days.length > 0) previousLast = last
+        if (!start) continue
+
+        const end = isCurrent
+            ? { dateKey: todayKey, ars: current!.ars, usd: current!.usd, fxMep: current!.fxMep }
+            : { dateKey: last.dateLocal, ars: last.totalARS, usd: last.totalUSD, fxMep: snapshotFxMep(last) }
+        if (end.dateKey <= start.dateLocal) {
+            // A single recorded day and nothing after it: no movement to show yet
+            if (!isCurrent) continue
+        }
+
+        const flows = computeNetFlowsByRubro(movements, fxContext, start.dateLocal, end.dateKey)
+        let netFlowsArs = 0
+        let netFlowsUsd = 0
+        for (const value of flows.values()) {
+            netFlowsArs += value.ars
+            netFlowsUsd += value.usdEq
+        }
+        const deltaArs = end.ars - start.totalARS
+        const deltaUsd = end.usd - start.totalUSD
+        const gainArs = deltaArs - netFlowsArs
+        const gainUsd = deltaUsd - netFlowsUsd
+        const investedArs = start.totalARS + Math.max(0, netFlowsArs)
+        const investedUsd = start.totalUSD + Math.max(0, netFlowsUsd)
+
+        out.push({
+            monthKey,
+            startDateKey: start.dateLocal,
+            endDateKey: end.dateKey,
+            startArs: start.totalARS,
+            startUsd: start.totalUSD,
+            endArs: end.ars,
+            endUsd: end.usd,
+            deltaArs,
+            deltaUsd,
+            netFlowsArs,
+            netFlowsUsd,
+            gainArs,
+            gainUsd,
+            gainPctArs: investedArs > 0 ? gainArs / investedArs : null,
+            gainPctUsd: investedUsd > 0 ? gainUsd / investedUsd : null,
+            fxStart: snapshotFxMep(start),
+            fxEnd: end.fxMep,
+            daysRecorded: days.length,
+            isCurrent,
+        })
+    }
+    return out.reverse()
+}
+
+// ---------------------------------------------------------------------------
+// By type of investment
+// ---------------------------------------------------------------------------
+
+export type HistoryRubro = 'pesos' | 'plazos' | 'fci' | 'cedears' | 'crypto'
+
+export const HISTORY_RUBRO_LABELS: Record<HistoryRubro, string> = {
+    pesos: 'Billeteras y frascos',
+    plazos: 'Plazos fijos',
+    fci: 'Fondos (FCI)',
+    cedears: 'CEDEARs',
+    crypto: 'Cripto y dólares',
+}
+
+const RUBRO_TO_HISTORY: Record<string, HistoryRubro> = {
+    wallets: 'pesos',
+    frascos: 'pesos',
+    plazos: 'plazos',
+    fci: 'fci',
+    cedears: 'cedears',
+    crypto: 'crypto',
+}
+
+export interface RubroPoint {
+    dateKey: string
+    values: Record<HistoryRubro, { ars: number; usd: number }>
+}
+
+/** Recorded days (not filled) with their value per type of investment. */
+export function buildRubroSeries(snapshots: Snapshot[], fromKey?: string): RubroPoint[] {
+    return usableSnapshots(snapshots)
+        .filter(s => s.breakdownRubros && (!fromKey || s.dateLocal >= fromKey))
+        .map(s => {
+            const values = Object.fromEntries(
+                (Object.keys(HISTORY_RUBRO_LABELS) as HistoryRubro[]).map(k => [k, { ars: 0, usd: 0 }]),
+            ) as RubroPoint['values']
+            for (const [rubro, value] of Object.entries(s.breakdownRubros ?? {})) {
+                const target = values[RUBRO_TO_HISTORY[rubro] ?? 'pesos']
+                target.ars += Number.isFinite(value.ars) ? value.ars : 0
+                target.usd += Number.isFinite(value.usd) ? value.usd : 0
+            }
+            return { dateKey: s.dateLocal, values }
+        })
+}
+
+/**
+ * Recorded days that look like a bad capture: the total (in dollars) is more
+ * than `threshold` away from both neighbours while the neighbours agree with
+ * each other. A jump that stays (a deposit, a correction) is left alone.
+ */
+export function findSuspiciousDays(snapshots: Snapshot[], threshold = 0.15): Set<string> {
+    const usable = usableSnapshots(snapshots).filter(s => s.totalUSD > 0)
+    const out = new Set<string>()
+    let prev = usable[0]
+    for (let i = 1; i < usable.length - 1; i++) {
+        const day = usable[i]
+        const next = usable[i + 1]
+        const vsPrev = day.totalUSD / prev.totalUSD - 1
+        const vsNext = day.totalUSD / next.totalUSD - 1
+        const neighbours = next.totalUSD / prev.totalUSD - 1
+        if (Math.abs(vsPrev) > threshold && Math.abs(vsNext) > threshold
+            && Math.sign(vsPrev) === Math.sign(vsNext) && Math.abs(neighbours) < threshold / 2) {
+            out.add(day.dateLocal)
+            continue // judge the next day against the last good one
+        }
+        prev = day
+    }
+    return out
+}

@@ -598,6 +598,21 @@ const SNAPSHOT_PUSH_DEBOUNCE_MS = 2000
 let snapshotPushTimeout: ReturnType<typeof setTimeout> | null = null
 let snapshotPushInFlight = false
 
+/**
+ * Delete one day's snapshot in D1 too; otherwise the next bootstrap brings it
+ * back. 'skipped' when sync is off or there is no token on this device.
+ */
+export async function syncDeleteSnapshot(dateLocal: string): Promise<'ok' | 'skipped' | 'failed'> {
+    if (!isRemoteSyncEnabled() || readSyncToken().length === 0) return 'skipped'
+    try {
+        await requestJson(`/api/sync/snapshots?date=${encodeURIComponent(dateLocal)}`, { method: 'DELETE' })
+        return 'ok'
+    } catch (error) {
+        console.warn('[snapshots-sync] delete failed', { dateLocal, error })
+        return 'failed'
+    }
+}
+
 export async function syncPushSnapshots(snapshots: Snapshot[]): Promise<void> {
     if (!isRemoteSyncEnabled()) return
     if (snapshots.length === 0) return
