@@ -67,12 +67,12 @@ function getStatusBadge(status: PFStatus) {
         case 'active':
             return {
                 label: 'Activo',
-                className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
             }
         case 'expiring_today':
             return {
                 label: 'Vence hoy',
-                className: 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
             }
         case 'matured':
             return {
@@ -231,7 +231,7 @@ export function PFDetailPage() {
                             {formatMoneyARS(pfMeta.expectedTotalArs)}
                         </p>
                         <div className="mt-4 flex items-center gap-2">
-                            <span className="px-2 py-1 rounded bg-background/50 text-sm font-mono text-emerald-400">
+                            <span className="px-2 py-1 rounded bg-background/50 text-sm font-mono text-emerald-600 dark:text-emerald-400">
                                 ≈ {formatMoneyUSD(pfMeta.expectedTotalArs / oficialSell)}
                             </span>
                             <span className="text-xs text-muted-foreground">
@@ -260,7 +260,7 @@ export function PFDetailPage() {
                             <circle cx="100" cy="10" r="2" fill="#fff" />
                             {/* Labels */}
                             <text x="2" y="35" className="text-[4px] fill-muted-foreground font-mono">Inicio</text>
-                            <text x="75" y="5" className="text-[4px] fill-emerald-400 font-mono font-bold">Cobro</text>
+                            <text x="75" y="5" className="text-[4px] fill-emerald-500 font-mono font-bold">Cobro</text>
                         </svg>
                     </div>
                 </div>
@@ -285,7 +285,7 @@ export function PFDetailPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                         </svg>
                     </div>
-                    <p className="text-lg font-mono font-medium text-emerald-400">
+                    <p className="text-lg font-mono font-medium text-emerald-600 dark:text-emerald-400">
                         +{formatMoneyARS(pfMeta.expectedInterestArs)}
                     </p>
                     <p className="text-xs font-mono text-emerald-500/50 mt-1">Fijo por contrato</p>
@@ -318,8 +318,8 @@ export function PFDetailPage() {
                     <div className="mt-1 flex justify-between text-[10px] font-mono text-muted-foreground">
                         <span>{startDate.split('/').slice(0, 2).join('/')}</span>
                         <span className={cn(
-                            status === 'expiring_today' && "text-amber-400 font-bold",
-                            status === 'matured' && "text-emerald-400"
+                            status === 'expiring_today' && "text-amber-600 dark:text-amber-400 font-bold",
+                            status === 'matured' && "text-emerald-600 dark:text-emerald-400"
                         )}>
                             {daysRemaining > 0 ? `${daysRemaining} días restantes` :
                                 daysRemaining === 0 ? 'Vence hoy' : 'Finalizado'}
@@ -459,7 +459,7 @@ export function PFDetailPage() {
                                                 </div>
                                                 <p className="text-xs text-muted-foreground">Acreditación automática</p>
                                             </td>
-                                            <td className="p-4 text-right font-mono text-emerald-400">
+                                            <td className="p-4 text-right font-mono text-emerald-600 dark:text-emerald-400">
                                                 +{formatMoneyARS(pfMeta.expectedTotalArs)}
                                             </td>
                                         </tr>
@@ -530,7 +530,7 @@ function MovementRow({ movement }: MovementRowProps) {
             </td>
             <td className={cn(
                 "p-4 text-right font-mono",
-                isDeposit && !isCreation ? "text-emerald-400" : ""
+                isDeposit && !isCreation ? "text-emerald-600 dark:text-emerald-400" : ""
             )}>
                 {isDeposit && !isCreation ? '+' : isCreation ? '-' : ''}{formatMoneyARS(amount)}
             </td>
