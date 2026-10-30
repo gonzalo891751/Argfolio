@@ -653,6 +653,9 @@ export function buildRubros(
     const rubros: RubroV2[] = []
     const accountMap = new Map(accounts.map(a => [a.id, a]))
     const settingsMap = new Map(accountSettings.map(s => [s.id, s]))
+    // Device settings win; the account's own (synced) rubro is the fallback
+    const rubroOverrideOf = (accountId: string): RubroOverride | undefined =>
+        settingsMap.get(accountId)?.rubroOverride ?? accountMap.get(accountId)?.rubroOverride
     const oficialSell = fxSnapshot?.officialSell ?? 1
 
     for (const config of RUBRO_CONFIGS) {
@@ -664,7 +667,7 @@ export function buildRubros(
         if (config.id === 'frascos') {
             for (const [accountId, group] of Object.entries(groupedRows)) {
                 const account = accountMap.get(accountId)
-                const rubroOverride = settingsMap.get(accountId)?.rubroOverride
+                const rubroOverride = rubroOverrideOf(accountId)
 
                 // Only include if explicitly marked as Frasco via settings
                 if (!isFrasco(rubroOverride)) continue
@@ -812,7 +815,7 @@ export function buildRubros(
                 // BILLETERAS: WALLET/BANK + cash from brokers/exchanges
                 // ==========================================================
                 if (config.id === 'wallets') {
-                    const rubroOverride = settingsMap.get(accountId)?.rubroOverride
+                    const rubroOverride = rubroOverrideOf(accountId)
 
                     // Case A: Standard wallet/bank accounts - include all their cash
                     if (isWalletForBilleteras(account, rubroOverride)) {

@@ -74,6 +74,12 @@ export function computeAverageCost(
                 let tradeAmtArs = 0
                 let tradeAmtUsd = 0
 
+                // Split or reward: more units, same total cost
+                if (mov.meta?.costPolicy === 'zero_cost') {
+                    quantity += addedQty
+                    break
+                }
+
                 // USD Cash (BUY_USD or DEPOSIT USD)
                 // If it's a USD Deposit, we assume it carries a Cost Basis in ARS (either Manual or Implied)
                 if (mov.type === 'BUY_USD') {

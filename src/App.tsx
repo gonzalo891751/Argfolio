@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { AppLayout } from '@/components/layout/app-layout'
 import { InicioPage } from '@/pages/inicio'
 import { ActivosPage } from '@/pages/activos'
+import { RendimientoPage } from '@/pages/rendimiento'
 import { AssetsPageV2 } from '@/pages/assets-v2'
 import { WalletDetailPage } from '@/pages/wallet-detail'
 import { PFDetailPage } from '@/pages/pf-detail'
@@ -86,6 +87,14 @@ function App() {
                                                 element={
                                                     <ErrorBoundary>
                                                         <ActivosPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            <Route
+                                                path="/rendimiento"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <RendimientoPage />
                                                     </ErrorBoundary>
                                                 }
                                             />
