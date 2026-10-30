@@ -3,6 +3,35 @@ import type { PortfolioV2, ItemV2, RubroV2 } from '@/features/portfolioV2'
 
 export const SNAPSHOT_SOURCE_V2: Snapshot['source'] = 'v2'
 export const SNAPSHOT_AUTO_STORAGE_KEY = 'argfolio.snapshots.auto.v2'
+/** Marks a snapshot saved while some positions had no quote. */
+export const SNAPSHOT_PARTIAL_NOTE = 'precios-incompletos'
+
+export function isPartialSnapshot(snapshot: Pick<Snapshot, 'meta'>): boolean {
+    return snapshot.meta?.notes === SNAPSHOT_PARTIAL_NOTE
+}
+
+/**
+ * Whether today's stored snapshot should be replaced by a fresher capture.
+ * The day keeps its latest value (closing value), but a complete capture is
+ * never overwritten by one with missing quotes.
+ */
+export function shouldReplaceDaySnapshot(
+    existing: Pick<Snapshot, 'totalARS' | 'totalUSD' | 'meta' | 'createdAtISO'> | undefined,
+    next: Pick<Snapshot, 'totalARS' | 'totalUSD' | 'meta' | 'createdAtISO'>,
+    minIntervalMs = 10 * 60 * 1000,
+): boolean {
+    if (!existing) return true
+    if (existing.totalARS === 0 && next.totalARS > 0) return true
+    if (!isPartialSnapshot(existing) && isPartialSnapshot(next)) return false
+    if (isPartialSnapshot(existing) && !isPartialSnapshot(next)) return true
+
+    const sameTotals = Math.abs(existing.totalARS - next.totalARS) < 0.5
+        && Math.abs(existing.totalUSD - next.totalUSD) < 0.01
+    if (sameTotals) return false
+
+    const elapsed = Date.parse(next.createdAtISO) - Date.parse(existing.createdAtISO)
+    return !Number.isFinite(elapsed) || elapsed >= minIntervalMs
+}
 
 function sanitizeSegment(raw: string): string {
     return raw
@@ -12,8 +41,16 @@ function sanitizeSegment(raw: string): string {
         .replace(/^-|-$/g, '')
 }
 
+/**
+ * Calendar day of the snapshot in the user's local time zone.
+ * (Using toISOString() here filed every capture after 21:00 in Argentina
+ * under the next day.)
+ */
 export function toSnapshotDateKey(date: Date = new Date()): string {
-    return date.toISOString().slice(0, 10)
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
 }
 
 function normalizeAccountId(accountId: string): string {
@@ -141,6 +178,7 @@ export function buildSnapshotFromPortfolioV2(
         breakdownItems: itemBreakdown,
         meta: {
             fxRef: `MEP:${portfolio.fx.mepSell.toFixed(2)}|OFI:${portfolio.fx.officialSell.toFixed(2)}|CR:${portfolio.fx.cryptoSell.toFixed(2)}`,
+            ...(countMissingPriceItems(portfolio) > 0 ? { notes: SNAPSHOT_PARTIAL_NOTE } : {}),
         },
         createdAtISO: now.toISOString(),
     }
@@ -155,6 +193,7 @@ export type SnapshotSkipReason =
     | 'LOADING'
     | 'NO_FX'
     | 'TOTAL_ZERO_WITH_ASSETS'
+    | 'MISSING_PRICES'
     | null
 
 export interface SnapshotReadinessResult {
@@ -166,6 +205,28 @@ export interface SnapshotEvidence {
     accountsCount?: number
     movementsCount?: number
     instrumentsCount?: number
+}
+
+export interface SnapshotReadinessOptions {
+    /**
+     * Accept a portfolio where some positions have no quote. Used only after
+     * waiting for prices, so a coin that never gets quoted cannot block the
+     * daily history forever.
+     */
+    allowMissingPrices?: boolean
+}
+
+/** Positions held (qty > 0) whose market price is missing, so their value is unknown. */
+export function countMissingPriceItems(portfolio: PortfolioV2): number {
+    let count = 0
+    for (const rubro of portfolio.rubros) {
+        for (const provider of rubro.providers) {
+            for (const item of provider.items) {
+                if (item.valueMissing) count += 1
+            }
+        }
+    }
+    return count
 }
 
 function hasYieldEvidence(portfolio: PortfolioV2): boolean {
@@ -188,6 +249,7 @@ function hasYieldEvidence(portfolio: PortfolioV2): boolean {
 export function isPortfolioReadyForSnapshot(
     portfolio: PortfolioV2 | null,
     evidence?: SnapshotEvidence,
+    options: SnapshotReadinessOptions = {},
 ): SnapshotReadinessResult {
     if (!portfolio) {
         return { ready: false, reason: 'LOADING' }
@@ -216,6 +278,11 @@ export function isPortfolioReadyForSnapshot(
 
     if ((itemCount > 0 || hasExternalEvidence) && hasZeroTotals) {
         return { ready: false, reason: 'TOTAL_ZERO_WITH_ASSETS' }
+    }
+
+    // A position without quote is valued at 0: saving now would record a fake drop.
+    if (!options.allowMissingPrices && countMissingPriceItems(portfolio) > 0) {
+        return { ready: false, reason: 'MISSING_PRICES' }
     }
 
     return { ready: true, reason: null }

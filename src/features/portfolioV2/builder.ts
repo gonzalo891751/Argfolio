@@ -523,6 +523,7 @@ function buildItemFromMetrics(
             symbol: metrics.symbol,
             label: metrics.name || metrics.symbol,
             qty: metrics.quantity,
+            nativeCurrency: metrics.nativeCurrency,
             valArs: 0,
             valUsd: 0,
             pnlArs: undefined,
@@ -543,6 +544,7 @@ function buildItemFromMetrics(
         symbol: metrics.symbol,
         label: metrics.name || metrics.symbol,
         qty: metrics.quantity,
+        nativeCurrency: metrics.nativeCurrency,
         valArs,
         valUsd,
         pnlArs: Number.isFinite(metrics.costArs ?? NaN) ? valArs - (metrics.costArs ?? 0) : (metrics.pnlArs ?? undefined),
@@ -765,6 +767,7 @@ export function buildRubros(
                         kind: 'plazo_fijo' as ItemKind,
                         symbol: 'PF',
                         label: pf.alias || pf.pfCode || 'Plazo Fijo',
+                        nativeCurrency: 'ARS',
                         // Worth today = capital + interest accrued so far (full amount once matured)
                         valArs: computePfValueToday(pf),
                         valUsd: computePfValueToday(pf) / oficialSell,

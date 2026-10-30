@@ -12,8 +12,12 @@ const PERIOD_TO_DAYS: Record<Exclude<SnapshotPeriod, 'MAX' | 'TOTAL'>, number> =
 
 const EPSILON = 1e-9
 
+// Snapshots are keyed by local calendar day (see toSnapshotDateKey).
 function toDateKey(date: Date): string {
-    return date.toISOString().slice(0, 10)
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
 }
 
 function subtractDays(date: Date, days: number): Date {
