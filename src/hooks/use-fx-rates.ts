@@ -48,6 +48,7 @@ export function useFxRates() {
             }
         },
         refetchInterval: refreshInterval, // 0 when auto-refresh disabled
+        refetchOnWindowFocus: true,
         staleTime: 60000, // 1 minute
         retry: 2
     })

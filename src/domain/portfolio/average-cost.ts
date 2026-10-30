@@ -17,6 +17,13 @@ export interface AverageCostResult {
     avgCostNative: number
     avgCostArs: number
     avgCostUsd: number
+
+    /**
+     * True when part of the open position came in without any ARS reference
+     * (e.g. a USD deposit saved without totalARS/fx). Its ARS cost is unknown,
+     * so ARS PnL must not be reported for it.
+     */
+    arsCostUnknown: boolean
 }
 
 /**
@@ -33,6 +40,7 @@ export function computeAverageCost(
     let quantity = 0
     let costBasisArs = 0    // Always ARS
     let costBasisUsd = 0    // Always USD
+    let arsCostUnknown = false
 
     for (const mov of sorted) {
         if (!mov.instrumentId) continue
@@ -68,12 +76,23 @@ export function computeAverageCost(
 
                 // USD Cash (BUY_USD or DEPOSIT USD)
                 // If it's a USD Deposit, we assume it carries a Cost Basis in ARS (either Manual or Implied)
-                if (mov.type === 'BUY_USD' || (mov.tradeCurrency === 'USD' && mov.type === 'DEPOSIT')) {
+                if (mov.type === 'BUY_USD') {
                     // Qty = USD Bought
                     // Cost ARS = totalAmount (ARS Paid)
                     // Cost USD = totalUSD (USD Value, usually equal to Qty)
                     tradeAmtArs = mov.totalAmount || 0
                     tradeAmtUsd = mov.totalUSD || addedQty
+                } else if (mov.tradeCurrency === 'USD' && mov.type === 'DEPOSIT') {
+                    // USD deposit: totalAmount is in USD, never an ARS cost.
+                    // The ARS basis is the deposit valued at its own FX, when known.
+                    tradeAmtUsd = mov.totalUSD || addedQty
+                    if (mov.totalARS != null && mov.totalARS > 0) {
+                        tradeAmtArs = mov.totalARS
+                    } else if (fxRate > 1) {
+                        tradeAmtArs = tradeAmtUsd * fxRate
+                    } else {
+                        arsCostUnknown = true
+                    }
                 } else if (tradeCcy === 'ARS') {
                     // Bought/Deposited with ARS
                     // For Cash ARS, Quantity IS the Amount. price usually 1.
@@ -123,6 +142,7 @@ export function computeAverageCost(
                     quantity = 0
                     costBasisArs = 0
                     costBasisUsd = 0
+                    arsCostUnknown = false
                 }
                 break
             }
@@ -144,6 +164,7 @@ export function computeAverageCost(
         costBasisUsd,
         avgCostNative: 0, // Caller must decide
         avgCostArs,
-        avgCostUsd
+        avgCostUsd,
+        arsCostUnknown,
     }
 }

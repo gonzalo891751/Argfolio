@@ -67,6 +67,7 @@ export function computeHoldings(
             avgCostArs: result.avgCostArs,
             avgCostUsd: result.avgCostUsd, // Raw USD Unit Cost
             avgCostUsdEq: result.avgCostUsd, // Historical USD Unit Cost (same as above for Average Cost method)
+            arsCostUnknown: result.arsCostUnknown || undefined,
         })
     }
 

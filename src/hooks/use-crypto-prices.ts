@@ -68,6 +68,7 @@ export function useCryptoPrices(symbols: string[]) {
             }
         },
         refetchInterval: refreshInterval, // 0 when auto-refresh disabled
+        refetchOnWindowFocus: true,
         staleTime: 60000,
         enabled: symbols.length > 0
     })

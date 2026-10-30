@@ -98,7 +98,7 @@ export function computeAssetMetrics(
     let costUsdEq: number | null = null
     let cedearDetails: CedearDetails | undefined
 
-    const costArs = asset.costBasisArs
+    const costArs: number | null = asset.arsCostUnknown ? null : asset.costBasisArs
 
     // Category-specific valuation logic
     switch (asset.category) {
@@ -313,7 +313,7 @@ export function computeAssetMetrics(
         fxRate,
         currentPrice: prices.currentPrice,
         // Force average cost calculation from basis to ensure consistency (especially for CEDEARs ARS vs USD)
-        avgCost: asset.quantity > 0 ? (asset.category === 'CEDEAR' ? costArs / asset.quantity : asset.avgCostNative) : 0,
+        avgCost: asset.quantity > 0 ? (asset.category === 'CEDEAR' ? (costArs ?? 0) / asset.quantity : asset.avgCostNative) : 0,
         avgCostUsdEq: (asset.quantity > 0 && costUsdEq != null) ? costUsdEq / asset.quantity : 0,
         investedArs: costArs,
         nativeCurrency: asset.nativeCurrency,

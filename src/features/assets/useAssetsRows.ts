@@ -198,6 +198,7 @@ export function useAssetsRows(options: UseAssetsRowsOptions): UseAssetsRowsResul
                         avgCostUsdEq: holding.avgCostUsdEq,
                         costBasisArs: holding.costBasisArs,
                         costBasisUsdEq: holding.costBasisUsd, // Pass historical USD cost
+                        arsCostUnknown: holding.arsCostUnknown,
                         cedearRatio: category === 'CEDEAR' ? getCedearRatioLocal(holding.instrument.symbol) : undefined,
                         underlyingSymbol: holding.instrument.underlyingSymbol,
                     }

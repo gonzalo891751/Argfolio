@@ -348,6 +348,8 @@ export interface Holding {
     avgCostArs: number
     avgCostUsd: number
     avgCostUsdEq: number // new: weighted average cost in historical USD
+    /** ARS cost basis is unknown for part of the position (see AverageCostResult) */
+    arsCostUnknown?: boolean
     openingBalanceInferred?: boolean
     openingBalance?: number
     currentPriceNative?: number

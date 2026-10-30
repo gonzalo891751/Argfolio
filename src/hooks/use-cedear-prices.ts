@@ -13,18 +13,30 @@ declare global {
     }
 }
 
-function getStoredPrices(): CedearPriceMap {
+function getStoredPrices(): CedearPriceMap | undefined {
     try {
         const item = localStorage.getItem(STORAGE_KEY)
-        return item ? JSON.parse(item) : {}
+        const parsed = item ? JSON.parse(item) as CedearPriceMap : null
+        return parsed && Object.keys(parsed).length > 0 ? parsed : undefined
     } catch {
-        return {}
+        return undefined
     }
 }
 
+/** Oldest quote timestamp in the cache, so React Query knows how stale it is. */
+function getStoredUpdatedAt(prices: CedearPriceMap | undefined): number {
+    if (!prices) return 0
+    const times = Object.values(prices)
+        .map(p => Date.parse(p.updatedAt))
+        .filter(Number.isFinite)
+    return times.length > 0 ? Math.min(...times) : 0
+}
+
 export function useCedearPrices(enabled: boolean = true) {
-    // Load initial data from local storage to avoid layout shift / empty state
+    // Cached quotes render immediately, but are marked with their real age so a
+    // fresh fetch always runs on mount (an empty cache must never look "fresh").
     const initialData = getStoredPrices()
+    const initialDataUpdatedAt = getStoredUpdatedAt(initialData)
 
     const query = useQuery({
         queryKey: ['cedears', 'prices'],
@@ -56,7 +68,9 @@ export function useCedearPrices(enabled: boolean = true) {
         refetchInterval: enabled ? REFRESH_INTERVAL : false,
         enabled,
         staleTime: 60 * 1000, // 1 minute stale
-        initialData: initialData,
+        refetchOnWindowFocus: enabled,
+        initialData,
+        initialDataUpdatedAt,
     })
 
     // Sync to localStorage on success

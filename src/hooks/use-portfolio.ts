@@ -31,6 +31,10 @@ export function useRefreshAll() {
             queryClient.invalidateQueries({ queryKey: ['fxRates'] }),
             queryClient.invalidateQueries({ queryKey: ['marketTape'] }),
             queryClient.invalidateQueries({ queryKey: ['debts'] }),
+            // Market quotes feeding the valuation
+            queryClient.invalidateQueries({ queryKey: ['cedears'] }),
+            queryClient.invalidateQueries({ queryKey: ['cryptoPrices'] }),
+            queryClient.invalidateQueries({ queryKey: ['market'] }),
         ])
         setLastRefreshTime(new Date())
     }
