@@ -523,6 +523,7 @@ function buildItemFromMetrics(
             symbol: metrics.symbol,
             label: metrics.name || metrics.symbol,
             qty: metrics.quantity,
+            nativeCurrency: metrics.nativeCurrency,
             valArs: 0,
             valUsd: 0,
             pnlArs: undefined,
@@ -543,6 +544,7 @@ function buildItemFromMetrics(
         symbol: metrics.symbol,
         label: metrics.name || metrics.symbol,
         qty: metrics.quantity,
+        nativeCurrency: metrics.nativeCurrency,
         valArs,
         valUsd,
         pnlArs: Number.isFinite(metrics.costArs ?? NaN) ? valArs - (metrics.costArs ?? 0) : (metrics.pnlArs ?? undefined),
@@ -740,7 +742,7 @@ export function buildRubros(
             }
 
             for (const [bank, pfPositions] of byBank) {
-                const bankTotal = pfPositions.reduce((s, pf) => s + pf.expectedTotalARS, 0)
+                const bankTotal = pfPositions.reduce((s, pf) => s + computePfValueToday(pf), 0)
 
                 const items: ItemV2[] = pfPositions.map(pf => {
                     const daysRemaining = pf.maturityTs
@@ -765,8 +767,10 @@ export function buildRubros(
                         kind: 'plazo_fijo' as ItemKind,
                         symbol: 'PF',
                         label: pf.alias || pf.pfCode || 'Plazo Fijo',
-                        valArs: pf.expectedTotalARS,
-                        valUsd: pf.expectedTotalARS / oficialSell,
+                        nativeCurrency: 'ARS',
+                        // Worth today = capital + interest accrued so far (full amount once matured)
+                        valArs: computePfValueToday(pf),
+                        valUsd: computePfValueToday(pf) / oficialSell,
                         accountId: pf.accountId,
                         pfMeta: {
                             startDateISO: pf.startTs,
@@ -1138,6 +1142,25 @@ export function buildKPIs(
     }
 }
 
+/**
+ * Value of a plazo fijo today: capital plus the interest accrued for the whole
+ * days elapsed. Before this, active PFs were valued at their maturity amount,
+ * overstating today's patrimonio.
+ */
+export function computePfValueToday(
+    pf: Pick<PFPosition, 'principalARS' | 'expectedInterestARS' | 'expectedTotalARS' | 'startTs' | 'maturityTs'>,
+    nowMs: number = Date.now()
+): number {
+    const start = Date.parse(pf.startTs)
+    const end = Date.parse(pf.maturityTs)
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return pf.expectedTotalARS
+    if (nowMs >= end) return pf.expectedTotalARS
+    const termDays = Math.max(1, Math.round((end - start) / 86400000))
+    const daysElapsed = Math.max(0, Math.floor((nowMs - start) / 86400000))
+    const fraction = Math.min(1, daysElapsed / termDays)
+    return pf.principalARS + pf.expectedInterestARS * fraction
+}
+
 function computeTEA(tna: number): number {
     // TEA = (1 + TNA/365)^365 - 1
     return (Math.pow(1 + tna / 100 / 365, 365) - 1) * 100
@@ -1298,7 +1321,7 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
                 daysElapsed,
                 expectedInterestArs: pf.expectedInterestARS,
                 expectedTotalArs: pf.expectedTotalARS,
-                accruedInterestArs: pf.termDays > 0 ? (pf.expectedInterestARS / pf.termDays) * daysElapsed : 0,
+                accruedInterestArs: computePfValueToday(pf, now) - pf.principalARS,
                 fxAtConstituteOficial: pf.initialFx,
             })
         }
@@ -1414,7 +1437,9 @@ export function buildPortfolioV2(input: BuildPortfolioV2Input): PortfolioV2 {
     const cryptoDetails = new Map<string, CryptoDetail>()
     const cryptoRubro = rubros.find(r => r.id === 'crypto')
     if (cryptoRubro) {
-        const criptoSellRate = fxSnapshot.cryptoSell || 1
+        // Same convention as the Mis Activos rows: USD→ARS valued at the rate
+        // you get when selling USD (dólar cripto compra), so list and detail match.
+        const criptoSellRate = fxSnapshot.cryptoBuy || fxSnapshot.cryptoSell || 1
 
         for (const provider of cryptoRubro.providers) {
             for (const item of provider.items) {

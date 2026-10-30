@@ -1,5 +1,52 @@
 # Project Snapshot
 
+[CHECKPOINT #8 - EN CURSO] - Rediseño "simple": Inicio pesos/dólares, Mis activos, carga rápida (2026-10-30)
+
+Pedido del usuario (resumen): la app tenía demasiadas cosas. Quiere entrar y ver en grande cuánta plata tiene
+en pesos y su equivalente en dólares, y abajo cuánto hay realmente en pesos y realmente en dólares. Pesos =
+billeteras, frascos (Naranja X), plazos fijos, FCI; dólares = USD, USDT (se trata como dólar), cripto, CEDEARs.
+Ver rendimientos: pesos por TNA (capitalización diaria; mañana / 30 días), CEDEARs en ARS y en USD (MEP de compra
+vs hoy), cripto en USD contra USDT. Cargar rápido (compré X al precio del broker) y actualizar saldos sin fricción.
+Historial diario confiable para comparar contra 30/40 días atrás. Al terminar: merge a main para verlo publicado.
+
+Hecho en la rama claude/kind-goldberg-o0trr5:
+- Precios: CEDEAR ya no queda "Sin precio" con caché vacía (use-cedear-prices initialDataUpdatedAt); el botón
+  actualizar refresca CEDEAR/cripto/mercado (use-portfolio useRefreshAll); auto-refresh ON por defecto; refetch al
+  volver a la pestaña.
+- Resultados: depósito/saldo en USD ya no cuenta todo como "ganancia en pesos" (arsCostUnknown en average-cost,
+  computeTotals, valuation). Detalle cripto usa el mismo dólar que la lista. Plazo fijo vale capital + devengado
+  (computePfValueToday en portfolioV2/builder.ts).
+- Snapshots: clave de día LOCAL (antes UTC: después de las 21 h se guardaba como el día siguiente); no guarda si
+  faltan precios (MISSING_PRICES) salvo tras reintentos (marca 'precios-incompletos'); el día conserva el último
+  valor (shouldReplaceDaySnapshot). Archivos: features/dashboardV2/snapshot-v2.ts, hooks/use-snapshots.ts.
+- Modelos puros nuevos + tests: features/overview/overview-model.ts (buckets pesos/dólares, resultados, intereses,
+  proyecciones) y history-model.ts (serie diaria con huecos rellenados, variación neta de aportes, dólar MEP).
+- Carga rápida: features/quick-entry/ (QuickEntrySheet: Compra/venta, Ingreso/retiro, Saldo con TNA;
+  quick-movements.ts arma movimientos con la misma forma que los wizards; tests contra el cash ledger).
+- Pantallas nuevas: pages/inicio.tsx (/inicio, reemplaza /dashboard) y pages/activos.tsx (/activos). Detalles
+  también en /activos/... (se mantienen /mis-activos-v2/... y la vista avanzada /mis-activos-v2).
+- Navegación: Inicio, Mis activos, Movimientos, Mercado + "Más"; barra inferior en celular con "Cargar" al medio.
+  Header nuevo simple (components/layout/AppHeader.tsx) con MEP/Oficial/Cripto/Blue/CCL.
+
+Pendiente (próximos pasos sugeridos, en orden):
+1. QA en navegador del header nuevo y de la carga rápida guardando de verdad (compra cripto con USDT, CEDEAR,
+   ingreso USD, actualizar saldo con interés). Revisar modo claro en detalles (wallet/crypto/cedear/pf/fci
+   detail usan colores oscuros fijos).
+2. Página Historial (/history): hoy es una tabla enorme; rediseñar (gráfico + lista por mes + borrar día malo).
+3. Reconstrucción del historial para días sin snapshot (movimientos + precios históricos: CoinGecko market_chart,
+   argentinadatos dólar bolsa) o snapshot diario en servidor (Worker con cron sobre D1).
+4. Limpieza: borrar pages/dashboard.tsx, components/dashboard/ResultsCard.tsx, ArgfolioHeader + header/*,
+   topbar/user-menu, componentes no usados (AccountFixedDepositsBlock, PFList, YieldSummaryCard,
+   FciHoldingsTable, CurrencyRatioCard, AuditModal...), y archivos basura en raíz (lint_*.txt, ts-errors.txt,
+   DGitrun-contalivre.bat, minimal_import.csv). Verificar con tsc/build antes de borrar.
+5. Nombre del usuario para el saludo (Configuración → "Tu nombre", localStorage argfolio.user.firstName).
+6. Precios de cripto fuera de COINGECKO_MAP (usar instrument.coingeckoId en crypto-coingecko.ts).
+
+Validación al cierre de esta sesión: ver el commit final (npm test, tsc y build).
+Datos reales: no se tocaron movimientos. Nada migra datos; los cambios son de cálculo y UI.
+
+---
+
 [CHECKPOINT #7 - COMPLETADO] - Prompt 3: operaciones unificadas y saldos fantasma (2026-07-10)
 
 Resultado:

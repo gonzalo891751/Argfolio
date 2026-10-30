@@ -130,6 +130,9 @@ export function computeTotals(input: ComputeTotalsInput): PortfolioTotals {
                 costBasisNative: balance,
                 costBasisArs: isArs ? balance : 0, // Simplified: ARS cost of USD is unknown here without history
                 costBasisUsd: isArs ? 0 : balance,
+                // Without history the ARS cost of a USD balance is unknown: report
+                // no ARS PnL instead of the whole balance as "ganancia en pesos".
+                arsCostUnknown: isArs ? undefined : true,
                 avgCostNative: 1,
                 avgCostArs: isArs ? 1 : 0,
                 avgCostUsd: isArs ? 0 : 1,

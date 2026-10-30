@@ -1,7 +1,7 @@
 import { useState, useEffect, createContext, useContext } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-    LayoutDashboard,
+    Home,
     Wallet,
     ArrowLeftRight,
     History,
@@ -9,9 +9,11 @@ import {
     Calculator,
     Settings,
     ChevronLeft,
-
+    Plus,
+    Menu,
     TrendingUp,
 } from 'lucide-react'
+import { useQuickEntry } from '@/features/quick-entry/QuickEntryContext'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -40,15 +42,29 @@ export function useSidebar() {
 const STORAGE_KEY = 'argfolio-sidebar-collapsed'
 
 const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/market', label: 'Mercado', icon: TrendingUp },
-    { path: '/mis-activos-v2', label: 'Mis Activos', icon: Wallet },
+    { path: '/inicio', label: 'Inicio', icon: Home },
+    { path: '/activos', label: 'Mis activos', icon: Wallet },
     { path: '/movements', label: 'Movimientos', icon: ArrowLeftRight },
-    { path: '/history', label: 'Historial', icon: History },
-    { path: '/personal-finances', label: 'Finanzas', icon: CreditCard },
-    { path: '/finanzas-express', label: 'Presupuesto', icon: Calculator },
-    { path: '/settings', label: 'Configurar', icon: Settings },
+    { path: '/market', label: 'Mercado', icon: TrendingUp },
 ]
+
+/** Secondary tools, out of the way */
+const moreItems = [
+    { path: '/history', label: 'Historial diario', icon: History },
+    { path: '/personal-finances', label: 'Finanzas personales', icon: CreditCard },
+    { path: '/finanzas-express', label: 'Presupuesto', icon: Calculator },
+    { path: '/settings', label: 'Configuración', icon: Settings },
+]
+
+/** Old paths still count as active for their new section */
+const ACTIVE_ALIASES: Record<string, string[]> = {
+    '/inicio': ['/dashboard'],
+    '/activos': ['/mis-activos-v2'],
+}
+
+function isNavActive(path: string, pathname: string): boolean {
+    return [path, ...(ACTIVE_ALIASES[path] ?? [])].some(p => pathname === p || pathname.startsWith(`${p}/`))
+}
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
     // Manual collapse (user toggle via Colapsar button, persisted)
@@ -93,20 +109,20 @@ function NavItem({
     isCollapsed: boolean
     onClick?: () => void
 }) {
+    const { pathname } = useLocation()
+    const isActive = isNavActive(path, pathname)
     const content = (
         <NavLink
             to={path}
             onClick={onClick}
-            className={({ isActive }) =>
-                cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                    'hover:bg-accent hover:text-accent-foreground',
-                    isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground',
-                    isCollapsed && 'justify-center px-2'
-                )
-            }
+            className={cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                'hover:bg-accent hover:text-accent-foreground',
+                isActive
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground',
+                isCollapsed && 'justify-center px-2'
+            )}
         >
             <Icon className="h-5 w-5 shrink-0" />
             {!isCollapsed && <span>{label}</span>}
@@ -163,7 +179,18 @@ export function Sidebar() {
 
             {/* Navigation */}
             <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+                <QuickEntryButton isCollapsed={isCollapsed} />
                 {navItems.map((item) => (
+                    <NavItem
+                        key={item.path}
+                        {...item}
+                        isCollapsed={isCollapsed}
+                    />
+                ))}
+                <div className={cn('pt-4 pb-1 text-xs font-medium text-muted-foreground/80', isCollapsed ? 'text-center' : 'px-3')}>
+                    {isCollapsed ? '···' : 'Más'}
+                </div>
+                {moreItems.map((item) => (
                     <NavItem
                         key={item.path}
                         {...item}
@@ -212,7 +239,7 @@ export function MobileNav() {
                     </div>
                 </SheetHeader>
                 <nav className="p-4 space-y-1">
-                    {navItems.map((item) => (
+                    {[...navItems, ...moreItems].map((item) => (
                         <NavItem
                             key={item.path}
                             {...item}
@@ -223,5 +250,74 @@ export function MobileNav() {
                 </nav>
             </SheetContent>
         </Sheet>
+    )
+}
+
+function QuickEntryButton({ isCollapsed }: { isCollapsed: boolean }) {
+    const { openQuickEntry } = useQuickEntry()
+    return (
+        <button
+            type="button"
+            onClick={() => openQuickEntry()}
+            className={cn(
+                'mb-3 flex w-full items-center gap-3 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90',
+                isCollapsed && 'justify-center px-2'
+            )}
+            title="Cargar un movimiento"
+        >
+            <Plus className="h-5 w-5 shrink-0" />
+            {!isCollapsed && <span>Cargar</span>}
+        </button>
+    )
+}
+
+/**
+ * Phone bottom bar: the three places you use most and "Cargar" in the middle.
+ * "Más" opens the drawer with the rest.
+ */
+export function MobileTabBar() {
+    const { pathname } = useLocation()
+    const { setIsMobileOpen } = useSidebar()
+    const { openQuickEntry } = useQuickEntry()
+
+    const tab = (path: string, label: string, Icon: React.ComponentType<{ className?: string }>) => {
+        const active = isNavActive(path, pathname)
+        return (
+            <NavLink
+                to={path}
+                className={cn('flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium', active ? 'text-primary' : 'text-muted-foreground')}
+            >
+                <Icon className="h-5 w-5" />
+                {label}
+            </NavLink>
+        )
+    }
+
+    return (
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="Navegación principal">
+            <div className="mx-auto flex max-w-md items-stretch">
+                {tab('/inicio', 'Inicio', Home)}
+                {tab('/activos', 'Activos', Wallet)}
+                <div className="flex flex-1 items-center justify-center">
+                    <button
+                        type="button"
+                        onClick={() => openQuickEntry()}
+                        className="-mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg ring-4 ring-background"
+                        aria-label="Cargar"
+                    >
+                        <Plus className="h-6 w-6" />
+                    </button>
+                </div>
+                {tab('/movements', 'Movimientos', ArrowLeftRight)}
+                <button
+                    type="button"
+                    onClick={() => setIsMobileOpen(true)}
+                    className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium text-muted-foreground"
+                >
+                    <Menu className="h-5 w-5" />
+                    Más
+                </button>
+            </div>
+        </nav>
     )
 }

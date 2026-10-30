@@ -10,6 +10,7 @@ import {
     buildSnapshotFromPortfolioV2,
     isPortfolioReadyForSnapshot,
     readAutoSnapshotsEnabled,
+    shouldReplaceDaySnapshot,
     writeAutoSnapshotsEnabled,
 } from '@/features/dashboardV2/snapshot-v2'
 import { syncPushSnapshots } from '@/sync/remote-sync'
@@ -43,7 +44,9 @@ export function useSaveSnapshot() {
                         ? 'El portfolio tiene activos pero los totales son $0. Esperá a que cargue completamente.'
                         : check.reason === 'NO_FX'
                             ? 'Las cotizaciones FX no están disponibles aún.'
-                            : 'Los datos del portfolio todavía están cargando.'
+                            : check.reason === 'MISSING_PRICES'
+                                ? 'Hay activos sin cotización todavía. Esperá a que carguen los precios.'
+                                : 'Los datos del portfolio todavía están cargando.'
                 )
             }
 
@@ -153,13 +156,16 @@ export function useAutoDailySnapshotCapture() {
         }
 
         const dependenciesLoading = accountsLoading || movementsLoading || instrumentsLoading
+        // After waiting out the retries, accept positions that still have no
+        // quote (the snapshot is tagged as partial and replaced once complete).
+        const waitedForPrices = retryAttemptRef.current >= SNAPSHOT_RETRY_BACKOFF_MS.length
         const check = dependenciesLoading
             ? { ready: false as const, reason: 'LOADING' as const }
             : isPortfolioReadyForSnapshot(portfolio, {
                 accountsCount: accounts.length,
                 movementsCount: movements.length,
                 instrumentsCount: instruments.length,
-            })
+            }, { allowMissingPrices: waitedForPrices })
 
         if (!check.ready) {
             if (skipLoggedRef.current !== check.reason) {
@@ -188,7 +194,6 @@ export function useAutoDailySnapshotCapture() {
         }
 
         clearRetryTimeout()
-        retryAttemptRef.current = 0
         skipLoggedRef.current = null
 
         const snapshot = buildSnapshotFromPortfolioV2(portfolio!, 'MEP')
@@ -196,18 +201,12 @@ export function useAutoDailySnapshotCapture() {
         let cancelled = false
         const persistSnapshot = async () => {
             const existing = await snapshotsRepo.getByDate(snapshot.dateLocal)
-            const shouldRepairZero = Boolean(existing && existing.totalARS === 0 && snapshot.totalARS > 0)
 
-            if (savedForDayRef.current === snapshot.dateLocal && !shouldRepairZero) {
+            // The day keeps its latest (closing) value: re-capture as quotes move,
+            // throttled, and never replace a complete capture with a partial one.
+            if (!shouldReplaceDaySnapshot(existing, snapshot)) {
+                savedForDayRef.current = snapshot.dateLocal
                 return
-            }
-
-            if (existing && !shouldRepairZero) {
-                const sameTotals = existing.totalARS === snapshot.totalARS && existing.totalUSD === snapshot.totalUSD
-                if (sameTotals) {
-                    savedForDayRef.current = snapshot.dateLocal
-                    return
-                }
             }
 
             await snapshotsRepo.upsertByDate(snapshot)
@@ -215,19 +214,12 @@ export function useAutoDailySnapshotCapture() {
             if (cancelled) return
             savedForDayRef.current = snapshot.dateLocal
 
-            if (shouldRepairZero) {
-                console.log('[snapshots] auto-capture repaired zero snapshot', {
-                    date: snapshot.dateLocal,
-                    previousTotalARS: existing?.totalARS ?? 0,
-                    newTotalARS: snapshot.totalARS,
-                })
-            } else {
-                console.log('[snapshots] auto-capture saved', {
-                    date: snapshot.dateLocal,
-                    totalARS: snapshot.totalARS,
-                    totalUSD: snapshot.totalUSD,
-                })
-            }
+            console.log('[snapshots] auto-capture saved', {
+                date: snapshot.dateLocal,
+                totalARS: snapshot.totalARS,
+                totalUSD: snapshot.totalUSD,
+                partial: snapshot.meta?.notes,
+            })
 
             queryClient.invalidateQueries({ queryKey: ['snapshots'] })
 
@@ -237,9 +229,6 @@ export function useAutoDailySnapshotCapture() {
         }
 
         persistSnapshot()
-            .then(() => {
-                retryAttemptRef.current = 0
-            })
             .catch((error) => {
                 if (cancelled) return
                 console.error('[snapshots] auto-capture failed', error)

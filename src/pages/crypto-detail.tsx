@@ -111,6 +111,8 @@ export function CryptoDetailPage() {
 
     // FX rate
     const criptoSellRate = portfolio?.fx.cryptoSell ?? 1
+    // Valuation (display) rate: same one Mis Activos uses for crypto rows.
+    const valuationRate = portfolio?.fx.cryptoBuy || criptoSellRate
 
     // Sorted lots for table
     const sortedLots = useMemo(() => {
@@ -345,7 +347,7 @@ export function CryptoDetailPage() {
                     {symbol ? `Sin tenencia de ${symbol}` : 'Activo no encontrado'}
                 </p>
                 <button
-                    onClick={() => navigate('/mis-activos-v2')}
+                    onClick={() => navigate('/activos')}
                     className="text-primary hover:underline"
                 >
                     Volver a Mis Activos
@@ -379,13 +381,13 @@ export function CryptoDetailPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={() => navigate('/mis-activos-v2')}
+                        onClick={() => navigate('/activos')}
                         className="p-2 hover:bg-muted rounded-lg transition-colors"
                     >
                         <ArrowLeft className="h-5 w-5" />
                     </button>
                     <nav className="flex items-center text-sm font-mono text-muted-foreground">
-                        <Link to="/mis-activos-v2" className="hover:text-foreground transition-colors">
+                        <Link to="/activos" className="hover:text-foreground transition-colors">
                             Mis Activos
                         </Link>
                         <span className="mx-2">/</span>
@@ -396,7 +398,7 @@ export function CryptoDetailPage() {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     <div className="px-3 py-1 rounded bg-background border border-border text-[10px] font-mono text-muted-foreground">
-                        TC Venta: <span className="text-sky-400 font-bold">${criptoSellRate.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
+                        Dólar cripto: <span className="text-sky-400 font-bold">${valuationRate.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -777,7 +779,7 @@ export function CryptoDetailPage() {
                                             {formatMoneyUSD(allocation.totalProceedsUsd)} <span className="text-sm text-muted-foreground font-normal">USD</span>
                                         </div>
                                         <div className="text-sm font-mono text-emerald-400">
-                                            ≈ {formatMoneyARS(allocation.totalProceedsUsd * criptoSellRate)} ARS
+                                            ≈ {formatMoneyARS(allocation.totalProceedsUsd * valuationRate)} ARS
                                         </div>
                                     </div>
 
@@ -812,7 +814,7 @@ export function CryptoDetailPage() {
                                             "text-sm font-mono mt-1",
                                             allocation.realizedPnlUsd >= 0 ? 'text-emerald-400/70' : 'text-rose-400/70'
                                         )}>
-                                            ≈ {formatMoneyARS(allocation.realizedPnlUsd * criptoSellRate)} ARS
+                                            ≈ {formatMoneyARS(allocation.realizedPnlUsd * valuationRate)} ARS
                                         </div>
                                     </div>
 

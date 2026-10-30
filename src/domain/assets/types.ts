@@ -106,6 +106,8 @@ export interface AssetInput {
 
     costBasisArs: number
     costBasisUsdEq?: number // New field: Historical Total USD Cost
+    /** ARS cost basis unknown (legacy USD deposit without FX): no ARS PnL */
+    arsCostUnknown?: boolean
 
     // CEDEAR-specific
     cedearRatio?: number

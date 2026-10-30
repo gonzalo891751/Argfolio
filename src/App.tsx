@@ -6,7 +6,8 @@ import { RefreshProvider } from '@/hooks/use-auto-refresh'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { AppLayout } from '@/components/layout/app-layout'
-import { DashboardPage } from '@/pages/dashboard'
+import { InicioPage } from '@/pages/inicio'
+import { ActivosPage } from '@/pages/activos'
 import { AssetsPageV2 } from '@/pages/assets-v2'
 import { WalletDetailPage } from '@/pages/wallet-detail'
 import { PFDetailPage } from '@/pages/pf-detail'
@@ -70,15 +71,32 @@ function App() {
                                 <GlobalDataHandler>
                                     <Routes>
                                         <Route element={<AppLayout />}>
-                                            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                                            <Route path="/" element={<Navigate to="/inicio" replace />} />
+                                            <Route path="/dashboard" element={<Navigate to="/inicio" replace />} />
                                             <Route
-                                                path="/dashboard"
+                                                path="/inicio"
                                                 element={
                                                     <ErrorBoundary>
-                                                        <DashboardPage />
+                                                        <InicioPage />
                                                     </ErrorBoundary>
                                                 }
                                             />
+                                            <Route
+                                                path="/activos"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <ActivosPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
+                                            {/* Asset details: /activos/... (new) and /mis-activos-v2/... (old links) */}
+                                            {['/activos', '/mis-activos-v2'].flatMap(base => [
+                                                <Route key={`${base}-wallet`} path={`${base}/billeteras/:accountId`} element={<ErrorBoundary><WalletDetailPage /></ErrorBoundary>} />,
+                                                <Route key={`${base}-pf`} path={`${base}/plazos-fijos/:pfId`} element={<ErrorBoundary><PFDetailPage /></ErrorBoundary>} />,
+                                                <Route key={`${base}-crypto`} path={`${base}/cripto/:accountId/:symbol`} element={<ErrorBoundary><CryptoDetailPage /></ErrorBoundary>} />,
+                                                <Route key={`${base}-cedear`} path={`${base}/cedears/:accountId/:ticker`} element={<ErrorBoundary><CedearDetailPage /></ErrorBoundary>} />,
+                                                <Route key={`${base}-fci`} path={`${base}/fondos/:accountId/:instrumentId`} element={<ErrorBoundary><FciDetailPage /></ErrorBoundary>} />,
+                                            ])}
                                             <Route
                                                 path="/market"
                                                 element={
@@ -87,58 +105,13 @@ function App() {
                                                     </ErrorBoundary>
                                                 }
                                             />
-                                            <Route path="/assets/*" element={<Navigate to="/mis-activos-v2" replace />} />
+                                            <Route path="/assets/*" element={<Navigate to="/activos" replace />} />
                                             {/* Mis Activos V2 - New Implementation */}
                                             <Route
                                                 path="/mis-activos-v2"
                                                 element={
                                                     <ErrorBoundary>
                                                         <AssetsPageV2 />
-                                                    </ErrorBoundary>
-                                                }
-                                            />
-                                            {/* Wallet Detail - Subpage */}
-                                            <Route
-                                                path="/mis-activos-v2/billeteras/:accountId"
-                                                element={
-                                                    <ErrorBoundary>
-                                                        <WalletDetailPage />
-                                                    </ErrorBoundary>
-                                                }
-                                            />
-                                            {/* PF Detail - Subpage */}
-                                            <Route
-                                                path="/mis-activos-v2/plazos-fijos/:pfId"
-                                                element={
-                                                    <ErrorBoundary>
-                                                        <PFDetailPage />
-                                                    </ErrorBoundary>
-                                                }
-                                            />
-                                            {/* Crypto Detail - Subpage */}
-                                            <Route
-                                                path="/mis-activos-v2/cripto/:accountId/:symbol"
-                                                element={
-                                                    <ErrorBoundary>
-                                                        <CryptoDetailPage />
-                                                    </ErrorBoundary>
-                                                }
-                                            />
-                                            {/* CEDEAR Detail - Subpage */}
-                                            <Route
-                                                path="/mis-activos-v2/cedears/:accountId/:ticker"
-                                                element={
-                                                    <ErrorBoundary>
-                                                        <CedearDetailPage />
-                                                    </ErrorBoundary>
-                                                }
-                                            />
-                                            {/* FCI Detail - Subpage */}
-                                            <Route
-                                                path="/mis-activos-v2/fondos/:accountId/:instrumentId"
-                                                element={
-                                                    <ErrorBoundary>
-                                                        <FciDetailPage />
                                                     </ErrorBoundary>
                                                 }
                                             />

@@ -142,6 +142,9 @@ export interface ItemV2 {
     /** Quantity held (shares, coins, cuotapartes) */
     qty?: number
 
+    /** Currency the position is denominated in (ARS for pesos, USD for dollars/crypto) */
+    nativeCurrency?: string
+
     /** Current valuation */
     valArs: number
     valUsd: number
