@@ -1,5 +1,28 @@
 # Project Snapshot
 
+[CHECKPOINT #10 - COMPLETADO] - Ver los datos desde el celular (vincular dispositivo) (2026-11-01)
+
+Problema: en el celular argfolio.pages.dev aparecía vacío. Cada dispositivo necesita el token de sync
+(localStorage 'argfolio-sync-token') para bajar los datos de D1; sin token, /api/sync/bootstrap responde 401 y la
+app queda con la base local vacía (solo un toast fugaz).
+
+Hecho:
+- src/sync/device-link.ts: enlace de vinculación `/inicio#vincular=<token>` (el token va en el fragmento, que el
+  navegador no envía al servidor; se borra de la barra al leerlo) y connectDevice(token): guarda el token, hace
+  bootstrap forzado y, si el servidor responde 401, restaura el token anterior.
+- Configuración → "Usar en otro dispositivo" (components/OtherDeviceCard.tsx): QR (paquete `qrcode`) y "Copiar
+  enlace", solo en un dispositivo que ya tiene token.
+- Inicio y Mis activos vacíos sin token: tarjeta "¿Ya usás Argfolio en otro dispositivo?" con pasos y campo para
+  pegar el código (components/ConnectDeviceCard.tsx).
+- use-remote-sync: si la URL trae el enlace, conecta y avisa "Dispositivo conectado"; sin token ya no intenta el
+  bootstrap (evita el toast rojo). "Guardar token" en Configuración ahora baja los datos al instante.
+- bootstrapRemoteSync devuelve el status HTTP y acepta { quiet }.
+
+Para el usuario: en la compu, Configuración → Usar en otro dispositivo → Mostrar código QR, y escanearlo con el
+celular.
+
+---
+
 [CHECKPOINT #9 - COMPLETADO] - QA de carga rápida, Rendimiento, Historial, modo claro, limpieza y actualización de saldos reales (2026-10-30)
 
 Pedido: seguir los pendientes del #8 en orden (QA del header y "Cargar" guardando de verdad, modo claro de los
