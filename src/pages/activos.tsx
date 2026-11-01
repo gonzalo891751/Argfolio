@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ManualPriceDialog } from '@/components/assets/ManualPriceDialog'
 import { PreferencesSheet } from '@/components/PreferencesSheet'
+import { ConnectDeviceCard } from '@/components/ConnectDeviceCard'
+import { needsDeviceConnection } from '@/sync/device-link'
 
 const PESOS_COLOR = '#0ea5e9'
 const DOLARES_COLOR = '#10b981'
@@ -255,7 +257,7 @@ export function ActivosPage() {
                     {[0, 1, 2].map(i => <div key={i} className="h-24 animate-pulse rounded-2xl bg-muted" />)}
                 </div>
             ) : !overview.hasPositions ? (
-                <div className="rounded-2xl border bg-card p-6 text-center">
+                needsDeviceConnection() ? <ConnectDeviceCard /> : <div className="rounded-2xl border bg-card p-6 text-center">
                     <p className="font-medium">Todavía no cargaste nada.</p>
                     <button type="button" onClick={() => openQuickEntry({ mode: 'balance' })} className="mt-3 rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground">
                         Cargar mi primer saldo

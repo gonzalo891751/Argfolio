@@ -11,6 +11,9 @@ import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTrackCash } from '@/hooks/use-preferences'
 import { exportLocalBackup, importLocalBackup, parseBackupJson } from '@/domain/sync/local-backup'
+import { OtherDeviceCard } from '@/components/OtherDeviceCard'
+import { connectDevice } from '@/sync/device-link'
+import { invalidateSyncedData } from '@/hooks/use-remote-sync'
 import { getSyncToken, isRemoteSyncEnabled, setSyncToken, markPreferencesModified, forceReconcile, getLastSyncISO, computeSyncFingerprint, type SyncFingerprint } from '@/sync/remote-sync'
 import { BinanceNexoRepairPanel } from '@/pages/settings/BinanceNexoRepairPanel'
 
@@ -138,10 +141,25 @@ export function SettingsPage() {
         }
     }
 
-    const handleSaveSyncToken = () => {
-        setSyncToken(syncTokenInput)
-        const hasToken = syncTokenInput.trim().length > 0
-        alert(hasToken ? 'Token de Sync guardado.' : 'Token de Sync eliminado.')
+    const handleSaveSyncToken = async () => {
+        if (!syncTokenInput.trim()) {
+            setSyncToken('')
+            alert('Token de Sync eliminado.')
+            return
+        }
+        if (!isRemoteSyncEnabled()) {
+            setSyncToken(syncTokenInput)
+            alert('Token de Sync guardado.')
+            return
+        }
+        // Save and download the data right away (a rejected token is not kept)
+        const result = await connectDevice(syncTokenInput)
+        if (result === 'ok') invalidateSyncedData(queryClient)
+        alert(result === 'ok'
+            ? 'Token guardado: tus datos ya están en este dispositivo.'
+            : result === 'invalid'
+                ? 'El token no es correcto.'
+                : 'Token guardado, pero no se pudo conectar. Probá de nuevo con internet.')
     }
 
     const handlePushAllToD1 = async () => {
@@ -296,6 +314,8 @@ export function SettingsPage() {
                 <h1 className="text-2xl font-bold">Configuración</h1>
                 <p className="text-muted-foreground">Personalizá tu experiencia en Argfolio</p>
             </div>
+
+            <OtherDeviceCard />
 
             {/* Theme */}
             <Card>

@@ -58,7 +58,14 @@ class HttpError extends Error {
 
 let lastStatusKey = ''
 let lastStatusAt = 0
-let bootstrapInFlight: Promise<{ ok: boolean; offline: boolean }> | null = null
+export interface BootstrapResult {
+    ok: boolean
+    offline: boolean
+    /** HTTP status when the server answered with an error (401 = wrong or missing token) */
+    status?: number
+}
+
+let bootstrapInFlight: Promise<BootstrapResult> | null = null
 
 function emitSyncStatus(detail: RemoteSyncStatusDetail): void {
     if (typeof window === 'undefined') return
@@ -169,7 +176,7 @@ function handleRemoteSyncError(error: unknown): void {
     })
 }
 
-export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean; offline: boolean }> {
+export async function bootstrapRemoteSync(force = false, options: { quiet?: boolean } = {}): Promise<BootstrapResult> {
     if (!isRemoteSyncEnabled()) {
         return { ok: false, offline: false }
     }
@@ -235,8 +242,8 @@ export async function bootstrapRemoteSync(force = false): Promise<{ ok: boolean;
 
             return { ok: true, offline: false }
         } catch (error) {
-            handleRemoteSyncError(error)
-            return { ok: false, offline: true }
+            if (!options.quiet) handleRemoteSyncError(error)
+            return { ok: false, offline: true, status: error instanceof HttpError ? error.status : undefined }
         } finally {
             if (!force) bootstrapInFlight = null
         }

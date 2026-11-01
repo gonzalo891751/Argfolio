@@ -14,6 +14,8 @@ import { useMovements } from '@/hooks/use-movements'
 import { useRefreshAll } from '@/hooks/use-portfolio'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useQuickEntry } from '@/features/quick-entry/QuickEntryContext'
+import { ConnectDeviceCard } from '@/components/ConnectDeviceCard'
+import { needsDeviceConnection } from '@/sync/device-link'
 import { buildOverview, type OverviewBucket, type OverviewPosition } from '@/features/overview/overview-model'
 import { buildDailySeries, computePeriodChange } from '@/features/overview/history-model'
 import { fmtArs, fmtDayKey, fmtPct, fmtRate, fmtSignedArs, fmtSignedUsd, fmtUsd, toneClass } from '@/features/overview/format'
@@ -389,7 +391,10 @@ export function InicioPage() {
                     <div className="grid grid-cols-2 gap-3"><Skeleton className="h-20" /><Skeleton className="h-20" /></div>
                 </Card>
             ) : !overview.hasPositions ? (
-                <EmptyState />
+                <>
+                    {needsDeviceConnection() && <ConnectDeviceCard />}
+                    <EmptyState />
+                </>
             ) : (
                 <>
                     <Hero totalArs={overview.totalArs} totalUsd={overview.totalUsd} pesos={overview.pesos} dolares={overview.dolares} />
