@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Smartphone } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { connectDevice } from '@/sync/device-link'
+import { connectDevice, replaceLocalDataQuestion } from '@/sync/device-link'
 import { invalidateSyncedData } from '@/hooks/use-remote-sync'
 
 export function ConnectDeviceCard({ className }: { className?: string }) {
@@ -20,10 +20,16 @@ export function ConnectDeviceCard({ className }: { className?: string }) {
     const onConnect = async () => {
         setError(null)
         setBusy(true)
-        const result = await connectDevice(code)
+        const result = await connectDevice(code, {
+            confirmReplace: count => window.confirm(replaceLocalDataQuestion(count)),
+        })
         setBusy(false)
         if (result === 'ok') {
             invalidateSyncedData(queryClient)
+            return
+        }
+        if (result === 'declined') {
+            setError('No se conectó: este dispositivo se queda con sus datos.')
             return
         }
         setError(result === 'invalid'

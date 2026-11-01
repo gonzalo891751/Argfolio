@@ -8,8 +8,10 @@ vi.mock('./remote-sync', () => ({
     bootstrapRemoteSync: vi.fn(async () => state.bootstrap),
     isRemoteSyncEnabled: () => true,
 }))
+vi.mock('@/db/schema', () => ({ db: { movements: { count: async () => 0 } } }))
 
 import { buildDeviceLink, connectDevice, readLinkToken } from './device-link'
+import { bootstrapRemoteSync } from './remote-sync'
 
 describe('device link', () => {
     it('carries the token in the fragment and reads it back', () => {
@@ -26,7 +28,10 @@ describe('device link', () => {
 })
 
 describe('connectDevice', () => {
-    beforeEach(() => { state.token = 'old-token' })
+    beforeEach(() => {
+        state.token = 'old-token'
+        vi.mocked(bootstrapRemoteSync).mockClear()
+    })
 
     it('keeps the token when the server accepts it', async () => {
         state.bootstrap = { ok: true, offline: false }
@@ -49,5 +54,51 @@ describe('connectDevice', () => {
     it('rejects an empty code without calling the server', async () => {
         expect(await connectDevice('   ')).toBe('invalid')
         expect(state.token).toBe('old-token')
+    })
+})
+
+describe('connectDevice with data only on this device', () => {
+    const withLocal = (count: number, answer?: boolean, keepTokenOnDecline?: boolean) => ({
+        countLocalMovements: async () => count,
+        keepTokenOnDecline,
+        ...(answer === undefined ? {} : { confirmReplace: vi.fn(() => answer) }),
+    })
+
+    beforeEach(() => {
+        state.token = ''
+        state.bootstrap = { ok: true, offline: false }
+        vi.mocked(bootstrapRemoteSync).mockClear()
+    })
+
+    it('never replaces it without asking, and stays unconnected', async () => {
+        expect(await connectDevice('tok', withLocal(12))).toBe('declined')
+        expect(bootstrapRemoteSync).not.toHaveBeenCalled()
+        expect(state.token).toBe('')
+    })
+
+    it('keeps it when the answer is no (no token saved: the next start would download)', async () => {
+        const options = withLocal(12, false)
+        expect(await connectDevice('tok', options)).toBe('declined')
+        expect(options.confirmReplace).toHaveBeenCalledWith(12)
+        expect(bootstrapRemoteSync).not.toHaveBeenCalled()
+        expect(state.token).toBe('')
+    })
+
+    it('saves only the token when asked to (Configuración, to upload this device)', async () => {
+        expect(await connectDevice('tok', withLocal(12, false, true))).toBe('saved')
+        expect(bootstrapRemoteSync).not.toHaveBeenCalled()
+        expect(state.token).toBe('tok')
+    })
+
+    it('downloads when the answer is yes', async () => {
+        expect(await connectDevice('tok', withLocal(12, true))).toBe('ok')
+        expect(bootstrapRemoteSync).toHaveBeenCalledTimes(1)
+        expect(state.token).toBe('tok')
+    })
+
+    it('does not ask on an empty device', async () => {
+        const options = withLocal(0, false)
+        expect(await connectDevice('tok', options)).toBe('ok')
+        expect(options.confirmReplace).not.toHaveBeenCalled()
     })
 })

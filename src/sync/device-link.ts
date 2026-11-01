@@ -7,6 +7,7 @@
  * removes it from the address bar as soon as it reads it.
  */
 
+import { db } from '@/db/schema'
 import { bootstrapRemoteSync, getSyncToken, isRemoteSyncEnabled, setSyncToken } from './remote-sync'
 
 const PARAM = 'vincular'
@@ -34,15 +35,51 @@ export function stripLinkFromUrl(): void {
     window.history.replaceState(window.history.state, '', `${pathname}${search}`)
 }
 
-export type ConnectResult = 'ok' | 'invalid' | 'offline'
+/**
+ * - ok: token accepted and the data downloaded
+ * - saved: token saved, nothing downloaded (keepTokenOnDecline)
+ * - declined: nothing changed; this device keeps its own data and stays unconnected
+ * - invalid: the server rejected the token (the previous one is restored)
+ * - offline: could not reach the server (the token is kept)
+ */
+export type ConnectResult = 'ok' | 'saved' | 'declined' | 'invalid' | 'offline'
+
+export interface ConnectOptions {
+    /**
+     * Downloading replaces this device's data with the cloud's. When the
+     * device already has movements, it only happens if this answers true.
+     */
+    confirmReplace?: (localMovements: number) => boolean | Promise<boolean>
+    /**
+     * Keep the token when the replacement is declined (Configuración: the user
+     * is setting up sync to upload this device's data). Otherwise nothing is
+     * saved, because with a token the next app start downloads anyway.
+     */
+    keepTokenOnDecline?: boolean
+    /** For tests */
+    countLocalMovements?: () => Promise<number>
+}
 
 /**
  * Save the token and download the data. A token the server rejects is not
- * kept, so a typo never leaves the device half connected.
+ * kept, so a typo never leaves the device half connected, and data that only
+ * lives on this device is never replaced without asking. The token is stored
+ * only after that answer.
  */
-export async function connectDevice(token: string): Promise<ConnectResult> {
+export async function connectDevice(token: string, options: ConnectOptions = {}): Promise<ConnectResult> {
     const trimmed = token.trim()
     if (!trimmed) return 'invalid'
+
+    const localMovements = await (options.countLocalMovements ?? (() => db.movements.count()))()
+    if (localMovements > 0) {
+        const replace = options.confirmReplace ? await options.confirmReplace(localMovements) : false
+        if (!replace) {
+            if (!options.keepTokenOnDecline) return 'declined'
+            setSyncToken(trimmed)
+            return 'saved'
+        }
+    }
+
     const previous = getSyncToken()
     setSyncToken(trimmed)
     const result = await bootstrapRemoteSync(true, { quiet: true })
@@ -52,4 +89,11 @@ export async function connectDevice(token: string): Promise<ConnectResult> {
         return 'invalid'
     }
     return 'offline'
+}
+
+/** Text for the confirm dialog shown before replacing this device's data. */
+export function replaceLocalDataQuestion(localMovements: number): string {
+    return `Este dispositivo ya tiene ${localMovements} movimientos guardados.\n\n`
+        + '¿Reemplazarlos por los datos de la nube?\n\n'
+        + 'Cancelar: este dispositivo se queda con sus datos.'
 }

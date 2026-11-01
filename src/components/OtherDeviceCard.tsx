@@ -6,16 +6,22 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { Check, Copy, QrCode, Smartphone } from 'lucide-react'
-import { getSyncToken, isRemoteSyncEnabled } from '@/sync/remote-sync'
+import { isRemoteSyncEnabled } from '@/sync/remote-sync'
 import { buildDeviceLink } from '@/sync/device-link'
 
-export function OtherDeviceCard() {
-    const [token] = useState(() => getSyncToken())
+export function OtherDeviceCard({ token, onConnect }: { token: string; onConnect: (code: string) => Promise<void> }) {
     const [show, setShow] = useState(false)
+    const [code, setCode] = useState('')
     const [qr, setQr] = useState<string | null>(null)
     const [copied, setCopied] = useState(false)
 
     const link = token ? buildDeviceLink(window.location.origin, token) : ''
+
+    // A new or removed token invalidates the QR on screen
+    useEffect(() => {
+        setQr(null)
+        if (!token) setShow(false)
+    }, [token])
 
     useEffect(() => {
         if (!show || !link) return
@@ -53,9 +59,30 @@ export function OtherDeviceCard() {
             </div>
 
             {!token ? (
-                <p className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">
-                    Este dispositivo todavía no está conectado a la nube. Cargá el token de sync más abajo (Sync remoto) para poder conectar otros.
-                </p>
+                <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                        Este dispositivo todavía no está conectado a la nube. Pegá tu código de sincronización (el token de sync):
+                    </p>
+                    <div className="flex gap-2">
+                        <input
+                            type="password"
+                            autoComplete="off"
+                            className="h-10 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            placeholder="Código de sincronización"
+                            value={code}
+                            onChange={e => setCode(e.target.value)}
+                            aria-label="Código de sincronización"
+                        />
+                        <button
+                            type="button"
+                            disabled={!code.trim()}
+                            onClick={() => onConnect(code)}
+                            className="h-10 shrink-0 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                        >
+                            Conectar
+                        </button>
+                    </div>
+                </div>
             ) : !show ? (
                 <button
                     type="button"

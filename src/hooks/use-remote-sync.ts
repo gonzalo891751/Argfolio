@@ -7,7 +7,7 @@ import {
     isRemoteSyncEnabled,
     subscribeRemoteSyncStatus,
 } from '@/sync/remote-sync'
-import { connectDevice, readLinkToken, stripLinkFromUrl } from '@/sync/device-link'
+import { connectDevice, readLinkToken, replaceLocalDataQuestion, stripLinkFromUrl } from '@/sync/device-link'
 
 /** Everything read from the local DB, after it was replaced from D1. */
 export function invalidateSyncedData(queryClient: QueryClient): void {
@@ -39,10 +39,14 @@ export function useRemoteSync() {
         if (linkToken) {
             stripLinkFromUrl()
             // One-shot: report the result even if this effect was re-run meanwhile
-            connectDevice(linkToken).then((result) => {
+            connectDevice(linkToken, {
+                confirmReplace: count => window.confirm(replaceLocalDataQuestion(count)),
+            }).then((result) => {
                 if (result === 'ok') {
                     invalidateSyncedData(queryClient)
                     toast({ title: 'Dispositivo conectado', description: 'Ya ves tus datos en este dispositivo.', variant: 'success' })
+                } else if (result === 'declined') {
+                    toast({ title: 'No se conectó', description: 'Este dispositivo se queda con sus datos.', variant: 'info' })
                 } else {
                     toast({
                         title: result === 'invalid' ? 'El enlace no es válido' : 'No se pudo conectar',

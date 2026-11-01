@@ -12,7 +12,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useTrackCash } from '@/hooks/use-preferences'
 import { exportLocalBackup, importLocalBackup, parseBackupJson } from '@/domain/sync/local-backup'
 import { OtherDeviceCard } from '@/components/OtherDeviceCard'
-import { connectDevice } from '@/sync/device-link'
+import { connectDevice, replaceLocalDataQuestion } from '@/sync/device-link'
 import { invalidateSyncedData } from '@/hooks/use-remote-sync'
 import { getSyncToken, isRemoteSyncEnabled, setSyncToken, markPreferencesModified, forceReconcile, getLastSyncISO, computeSyncFingerprint, type SyncFingerprint } from '@/sync/remote-sync'
 import { BinanceNexoRepairPanel } from '@/pages/settings/BinanceNexoRepairPanel'
@@ -57,6 +57,7 @@ export function SettingsPage() {
     const [isPushingToCloud, setIsPushingToCloud] = useState(false)
     const [isReconciling, setIsReconciling] = useState(false)
     const [syncTokenInput, setSyncTokenInput] = useState(() => getSyncToken())
+    const [savedToken, setSavedToken] = useState(() => getSyncToken())
     const [fingerprint, setFingerprint] = useState<SyncFingerprint | null>(null)
     const importInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -141,25 +142,38 @@ export function SettingsPage() {
         }
     }
 
-    const handleSaveSyncToken = async () => {
-        if (!syncTokenInput.trim()) {
+    const handleSaveSyncToken = async (value: string = syncTokenInput) => {
+        setSyncTokenInput(value)
+        if (!value.trim()) {
             setSyncToken('')
+            setSavedToken('')
             alert('Token de Sync eliminado.')
             return
         }
         if (!isRemoteSyncEnabled()) {
-            setSyncToken(syncTokenInput)
+            setSyncToken(value)
+            setSavedToken(getSyncToken())
             alert('Token de Sync guardado.')
             return
         }
-        // Save and download the data right away (a rejected token is not kept)
-        const result = await connectDevice(syncTokenInput)
+        // Save and download the data right away (a rejected token is not kept,
+        // and this device's own data is never replaced without asking)
+        const result = await connectDevice(value, {
+            confirmReplace: count => window.confirm(replaceLocalDataQuestion(count)),
+            // Only where "Subir todo a D1" is available to upload this device's data
+            keepTokenOnDecline: debugMode,
+        })
+        setSavedToken(getSyncToken())
         if (result === 'ok') invalidateSyncedData(queryClient)
         alert(result === 'ok'
             ? 'Token guardado: tus datos ya están en este dispositivo.'
-            : result === 'invalid'
-                ? 'El token no es correcto.'
-                : 'Token guardado, pero no se pudo conectar. Probá de nuevo con internet.')
+            : result === 'saved'
+                ? 'Token guardado sin descargar nada. Si los datos de este dispositivo son los buenos, subilos ahora con "Subir todo a D1": al recargar, la app baja los de la nube.'
+                : result === 'declined'
+                    ? 'No se conectó: este dispositivo se queda con sus datos.'
+                    : result === 'invalid'
+                    ? 'El token no es correcto.'
+                    : 'Token guardado, pero no se pudo conectar. Probá de nuevo con internet.')
     }
 
     const handlePushAllToD1 = async () => {
@@ -315,7 +329,7 @@ export function SettingsPage() {
                 <p className="text-muted-foreground">Personalizá tu experiencia en Argfolio</p>
             </div>
 
-            <OtherDeviceCard />
+            <OtherDeviceCard token={savedToken} onConnect={handleSaveSyncToken} />
 
             {/* Theme */}
             <Card>
@@ -488,7 +502,7 @@ export function SettingsPage() {
                                     />
                                     <Button
                                         variant="outline"
-                                        onClick={handleSaveSyncToken}
+                                        onClick={() => handleSaveSyncToken()}
                                         disabled={isPushingToCloud}
                                     >
                                         Guardar token
